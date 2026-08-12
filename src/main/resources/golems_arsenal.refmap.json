@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "a_silly_cat/golems_arsenal/mixin/AbstractGolemEnergyMixin": {
+      "addAdditionalSaveData": "Ldev/xkmc/modulargolems/content/entity/common/AbstractGolemEntity;m_7380_(Lnet/minecraft/nbt/CompoundTag;)V",
+      "readAdditionalSaveData": "Ldev/xkmc/modulargolems/content/entity/common/AbstractGolemEntity;m_7378_(Lnet/minecraft/nbt/CompoundTag;)V"
+    }
+  },
+  "data": {
+    "searge": {
+      "a_silly_cat/golems_arsenal/mixin/AbstractGolemEnergyMixin": {
+        "addAdditionalSaveData": "Ldev/xkmc/modulargolems/content/entity/common/AbstractGolemEntity;m_7380_(Lnet/minecraft/nbt/CompoundTag;)V",
+        "readAdditionalSaveData": "Ldev/xkmc/modulargolems/content/entity/common/AbstractGolemEntity;m_7378_(Lnet/minecraft/nbt/CompoundTag;)V"
+      }
+    }
+  }
+}

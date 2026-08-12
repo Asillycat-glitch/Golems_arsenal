@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "golems_arsenal:item/golem_energy_hammer"
+  }
+}

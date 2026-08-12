@@ -1,0 +1,21 @@
+{
+  "type": "golems_arsenal:part_sawing",
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "mekanism"
+    }
+  ],
+  "input": {
+    "ingredient": {
+      "tag": "modulargolems:parts"
+    }
+  },
+  "mainOutput": {
+    "item": "modulargolems:metal_golem_body"
+  },
+  "secondaryOutput": {
+    "item": "minecraft:clay_ball"
+  },
+  "secondaryChance": 1.0
+}

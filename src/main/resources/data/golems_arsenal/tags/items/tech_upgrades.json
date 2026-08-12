@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "golems_arsenal:golem_energy_upgrade",
+    "golems_arsenal:golem_energy_tech_upgrade"
+  ]
+}

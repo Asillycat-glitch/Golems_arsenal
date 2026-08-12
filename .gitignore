@@ -1,0 +1,28 @@
+# Gradle / Forge
+.gradle/
+build/
+run/
+run-data/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+
+# Local dependencies (fetch via Maven/Modrinth instead of committing jars)
+libs/
+
+# Upstream Modular Golems sources copied locally for reference
+dev/xkmc/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

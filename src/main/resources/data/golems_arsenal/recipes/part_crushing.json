@@ -1,0 +1,17 @@
+{
+  "type": "golems_arsenal:part_crushing",
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "mekanism"
+    }
+  ],
+  "input": {
+    "ingredient": {
+      "tag": "modulargolems:parts"
+    }
+  },
+  "output": {
+    "item": "modulargolems:metal_golem_body"
+  }
+}
