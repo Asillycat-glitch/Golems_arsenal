@@ -40,6 +40,7 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
             new ResourceLocation(Golems_arsenal.MODID, "energy_capacity");
 
     private static final String ENERGY_TAG = "Energy";
+    private static Attribute explosionAttributeCache;
 
     public GolemTrackingMechanicalBowItem(Properties properties) {
         super(properties, BASE_DRAW_STRENGTH, 0, projectileAttributes());
@@ -62,7 +63,10 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
     /** L2lib explosion damage attribute, granted to the holder only while the tech upgrade is installed. */
     @Nullable
     public static Attribute explosionAttribute() {
-        return resolveAttribute("EXPLOSION_FACTOR");
+        if (explosionAttributeCache == null) {
+            explosionAttributeCache = resolveAttribute("EXPLOSION_FACTOR");
+        }
+        return explosionAttributeCache;
     }
 
     /** Explosive arrows are a tech-upgrade skill; they unlock when the tech upgrade is installed. */

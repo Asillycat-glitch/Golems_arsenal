@@ -35,13 +35,13 @@
   "tooltip.golems_arsenal.energy": "能量：%s / %s FE",
   "tooltip.golems_arsenal.energy_katana.cost": "有电命中消耗 %s FE（获得充能）",
   "tooltip.golems_arsenal.energy_katana.damage": "有电命中额外造成 %s%% 伤害",
-  "tooltip.golems_arsenal.energy_katana.tech_attack": "科技等级每级 +%s%% 攻击伤害",
+  "tooltip.golems_arsenal.energy_katana.tech_attack": "装有科技升级时，每级提供 +%s%% 攻击伤害",
   "tooltip.golems_arsenal.energy_katana.charge": "有电命中时获得充能（%s 秒）",
   "tooltip.golems_arsenal.energy_hammer.defense": "超过最大生命 %s%% 的伤害消耗电量减免 %s%%",
-  "tooltip.golems_arsenal.energy_hammer.regen": "每级科技等级每秒恢复 %s%% 最大生命",
+  "tooltip.golems_arsenal.energy_hammer.regen": "装有科技升级时，每级提供 %s%% 最大生命回复",
   "tooltip.golems_arsenal.example_weapon": "基础攻击额外提高 %s%%",
   "tooltip.golems_arsenal.units": "已安装单元总等级：%s",
   "tooltip.golems_arsenal.tracking_bow.tracking": "有电时箭矢会追踪傀儡的目标",
-  "tooltip.golems_arsenal.tracking_bow.projectile": "科技等级每级提升 %s%% 弹射物伤害",
+  "tooltip.golems_arsenal.tracking_bow.projectile": "装有科技升级时，每级提升 %s%% 弹射物伤害（暂时只有转换爆炸伤的用途）",
   "tooltip.golems_arsenal.tracking_bow.cost": "每次追踪射击消耗 %s FE"
 }

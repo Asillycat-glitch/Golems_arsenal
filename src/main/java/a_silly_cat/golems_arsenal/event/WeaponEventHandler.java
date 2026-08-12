@@ -89,6 +89,7 @@ public final class WeaponEventHandler {
     private static final TagKey<DamageType> TACZ_BULLETS =
             TagKey.create(Registries.DAMAGE_TYPE, new ResourceLocation("tacz", "bullets"));
     private static final String SHIELD_REPAIR_KEY = "golems_arsenal_shield_repair";
+    private static volatile Attribute GOLEM_SWEEP_ATTR;
     private WeaponEventHandler() {
     }
 
@@ -115,21 +116,27 @@ public final class WeaponEventHandler {
                 ((GolemEnergyStorage) cap).receiveEnergy(Config.GOLEM_ENERGY_LIGHTNING.get(), false));
     }
 
+    /**
+     * All attack-side damage bonuses from this mod are fused into a single per-hit check: one
+     * golem lookup, one main-hand fetch and one item registry id lookup, then the katana,
+     * weapon-upgrade and onslaught effects are applied in order.
+     */
     @SubscribeEvent
-    public static void onLivingHurt(LivingHurtEvent event) {
+    public static void onGolemAttackHurt(LivingHurtEvent event) {
         if (event.getEntity().level().isClientSide) {
             return;
         }
         if (!(event.getSource().getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
             return;
         }
-        if (!(golem instanceof MetalGolemEntity metalGolem)) {
-            return;
-        }
-        ItemStack stack = metalGolem.getMainHandItem();
-        if (stack.getItem() instanceof GolemEnergyKatanaItem katana && katana.consumeAttackEnergy(stack)) {
-            float amount = event.getAmount();
-            event.setAmount(amount * (1.0f + katana.getPoweredHitBonus(stack)));
+        ItemStack stack = golem.getMainHandItem();
+        ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+        float amount = event.getAmount();
+
+        if (golem instanceof MetalGolemEntity
+                && stack.getItem() instanceof GolemEnergyKatanaItem katana
+                && katana.consumeAttackEnergy(stack)) {
+            amount *= (1.0f + katana.getPoweredHitBonus(stack));
             int tech = GolemEnergyTechModifier.levelOf(golem);
             golem.addEffect(new MobEffectInstance(GolemEffects.CHARGE.get(),
                     Config.ENERGY_KATANA_CHARGE_DURATION.get(), chargeAmplifier(tech)));
@@ -137,6 +144,40 @@ public final class WeaponEventHandler {
                 lightningChain(golem, event.getEntity(), stack);
             }
         }
+        if (GolemWeaponMainModifier.hasUpgrade(golem)) {
+            double bonus = mainClassHpBonus(golem, stack, id);
+            if (bonus > 0) {
+                amount += (float) bonus;
+            }
+            if (isFlameSword(id)) {
+                scheduleFlameCloud(golem, event.getEntity());
+            }
+        }
+        if (GolemWeaponAltModifier.hasUpgrade(golem)) {
+            if (isSculkScythe(id)) {
+                amount *= (float) (1 + Config.SCULK_SCYTHE_BONUS.get());
+            }
+            if (isGolemSpear(id)) {
+                scheduleSpearAoe(golem, event.getEntity(), amount);
+            }
+        }
+        if (golem instanceof HumanoidGolemEntity && GolemWeaponOnslaughtModifier.hasUpgrade(golem)) {
+            double armor = golem.getAttributeValue(Attributes.ARMOR);
+            if (armor > Config.ONSLAUGHT_ARMOR_THRESHOLD.get()) {
+                double excess = (armor - Config.ONSLAUGHT_ARMOR_THRESHOLD.get())
+                        + golem.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+                if (event.getSource().is(TACZ_BULLETS)) {
+                    amount *= (float) (1 + excess * Config.ONSLAUGHT_GUN_PERCENT_PER_POINT.get());
+                } else if (!event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
+                    if (Config.ONSLAUGHT_ATTACK_PERCENT_MODE.get()) {
+                        amount *= (float) (1 + excess * Config.ONSLAUGHT_ATTACK_PERCENT_PER_POINT.get());
+                    } else {
+                        amount += (float) (excess * Config.ONSLAUGHT_ATTACK_FLAT_PER_POINT.get());
+                    }
+                }
+            }
+        }
+        event.setAmount(amount);
     }
 
     private static int chargeAmplifier(int techLevel) {
@@ -202,43 +243,12 @@ public final class WeaponEventHandler {
         }).orElse(false);
     }
 
-    /** Weapon-upgrade damage bonuses, applied to any golem type based on its main-hand item. */
-    @SubscribeEvent
-    public static void onWeaponUpgradeHurt(LivingHurtEvent event) {
-        if (event.getEntity().level().isClientSide) {
-            return;
-        }
-        if (!(event.getSource().getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
-            return;
-        }
-        ItemStack stack = golem.getMainHandItem();
-        float amount = event.getAmount();
-        if (GolemWeaponMainModifier.hasUpgrade(golem)) {
-            double bonus = mainClassHpBonus(golem, stack);
-            if (bonus > 0) {
-                amount += (float) bonus;
-            }
-            if (isFlameSword(stack)) {
-                scheduleFlameCloud(golem, event.getEntity());
-            }
-        }
-        if (GolemWeaponAltModifier.hasUpgrade(golem)) {
-            if (isSculkScythe(stack)) {
-                amount *= (float) (1 + Config.SCULK_SCYTHE_BONUS.get());
-            }
-            if (isGolemSpear(stack)) {
-                scheduleSpearAoe(golem, event.getEntity(), amount);
-            }
-        }
-        event.setAmount(amount);
-    }
-
     /** Extra damage from the main weapon upgrade, as a flat amount based on the golem's max health. */
-    private static double mainClassHpBonus(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
+    private static double mainClassHpBonus(AbstractGolemEntity<?, ?> golem, ItemStack stack, ResourceLocation id) {
         double percent;
-        if (isForgeHammer(stack)) {
+        if (isForgeHammer(id)) {
             percent = Config.FORGE_HAMMER_HP_PERCENT.get();
-        } else if (isMainClassWeapon(stack)) {
+        } else if (isMainClassWeapon(stack, id)) {
             percent = Config.MAIN_WEAPON_HP_PERCENT.get();
         } else {
             return 0;
@@ -246,37 +256,31 @@ public final class WeaponEventHandler {
         return golem.getMaxHealth() * percent;
     }
 
-    private static boolean isMainClassWeapon(ItemStack stack) {
-        return stack.is(ItemTags.SWORDS) || isGolemSword(stack) || isGolemAxe(stack) || isFlameSword(stack);
+    private static boolean isMainClassWeapon(ItemStack stack, ResourceLocation id) {
+        return stack.is(ItemTags.SWORDS) || isGolemSword(id) || isGolemAxe(id) || isFlameSword(id);
     }
 
-    private static boolean isGolemSword(ItemStack stack) {
-        var id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+    private static boolean isGolemSword(ResourceLocation id) {
         return id != null && id.getPath().endsWith("_golem_sword");
     }
 
-    private static boolean isGolemAxe(ItemStack stack) {
-        var id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+    private static boolean isGolemAxe(ResourceLocation id) {
         return id != null && (id.getPath().endsWith("_golem_axe") || id.getPath().equals("golem_slicing_axe"));
     }
 
-    private static boolean isFlameSword(ItemStack stack) {
-        var id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+    private static boolean isFlameSword(ResourceLocation id) {
         return id != null && id.getNamespace().equals("golemdungeons") && id.getPath().equals("flame_sword");
     }
 
-    private static boolean isForgeHammer(ItemStack stack) {
-        var id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+    private static boolean isForgeHammer(ResourceLocation id) {
         return id != null && id.getNamespace().equals("golemdungeons") && id.getPath().equals("ancient_forge");
     }
 
-    private static boolean isGolemSpear(ItemStack stack) {
-        var id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+    private static boolean isGolemSpear(ResourceLocation id) {
         return id != null && id.getPath().endsWith("_golem_spear");
     }
 
-    private static boolean isSculkScythe(ItemStack stack) {
-        var id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+    private static boolean isSculkScythe(ResourceLocation id) {
         return id != null && id.getNamespace().equals("golemdungeons") && id.getPath().equals("sculk_golem_scythe");
     }
 
@@ -383,54 +387,38 @@ public final class WeaponEventHandler {
     }
 
     /**
-     * Full onslaught upgrade (humanoid golems only): while armor exceeds the threshold, every
-     * excess armor point plus toughness grants melee attack bonus (percentage or flat, per config)
-     * and percentage TACZ gun damage. Arrows and other projectiles are excluded from the melee
-     * bonus.
+     * Periodic per-golem work, fused into a single pass: one main-hand fetch and one combined
+     * modifier check gate all updates. Golems without any modifier from this mod are skipped.
      */
     @SubscribeEvent
-    public static void onOnslaughtHurt(LivingHurtEvent event) {
-        if (event.getEntity().level().isClientSide) {
+    public static void onGolemLivingTick(LivingEvent.LivingTickEvent event) {
+        if (!(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)
+                || golem.level().isClientSide
+                || golem.tickCount % 5 != 0) {
             return;
         }
-        if (!(event.getSource().getEntity() instanceof HumanoidGolemEntity golem)) {
+        syncGolemCapacity(golem);
+        if (!hasArsenalModifier(golem)) {
             return;
         }
-        if (!GolemWeaponOnslaughtModifier.hasUpgrade(golem)) {
-            return;
-        }
-        double armor = golem.getAttributeValue(Attributes.ARMOR);
-        if (armor <= Config.ONSLAUGHT_ARMOR_THRESHOLD.get()) {
-            return;
-        }
-        double excess = (armor - Config.ONSLAUGHT_ARMOR_THRESHOLD.get())
-                + golem.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
-        float amount = event.getAmount();
-        if (event.getSource().is(TACZ_BULLETS)) {
-            amount *= (float) (1 + excess * Config.ONSLAUGHT_GUN_PERCENT_PER_POINT.get());
-        } else if (!event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
-            if (Config.ONSLAUGHT_ATTACK_PERCENT_MODE.get()) {
-                amount *= (float) (1 + excess * Config.ONSLAUGHT_ATTACK_PERCENT_PER_POINT.get());
-            } else {
-                amount += (float) (excess * Config.ONSLAUGHT_ATTACK_FLAT_PER_POINT.get());
-            }
-        }
-        event.setAmount(amount);
+        ItemStack stack = golem.getMainHandItem();
+        chargeEquipment(golem, stack);
+        updateWeaponAttributes(golem, stack);
+        updateSwordAttributes(golem, stack);
+        updateRangedVelocityAttributes(golem, stack);
+        hammerRegen(golem, stack);
     }
 
-    /** Runs on the golem itself so charging is not dependent on entity-section iteration. */
-    @SubscribeEvent
-    public static void onGolemLivingTick(LivingEvent.LivingTickEvent event) {
-        if (event.getEntity() instanceof AbstractGolemEntity<?, ?> golem
-                && !golem.level().isClientSide
-                && golem.tickCount % 5 == 0) {
-            syncGolemCapacity(golem);
-            chargeEquipment(golem);
-            updateWeaponAttributes(golem);
-            updateSwordAttributes(golem);
-            updateRangedVelocityAttributes(golem);
-            hammerRegen(golem);
-        }
+    /** True when the golem has any modifier from this mod; gates all periodic per-golem work. */
+    private static boolean hasArsenalModifier(AbstractGolemEntity<?, ?> golem) {
+        return golem.getModifiers().keySet().stream().anyMatch(mod ->
+                mod instanceof GolemEnergyModifier
+                        || mod instanceof GolemEnergyTechModifier
+                        || mod instanceof GolemWeaponMainModifier
+                        || mod instanceof GolemWeaponAltModifier
+                        || mod instanceof GolemWeaponRangedModifier
+                        || mod instanceof GolemWeaponShieldModifier
+                        || mod instanceof GolemWeaponOnslaughtModifier);
     }
 
     /**
@@ -438,7 +426,7 @@ public final class WeaponEventHandler {
      * ATTACK_DAMAGE (+5% per level) and the bow grants the L2lib explosion damage attribute
      * (projectile-to-explosion conversion). Without the tech upgrade neither exists.
      */
-    private static void updateWeaponAttributes(AbstractGolemEntity<?, ?> golem) {
+    private static void updateWeaponAttributes(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
         AttributeInstance attack = golem.getAttribute(Attributes.ATTACK_DAMAGE);
         if (attack == null) {
             return;
@@ -446,7 +434,6 @@ public final class WeaponEventHandler {
         Attribute explosionAttr = GolemTrackingMechanicalBowItem.explosionAttribute();
         AttributeInstance explosion = explosionAttr == null ? null : golem.getAttribute(explosionAttr);
         int tech = GolemEnergyTechModifier.levelOf(golem);
-        ItemStack stack = golem.getMainHandItem();
         if (stack.getItem() instanceof GolemEnergyKatanaItem katana) {
             if (tech > 0) {
                 setModifier(attack, KATANA_PERCENT_UUID, "golems_arsenal_katana_percent",
@@ -485,8 +472,7 @@ public final class WeaponEventHandler {
      * Sword-tag weapons (used by humanoid golems) gain +1 entity reach and +1 sweep range while
      * the main weapon upgrade is installed. Both attributes exist on every golem type.
      */
-    private static void updateSwordAttributes(AbstractGolemEntity<?, ?> golem) {
-        ItemStack stack = golem.getMainHandItem();
+    private static void updateSwordAttributes(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
         boolean enabled = GolemWeaponMainModifier.hasUpgrade(golem) && stack.is(ItemTags.SWORDS);
         AttributeInstance reach = golem.getAttribute(ForgeMod.ENTITY_REACH.get());
         if (reach != null) {
@@ -496,8 +482,7 @@ public final class WeaponEventHandler {
                 reach.removeModifier(SWORD_REACH_UUID);
             }
         }
-        Attribute sweepAttr = net.minecraftforge.registries.ForgeRegistries.ATTRIBUTES
-                .getValue(new ResourceLocation("modulargolems", "golem_sweep"));
+        Attribute sweepAttr = golemSweepAttribute();
         AttributeInstance sweep = sweepAttr == null ? null : golem.getAttribute(sweepAttr);
         if (sweep != null) {
             if (enabled) {
@@ -506,6 +491,15 @@ public final class WeaponEventHandler {
                 sweep.removeModifier(SWORD_SWEEP_UUID);
             }
         }
+    }
+
+    /** Cached modulargolems:golem_sweep attribute, resolved once instead of every tick. */
+    private static Attribute golemSweepAttribute() {
+        if (GOLEM_SWEEP_ATTR == null) {
+            GOLEM_SWEEP_ATTR = net.minecraftforge.registries.ForgeRegistries.ATTRIBUTES
+                    .getValue(new ResourceLocation("modulargolems", "golem_sweep"));
+        }
+        return GOLEM_SWEEP_ATTR;
     }
 
     private static void setAddModifier(AttributeInstance instance, UUID uuid, String name, double amount) {
@@ -523,12 +517,11 @@ public final class WeaponEventHandler {
      * an allowed bow with the upgrade installed, the attribute gets a +speed multiplier modifier.
      * Vanilla arrow damage scales with velocity, so this raises speed and damage together.
      */
-    private static void updateRangedVelocityAttributes(AbstractGolemEntity<?, ?> golem) {
+    private static void updateRangedVelocityAttributes(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
         AttributeInstance attr = golem.getAttribute(ModAttributes.ARROW_VELOCITY.get());
         if (attr == null) {
             return;
         }
-        ItemStack stack = golem.getMainHandItem();
         boolean enabled = GolemWeaponRangedModifier.hasUpgrade(golem)
                 && stack.getItem() instanceof BowItem
                 && !(stack.getItem() instanceof GolemTrackingMechanicalBowItem);
@@ -540,8 +533,8 @@ public final class WeaponEventHandler {
         }
     }
 
-    private static void hammerRegen(AbstractGolemEntity<?, ?> golem) {
-        if (!(golem.getMainHandItem().getItem() instanceof GolemEnergyHammerItem)) {
+    private static void hammerRegen(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
+        if (!(stack.getItem() instanceof GolemEnergyHammerItem)) {
             return;
         }
         int tech = GolemEnergyTechModifier.levelOf(golem);
@@ -588,13 +581,19 @@ public final class WeaponEventHandler {
         if (event.getLevel().isClientSide() || !(event.getEntity() instanceof AbstractArrow arrow)) {
             return;
         }
-        if (arrow.getOwner() instanceof AbstractGolemEntity<?, ?> golem) {
-            applyRangedWeaponUpgrade(golem, arrow);
-        }
-        if (!(arrow.getOwner() instanceof MetalGolemEntity golem)) {
+        if (!(arrow.getOwner() instanceof AbstractGolemEntity<?, ?> golem)) {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
+        if (GolemWeaponRangedModifier.hasUpgrade(golem)
+                && stack.getItem() instanceof BowItem
+                && !(stack.getItem() instanceof GolemTrackingMechanicalBowItem)) {
+            double velocity = golem.getAttributeValue(ModAttributes.ARROW_VELOCITY.get());
+            if (velocity > 0) {
+                arrow.setDeltaMovement(arrow.getDeltaMovement().scale(velocity));
+                arrow.hasImpulse = true;
+            }
+        }
         if (stack.getItem() instanceof GolemTrackingMechanicalBowItem bow
                 && bow.consumeTrackingEnergy(stack)) {
             arrow.getPersistentData().putBoolean(TRACKING_TAG, true);
@@ -606,29 +605,6 @@ public final class WeaponEventHandler {
                 arrow.getPersistentData().putBoolean(EXPLOSIVE_TAG, true);
             }
         }
-    }
-
-    /**
-     * Ranged weapon upgrade: arrows shot by any golem (metal, humanoid or dog) holding a bow are
-     * launched at the golem's arrow velocity attribute value. Per the vanilla arrow formula the
-     * impact damage scales with velocity, so no direct base-damage edit is needed. The custom
-     * tracking bow is excluded so its own mechanics are untouched.
-     */
-    private static void applyRangedWeaponUpgrade(AbstractGolemEntity<?, ?> golem, AbstractArrow arrow) {
-        if (!GolemWeaponRangedModifier.hasUpgrade(golem)) {
-            return;
-        }
-        ItemStack stack = golem.getMainHandItem();
-        if (!(stack.getItem() instanceof BowItem)
-                || stack.getItem() instanceof GolemTrackingMechanicalBowItem) {
-            return;
-        }
-        double velocity = golem.getAttributeValue(ModAttributes.ARROW_VELOCITY.get());
-        if (velocity <= 0) {
-            return;
-        }
-        arrow.setDeltaMovement(arrow.getDeltaMovement().scale(velocity));
-        arrow.hasImpulse = true;
     }
 
     /** Powered arrows explode in a tiny blast on impact; stronger arrows scale the radius. */
@@ -656,13 +632,8 @@ public final class WeaponEventHandler {
                 || !(event.level instanceof ServerLevel level)) {
             return;
         }
-        if (level.getGameTime() % 5 == 0) {
-            for (Entity entity : level.getAllEntities()) {
-                if (entity instanceof MetalGolemEntity golem) {
-                    chargeEquipment(golem);
-                }
-            }
-        }
+        // Equipment charging and all per-golem updates run in onGolemLivingTick, so no
+        // level-wide entity iteration is needed here.
         Iterator<UUID> iterator = TRACKING_ARROWS.iterator();
         while (iterator.hasNext()) {
             UUID id = iterator.next();
@@ -695,11 +666,11 @@ public final class WeaponEventHandler {
         }
     }
 
-    private static void chargeEquipment(AbstractGolemEntity<?, ?> golem) {
+    private static void chargeEquipment(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
         golem.getCapability(GolemEnergyProvider.CAPABILITY).ifPresent(source -> {
             GolemEnergyStorage energy = (GolemEnergyStorage) source;
             if (energy.getEnergyStored() <= 0) return;
-            chargeStack(golem.getMainHandItem(), energy);
+            chargeStack(stack, energy);
             for (ItemStack armor : golem.getArmorSlots()) {
                 chargeStack(armor, energy);
             }

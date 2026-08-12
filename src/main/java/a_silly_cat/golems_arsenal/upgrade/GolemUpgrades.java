@@ -1,115 +1,77 @@
 package a_silly_cat.golems_arsenal.upgrade;
 
+import a_silly_cat.golems_arsenal.Golems_arsenal;
+import com.tterrag.registrate.util.entry.RegistryEntry;
+import com.tterrag.registrate.util.nullness.NonNullSupplier;
+import dev.xkmc.l2library.base.L2Registrate;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
+import dev.xkmc.modulargolems.init.registrate.GolemTypes;
 
+/**
+ * Registers this mod's golem modifiers through its own {@link L2Registrate}, exactly like other
+ * working Modular Golems addons (e.g. Golem Dungeons). The L2Registrate constructor wires the
+ * registry events automatically, so the values land in the live {@code modulargolems:modifier}
+ * registry and {@link RegistryEntry#get()} resolves both server and client side.
+ */
 public final class GolemUpgrades {
-    private static Object energyEntry;
-    private static Object energyTechEntry;
-    private static Object energyHealLegacyEntry;
-    private static Object weaponMainEntry;
-    private static Object weaponAltEntry;
-    private static Object weaponRangedEntry;
-    private static Object weaponShieldEntry;
-    private static Object weaponOnslaughtEntry;
 
-    /** Register in Modular Golems' modifier registry so l2serial can persist the upgrade. */
-    public static void register() {
-        try {
-            Class<?> supplierType = Class.forName("com.tterrag.registrate.util.nullness.NonNullSupplier");
-            Class<?> modifiers = Class.forName("dev.xkmc.modulargolems.init.registrate.GolemModifiers");
-            java.lang.reflect.Method reg = modifiers.getMethod("reg", String.class, supplierType, String.class);
-            energyEntry = reg.invoke(null, "golem_energy", proxy(supplierType, GolemEnergyModifier::new),
-                    "Golem Energy Storage");
-            energyTechEntry = reg.invoke(null, "golem_energy_tech", proxy(supplierType, GolemEnergyTechModifier::new),
-                    "Golem Energy Tech");
-            // Legacy alias so holders saved before the rename keep working. Forge forbids registering one instance
-            // under two names, so this is a separate instance; updateAttributes always rebuilds modifiers from the
-            // upgrade items afterwards, so gameplay only ever sees the tech modifier.
-            energyHealLegacyEntry = reg.invoke(null, "golem_energy_heal", proxy(supplierType, GolemEnergyTechModifier::new),
-                    "Golem Energy Tech");
-            weaponMainEntry = reg.invoke(null, "golem_weapon_main", proxy(supplierType, GolemWeaponMainModifier::new),
-                    "Golem Weapon Upgrade: Main");
-            weaponAltEntry = reg.invoke(null, "golem_weapon_alt", proxy(supplierType, GolemWeaponAltModifier::new),
-                    "Golem Weapon Upgrade: Atypical");
-            weaponRangedEntry = reg.invoke(null, "golem_weapon_ranged", proxy(supplierType, GolemWeaponRangedModifier::new),
-                    "Golem Weapon Upgrade: Ranged");
-            weaponShieldEntry = reg.invoke(null, "golem_weapon_shield", proxy(supplierType, GolemWeaponShieldModifier::new),
-                    "Golem Weapon Upgrade: Shield");
-            weaponOnslaughtEntry = reg.invoke(null, "golem_weapon_onslaught", proxy(supplierType, GolemWeaponOnslaughtModifier::new),
-                    "Golem Weapon Upgrade: Full Onslaught");
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to register golem energy modifiers", e);
-        }
+    public static final L2Registrate REGISTRATE = new L2Registrate(Golems_arsenal.MODID);
+
+    public static final RegistryEntry<GolemEnergyModifier> ENERGY =
+            reg("golem_energy", GolemEnergyModifier::new);
+    public static final RegistryEntry<GolemEnergyTechModifier> ENERGY_TECH =
+            reg("golem_energy_tech", GolemEnergyTechModifier::new);
+    // Legacy alias so holders saved before the rename keep working. Forge forbids registering one
+    // instance under two names, so this is a separate instance; updateAttributes always rebuilds
+    // modifiers from the upgrade items afterwards, so gameplay only ever sees the tech modifier.
+    public static final RegistryEntry<GolemEnergyTechModifier> ENERGY_HEAL_LEGACY =
+            reg("golem_energy_heal", GolemEnergyTechModifier::new);
+    public static final RegistryEntry<GolemWeaponMainModifier> WEAPON_MAIN =
+            reg("golem_weapon_main", GolemWeaponMainModifier::new);
+    public static final RegistryEntry<GolemWeaponAltModifier> WEAPON_ALT =
+            reg("golem_weapon_alt", GolemWeaponAltModifier::new);
+    public static final RegistryEntry<GolemWeaponRangedModifier> WEAPON_RANGED =
+            reg("golem_weapon_ranged", GolemWeaponRangedModifier::new);
+    public static final RegistryEntry<GolemWeaponShieldModifier> WEAPON_SHIELD =
+            reg("golem_weapon_shield", GolemWeaponShieldModifier::new);
+    public static final RegistryEntry<GolemWeaponOnslaughtModifier> WEAPON_ONSLAUGHT =
+            reg("golem_weapon_onslaught", GolemWeaponOnslaughtModifier::new);
+
+    private static <T extends GolemModifier> RegistryEntry<T> reg(String id, NonNullSupplier<T> sup) {
+        return REGISTRATE.generic(GolemTypes.MODIFIERS, id, sup).defaultLang().register();
     }
 
-    private static Object proxy(Class<?> supplierType, java.util.function.Supplier<?> factory) {
-        return java.lang.reflect.Proxy.newProxyInstance(
-                supplierType.getClassLoader(), new Class<?>[]{supplierType},
-                (proxy, method, args) -> method.getName().equals("get") ? factory.get() : null);
+    /** Forces the static initializer; the actual registration happens in the field declarations above. */
+    public static void register() {
     }
 
     public static GolemEnergyModifier modifier() {
-        if (energyEntry == null) throw new IllegalStateException("Energy modifier has not been registered");
-        try {
-            return (GolemEnergyModifier) energyEntry.getClass().getMethod("get").invoke(energyEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve golem energy modifier", e);
-        }
+        return ENERGY.get();
     }
 
     public static GolemEnergyTechModifier techModifier() {
-        if (energyTechEntry == null) throw new IllegalStateException("Energy tech modifier has not been registered");
-        try {
-            return (GolemEnergyTechModifier) energyTechEntry.getClass().getMethod("get").invoke(energyTechEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve golem energy tech modifier", e);
-        }
+        return ENERGY_TECH.get();
     }
 
     public static GolemWeaponMainModifier mainWeaponModifier() {
-        if (weaponMainEntry == null) throw new IllegalStateException("Main weapon modifier has not been registered");
-        try {
-            return (GolemWeaponMainModifier) weaponMainEntry.getClass().getMethod("get").invoke(weaponMainEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve main weapon modifier", e);
-        }
+        return WEAPON_MAIN.get();
     }
 
     public static GolemWeaponAltModifier altWeaponModifier() {
-        if (weaponAltEntry == null) throw new IllegalStateException("Atypical weapon modifier has not been registered");
-        try {
-            return (GolemWeaponAltModifier) weaponAltEntry.getClass().getMethod("get").invoke(weaponAltEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve atypical weapon modifier", e);
-        }
+        return WEAPON_ALT.get();
     }
 
     public static GolemWeaponRangedModifier rangedWeaponModifier() {
-        if (weaponRangedEntry == null) throw new IllegalStateException("Ranged weapon modifier has not been registered");
-        try {
-            return (GolemWeaponRangedModifier) weaponRangedEntry.getClass().getMethod("get").invoke(weaponRangedEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve ranged weapon modifier", e);
-        }
+        return WEAPON_RANGED.get();
     }
 
     public static GolemWeaponShieldModifier shieldWeaponModifier() {
-        if (weaponShieldEntry == null) throw new IllegalStateException("Shield weapon modifier has not been registered");
-        try {
-            return (GolemWeaponShieldModifier) weaponShieldEntry.getClass().getMethod("get").invoke(weaponShieldEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve shield weapon modifier", e);
-        }
+        return WEAPON_SHIELD.get();
     }
 
     public static GolemWeaponOnslaughtModifier onslaughtModifier() {
-        if (weaponOnslaughtEntry == null) throw new IllegalStateException("Onslaught modifier has not been registered");
-        try {
-            return (GolemWeaponOnslaughtModifier) weaponOnslaughtEntry.getClass().getMethod("get").invoke(weaponOnslaughtEntry);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to resolve onslaught modifier", e);
-        }
+        return WEAPON_ONSLAUGHT.get();
     }
 
     /** Level-1 upgrades are considered installed when their modifier is present on the golem. */
@@ -117,5 +79,6 @@ public final class GolemUpgrades {
         return entity.getModifiers().keySet().stream().anyMatch(type::isInstance);
     }
 
-    private GolemUpgrades() {}
+    private GolemUpgrades() {
+    }
 }
