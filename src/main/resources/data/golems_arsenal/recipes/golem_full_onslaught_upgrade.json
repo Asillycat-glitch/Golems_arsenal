@@ -1,0 +1,36 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "H": {
+      "item": "minecraft:diamond_helmet"
+    },
+    "C": {
+      "item": "minecraft:diamond_chestplate"
+    },
+    "L": {
+      "item": "minecraft:diamond_leggings"
+    },
+    "B": {
+      "item": "minecraft:diamond_boots"
+    },
+    "A": {
+      "item": "modulargolems:diamond"
+    },
+    "T": {
+      "item": "modulargolems:netherite"
+    },
+    "E": {
+      "item": "modulargolems:empty_upgrade"
+    }
+  },
+  "pattern": [
+    "HAB",
+    "TEC",
+    " L "
+  ],
+  "result": {
+    "item": "golems_arsenal:golem_full_onslaught_upgrade"
+  },
+  "show_notification": true
+}
