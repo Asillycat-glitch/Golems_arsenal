@@ -171,7 +171,7 @@ public final class Config {
         SHIELD_REPAIR_COOLDOWN = BUILDER.comment("Cooldown in ticks between shield durability restorations")
                 .defineInRange("shield_repair_cooldown", 100, 1, 72000);
         ONSLAUGHT_ARMOR_THRESHOLD = BUILDER.comment("Armor value above which the full onslaught upgrade starts granting bonuses; toughness adds to the bonus points once exceeded")
-                .defineInRange("onslaught_armor_threshold", 20, 0, 1000);
+                .defineInRange("onslaught_armor_threshold", 15, 0, 1000);
         ONSLAUGHT_ATTACK_PERCENT_MODE = BUILDER.comment("True: melee attack bonus is percentage per armor point; false: flat damage per armor point")
                 .define("onslaught_attack_percent_mode", false);
         ONSLAUGHT_ATTACK_PERCENT_PER_POINT = BUILDER.comment("Melee attack bonus per armor point above the threshold when percent mode is on")

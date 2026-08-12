@@ -13,7 +13,7 @@ public final class ModEnchantments {
             DeferredRegister.create(ForgeRegistries.ENCHANTMENTS, Golems_arsenal.MODID);
 
     public static final RegistryObject<FullOnslaughtEnchantment> FULL_ONSLAUGHT =
-            ENCHANTMENTS.register("full_onslaught", FullOnslaughtEnchantment::new);
+            ENCHANTMENTS.register("golem_full_onslaught", FullOnslaughtEnchantment::new);
 
     public static void register(IEventBus modEventBus) {
         ENCHANTMENTS.register(modEventBus);
