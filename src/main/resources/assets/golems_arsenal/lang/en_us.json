@@ -26,6 +26,7 @@
   "upgrade.golems_arsenal.golem_weapon_onslaught": "Golem Full-Onslaught Upgrade",
   "upgrade.golems_arsenal.golem_weapon_onslaught.desc": "While armor exceeds 20, each excess armor point plus toughness grants melee attack and percentage TACZ gun damage (configurable)",
   "attribute.name.golems_arsenal.arrow_velocity": "Arrow Velocity",
+  "enchantment.golems_arsenal.full_onslaught": "Full Onslaught",
   "tooltip.golems_arsenal.golem_energy": "%s FE / %s FE",
   "itemGroup.golems_arsenal": "Golem's Arsenal",
   "effect.golems_arsenal.charge": "Charge",

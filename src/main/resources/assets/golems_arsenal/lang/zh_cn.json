@@ -26,6 +26,7 @@
   "upgrade.golems_arsenal.golem_weapon_onslaught": "全装猛攻升级",
   "upgrade.golems_arsenal.golem_weapon_onslaught.desc": "护甲超过 20 点时，每点超出护甲与韧性提升近战攻击与 TACZ 枪械伤害（可配置）",
   "attribute.name.golems_arsenal.arrow_velocity": "箭矢速度",
+  "enchantment.golems_arsenal.full_onslaught": "全装猛攻",
   "tooltip.golems_arsenal.golem_energy": "%s FE / %s FE",
   "itemGroup.golems_arsenal": "傀儡军械库",
   "effect.golems_arsenal.charge": "充能",

@@ -7,6 +7,8 @@ import a_silly_cat.golems_arsenal.item.GolemEnergyHammerItem;
 import a_silly_cat.golems_arsenal.item.GolemTrackingMechanicalBowItem;
 import a_silly_cat.golems_arsenal.init.GolemEffects;
 import a_silly_cat.golems_arsenal.init.ModAttributes;
+import a_silly_cat.golems_arsenal.init.ModEnchantments;
+import a_silly_cat.golems_arsenal.init.ModTags;
 import dev.xkmc.modulargolems.content.entity.metalgolem.MetalGolemEntity;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.server.level.ServerLevel;
@@ -47,10 +49,14 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraftforge.event.AnvilUpdateEvent;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
@@ -162,22 +168,82 @@ public final class WeaponEventHandler {
             }
         }
         if (golem instanceof HumanoidGolemEntity && GolemWeaponOnslaughtModifier.hasUpgrade(golem)) {
-            double armor = golem.getAttributeValue(Attributes.ARMOR);
-            if (armor > Config.ONSLAUGHT_ARMOR_THRESHOLD.get()) {
-                double excess = (armor - Config.ONSLAUGHT_ARMOR_THRESHOLD.get())
-                        + golem.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
-                if (event.getSource().is(TACZ_BULLETS)) {
-                    amount *= (float) (1 + excess * Config.ONSLAUGHT_GUN_PERCENT_PER_POINT.get());
-                } else if (!event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
-                    if (Config.ONSLAUGHT_ATTACK_PERCENT_MODE.get()) {
-                        amount *= (float) (1 + excess * Config.ONSLAUGHT_ATTACK_PERCENT_PER_POINT.get());
-                    } else {
-                        amount += (float) (excess * Config.ONSLAUGHT_ATTACK_FLAT_PER_POINT.get());
-                    }
-                }
-            }
+            amount = applyOnslaughtBonus(golem, event.getSource(), amount);
         }
         event.setAmount(amount);
+    }
+
+    /**
+     * Full-onslaught chestplate enchantment: players wearing an enchanted chestplate gain the same
+     * bonus as the golem upgrade (melee attack and percentage TACZ gun damage while armor exceeds
+     * the threshold).
+     */
+    @SubscribeEvent
+    public static void onPlayerOnslaughtAttack(LivingHurtEvent event) {
+        if (event.getEntity().level().isClientSide) {
+            return;
+        }
+        if (!(event.getSource().getEntity() instanceof Player player)) {
+            return;
+        }
+        ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
+        if (chest.getEnchantmentLevel(ModEnchantments.FULL_ONSLAUGHT.get()) <= 0) {
+            return;
+        }
+        event.setAmount(applyOnslaughtBonus(player, event.getSource(), event.getAmount()));
+    }
+
+    /**
+     * Meme-upgrade items apply their matching enchantment on an anvil: the enchantment id is the
+     * item id with the trailing {@code _upgrade} removed (e.g. golem_full_onslaught_upgrade adds
+     * full_onslaught). One meme-upgrade item is consumed per application.
+     */
+    @SubscribeEvent
+    public static void onAnvilUpdate(AnvilUpdateEvent event) {
+        ItemStack left = event.getLeft();
+        ItemStack right = event.getRight();
+        if (left.isEmpty() || right.isEmpty() || !right.is(ModTags.MEME_UPGRADES)) {
+            return;
+        }
+        ResourceLocation upgradeId = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(right.getItem());
+        if (upgradeId == null || !upgradeId.getPath().endsWith("_upgrade")) {
+            return;
+        }
+        String enchantName = upgradeId.getPath().substring(0, upgradeId.getPath().length() - "_upgrade".length());
+        Enchantment enchantment = net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS
+                .getValue(new ResourceLocation(upgradeId.getNamespace(), enchantName));
+        if (enchantment == null || !enchantment.canEnchant(left)) {
+            return;
+        }
+        ItemStack output = left.copy();
+        output.enchant(enchantment, 1);
+        event.setOutput(output);
+        event.setMaterialCost(1);
+        event.setCost(1);
+    }
+
+    /**
+     * Shared onslaught math for golems and players: while armor exceeds the threshold, each excess
+     * armor point plus toughness grants TACZ gun damage as a percentage, and melee attack bonus
+     * (percentage or flat, per config). Projectiles other than TACZ bullets are excluded.
+     */
+    private static float applyOnslaughtBonus(LivingEntity attacker, DamageSource source, float amount) {
+        double armor = attacker.getAttributeValue(Attributes.ARMOR);
+        if (armor <= Config.ONSLAUGHT_ARMOR_THRESHOLD.get()) {
+            return amount;
+        }
+        double excess = (armor - Config.ONSLAUGHT_ARMOR_THRESHOLD.get())
+                + attacker.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+        if (source.is(TACZ_BULLETS)) {
+            return amount * (float) (1 + excess * Config.ONSLAUGHT_GUN_PERCENT_PER_POINT.get());
+        }
+        if (source.is(DamageTypeTags.IS_PROJECTILE)) {
+            return amount;
+        }
+        if (Config.ONSLAUGHT_ATTACK_PERCENT_MODE.get()) {
+            return amount * (float) (1 + excess * Config.ONSLAUGHT_ATTACK_PERCENT_PER_POINT.get());
+        }
+        return amount + (float) (excess * Config.ONSLAUGHT_ATTACK_FLAT_PER_POINT.get());
     }
 
     private static int chargeAmplifier(int techLevel) {
