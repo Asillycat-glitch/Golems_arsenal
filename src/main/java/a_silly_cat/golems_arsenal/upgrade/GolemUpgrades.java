@@ -5,6 +5,7 @@ import com.tterrag.registrate.util.entry.RegistryEntry;
 import com.tterrag.registrate.util.nullness.NonNullSupplier;
 import dev.xkmc.l2library.base.L2Registrate;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
+import dev.xkmc.modulargolems.content.modifier.base.AttributeGolemModifier;
 import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
 
@@ -37,6 +38,15 @@ public final class GolemUpgrades {
             reg("golem_weapon_shield", GolemWeaponShieldModifier::new);
     public static final RegistryEntry<GolemWeaponOnslaughtModifier> WEAPON_ONSLAUGHT =
             reg("golem_weapon_onslaught", GolemWeaponOnslaughtModifier::new);
+
+    /**
+     * Example repeatable expansion: up to 5 applications, each level +1 upgrade slot,
+     * +1 armor and +0.5 attack damage. Duplicate the registration to make more variants.
+     */
+    public static final RegistryEntry<RepeatableExpansionModifier> ARMORY_EXPANSION =
+            reg("golem_armory_expansion", () -> new RepeatableExpansionModifier(5, 1,
+                    new AttributeGolemModifier.AttrEntry(GolemTypes.STAT_ARMOR, () -> 1.0),
+                    new AttributeGolemModifier.AttrEntry(GolemTypes.STAT_ATTACK, () -> 0.5)));
 
     private static <T extends GolemModifier> RegistryEntry<T> reg(String id, NonNullSupplier<T> sup) {
         return REGISTRATE.generic(GolemTypes.MODIFIERS, id, sup).defaultLang().register();
@@ -72,6 +82,10 @@ public final class GolemUpgrades {
 
     public static GolemWeaponOnslaughtModifier onslaughtModifier() {
         return WEAPON_ONSLAUGHT.get();
+    }
+
+    public static RepeatableExpansionModifier armoryExpansionModifier() {
+        return ARMORY_EXPANSION.get();
     }
 
     /** Level-1 upgrades are considered installed when their modifier is present on the golem. */

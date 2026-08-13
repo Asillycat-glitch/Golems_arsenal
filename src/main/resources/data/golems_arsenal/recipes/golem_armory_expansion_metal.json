@@ -1,0 +1,15 @@
+{
+  "type": "golems_arsenal:golem_repeatable_add_slot",
+  "addition": {
+    "item": "minecraft:iron_ingot"
+  },
+  "base": {
+    "item": "modulargolems:metal_golem_holder"
+  },
+  "result": {
+    "item": "modulargolems:metal_golem_holder"
+  },
+  "template": {
+    "item": "golems_arsenal:golem_armory_expansion"
+  }
+}

@@ -9,6 +9,7 @@ import a_silly_cat.golems_arsenal.upgrade.GolemEnergyTechUpgradeItem;
 import a_silly_cat.golems_arsenal.upgrade.GolemEnergyUpgradeItem;
 import a_silly_cat.golems_arsenal.upgrade.GolemUpgrades;
 import a_silly_cat.golems_arsenal.upgrade.GolemWeaponUpgradeItem;
+import a_silly_cat.golems_arsenal.upgrade.RepeatableExpansionItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -74,6 +75,11 @@ public final class ModItems {
             "golem_full_onslaught_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::onslaughtModifier));
 
+    /** Example repeatable expansion template: forge it onto a golem holder repeatedly in a smithing table. */
+    public static final RegistryObject<RepeatableExpansionItem> GOLEM_ARMORY_EXPANSION = ITEMS.register(
+            "golem_armory_expansion",
+            () -> new RepeatableExpansionItem(new Item.Properties().stacksTo(1), GolemUpgrades::armoryExpansionModifier));
+
     public static final RegistryObject<CreativeModeTab> TAB = CREATIVE_TABS.register(
             "golems_arsenal",
             () -> CreativeModeTab.builder()
@@ -91,6 +97,7 @@ public final class ModItems {
                         output.accept(GOLEM_RANGED_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_SHIELD_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_FULL_ONSLAUGHT_UPGRADE.get());
+                        output.accept(GOLEM_ARMORY_EXPANSION.get());
                     })
                     .build());
 
