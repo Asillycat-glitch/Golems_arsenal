@@ -80,6 +80,15 @@ public final class ModItems {
             "tech_expansion_template",
             () -> new RepeatableExpansionItem(new Item.Properties().stacksTo(64), GolemUpgrades::techExpansionModifier));
 
+    /**
+     * Hidden legacy alias for the old id used before the rename to tech_expansion_template.
+     * Old golem holders / JEI bookmarks that stored {@code golems_arsenal:golem_armory_expansion}
+     * would otherwise resolve to AirItem and crash Modular Golems' collectModifiers while rendering.
+     */
+    public static final RegistryObject<RepeatableExpansionItem> LEGACY_TECH_EXPANSION_TEMPLATE = ITEMS.register(
+            "golem_armory_expansion",
+            () -> new RepeatableExpansionItem(new Item.Properties().stacksTo(64), GolemUpgrades::techExpansionModifier));
+
     public static final RegistryObject<CreativeModeTab> TAB = CREATIVE_TABS.register(
             "golems_arsenal",
             () -> CreativeModeTab.builder()

@@ -9,6 +9,7 @@
   "item.golems_arsenal.golem_shield_weapon_upgrade": "Golem Shield Weapon Upgrade",
   "item.golems_arsenal.golem_full_onslaught_upgrade": "Golem Full-Onslaught Upgrade",
   "item.golems_arsenal.tech_expansion_template": "Tech Expansion Template",
+  "item.golems_arsenal.golem_armory_expansion": "Tech Expansion Template",
   "upgrade.golems_arsenal.golem_energy": "Golem Energy Storage",
   "upgrade.golems_arsenal.golem_energy.desc": "Adds FE capacity; capacity increases with upgrade level.",
   "upgrade.golems_arsenal.golem_energy_tech": "Golem Energy Tech",

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "golems_arsenal:item/tech_expansion_template"
+  }
+}
