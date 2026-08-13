@@ -40,11 +40,12 @@ public final class GolemUpgrades {
             reg("golem_weapon_onslaught", GolemWeaponOnslaughtModifier::new);
 
     /**
-     * Example repeatable expansion: up to 5 applications, each level +1 upgrade slot,
+     * Tech expansion template modifier: up to 5 applications, each level +1 upgrade slot,
      * but -10% max health. Duplicate the registration to make more variants.
      */
-    public static final RegistryEntry<RepeatableExpansionModifier> ARMORY_EXPANSION =
-            reg("golem_armory_expansion", () -> new RepeatableExpansionModifier(5, 1,
+    public static final RegistryEntry<RepeatableExpansionModifier> TECH_EXPANSION =
+            reg("tech_expansion", () -> new RepeatableExpansionModifier(5, 1,
+                    "upgrade.golems_arsenal.tech_expansion",
                     new AttributeGolemModifier.AttrEntry(GolemTypes.STAT_HEALTH_P, () -> -0.1)));
 
     private static <T extends GolemModifier> RegistryEntry<T> reg(String id, NonNullSupplier<T> sup) {
@@ -83,8 +84,8 @@ public final class GolemUpgrades {
         return WEAPON_ONSLAUGHT.get();
     }
 
-    public static RepeatableExpansionModifier armoryExpansionModifier() {
-        return ARMORY_EXPANSION.get();
+    public static RepeatableExpansionModifier techExpansionModifier() {
+        return TECH_EXPANSION.get();
     }
 
     /** Level-1 upgrades are considered installed when their modifier is present on the golem. */

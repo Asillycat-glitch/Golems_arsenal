@@ -75,10 +75,10 @@ public final class ModItems {
             "golem_full_onslaught_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::onslaughtModifier));
 
-    /** Example repeatable expansion template: forge it onto a golem holder repeatedly in a smithing table. */
-    public static final RegistryObject<RepeatableExpansionItem> GOLEM_ARMORY_EXPANSION = ITEMS.register(
-            "golem_armory_expansion",
-            () -> new RepeatableExpansionItem(new Item.Properties().stacksTo(1), GolemUpgrades::armoryExpansionModifier));
+    /** Tech expansion template: forge it onto a golem holder repeatedly in a smithing table. */
+    public static final RegistryObject<RepeatableExpansionItem> TECH_EXPANSION_TEMPLATE = ITEMS.register(
+            "tech_expansion_template",
+            () -> new RepeatableExpansionItem(new Item.Properties().stacksTo(64), GolemUpgrades::techExpansionModifier));
 
     public static final RegistryObject<CreativeModeTab> TAB = CREATIVE_TABS.register(
             "golems_arsenal",
@@ -97,7 +97,7 @@ public final class ModItems {
                         output.accept(GOLEM_RANGED_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_SHIELD_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_FULL_ONSLAUGHT_UPGRADE.get());
-                        output.accept(GOLEM_ARMORY_EXPANSION.get());
+                        output.accept(TECH_EXPANSION_TEMPLATE.get());
                     })
                     .build());
 

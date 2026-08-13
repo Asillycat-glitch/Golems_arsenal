@@ -28,9 +28,21 @@ public class RepeatableExpansionModifier extends AttributeGolemModifier {
 
     private final int slotsPerLevel;
 
-    public RepeatableExpansionModifier(int maxLevel, int slotsPerLevel, AttrEntry... entries) {
+    /**
+     * @param langKey base language key (e.g. {@code upgrade.golems_arsenal.tech_expansion});
+     *                tooltip uses it directly, detail lines use {@code langKey + ".desc"}
+     */
+    private final String langKey;
+
+    public RepeatableExpansionModifier(int maxLevel, int slotsPerLevel, String langKey, AttrEntry... entries) {
         super(maxLevel, entries);
         this.slotsPerLevel = slotsPerLevel;
+        this.langKey = langKey;
+    }
+
+    @Override
+    public Component getTooltip(int level) {
+        return Component.translatable(langKey).withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     /**
@@ -46,7 +58,9 @@ public class RepeatableExpansionModifier extends AttributeGolemModifier {
 
     @Override
     public List<MutableComponent> getDetail(int level) {
-        List<MutableComponent> list = new ArrayList<>(super.getDetail(level));
+        List<MutableComponent> list = new ArrayList<>();
+        list.add(Component.translatable(langKey + ".desc").withStyle(ChatFormatting.GREEN));
+        list.addAll(super.getDetail(level));
         list.add(Component.translatable("upgrade.golems_arsenal.expansion.slot", level * slotsPerLevel)
                 .withStyle(ChatFormatting.GREEN));
         return list;

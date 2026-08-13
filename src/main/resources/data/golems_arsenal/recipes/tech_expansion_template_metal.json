@@ -4,12 +4,12 @@
     "item": "minecraft:iron_ingot"
   },
   "base": {
-    "item": "modulargolems:dog_golem_holder"
+    "item": "modulargolems:metal_golem_holder"
   },
   "result": {
-    "item": "modulargolems:dog_golem_holder"
+    "item": "modulargolems:metal_golem_holder"
   },
   "template": {
-    "item": "golems_arsenal:golem_armory_expansion"
+    "item": "golems_arsenal:tech_expansion_template"
   }
 }
