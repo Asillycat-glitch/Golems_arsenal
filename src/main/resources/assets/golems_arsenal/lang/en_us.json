@@ -27,7 +27,7 @@
   "upgrade.golems_arsenal.golem_weapon_onslaught": "Golem Full-Onslaught Upgrade",
   "upgrade.golems_arsenal.golem_weapon_onslaught.desc": "While armor exceeds the threshold, each excess armor point plus toughness grants melee attack and percentage TACZ gun damage (configurable)",
   "upgrade.golems_arsenal.golem_armory_expansion": "Armory Expansion",
-  "upgrade.golems_arsenal.golem_armory_expansion.desc": "Each level grants 1 extra upgrade slot and boosts armor and attack",
+  "upgrade.golems_arsenal.golem_armory_expansion.desc": "Each level grants 1 extra upgrade slot but reduces max health by 10%",
   "upgrade.golems_arsenal.expansion.slot": "+%s Upgrade Slot(s)",
   "attribute.name.golems_arsenal.arrow_velocity": "Arrow Velocity",
   "enchantment.golems_arsenal.golem_full_onslaught": "Full Onslaught",

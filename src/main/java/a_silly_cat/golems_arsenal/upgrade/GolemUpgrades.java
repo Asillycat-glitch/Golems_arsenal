@@ -41,12 +41,11 @@ public final class GolemUpgrades {
 
     /**
      * Example repeatable expansion: up to 5 applications, each level +1 upgrade slot,
-     * +1 armor and +0.5 attack damage. Duplicate the registration to make more variants.
+     * but -10% max health. Duplicate the registration to make more variants.
      */
     public static final RegistryEntry<RepeatableExpansionModifier> ARMORY_EXPANSION =
             reg("golem_armory_expansion", () -> new RepeatableExpansionModifier(5, 1,
-                    new AttributeGolemModifier.AttrEntry(GolemTypes.STAT_ARMOR, () -> 1.0),
-                    new AttributeGolemModifier.AttrEntry(GolemTypes.STAT_ATTACK, () -> 0.5)));
+                    new AttributeGolemModifier.AttrEntry(GolemTypes.STAT_HEALTH_P, () -> -0.1)));
 
     private static <T extends GolemModifier> RegistryEntry<T> reg(String id, NonNullSupplier<T> sup) {
         return REGISTRATE.generic(GolemTypes.MODIFIERS, id, sup).defaultLang().register();
