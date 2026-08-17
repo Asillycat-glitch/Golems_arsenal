@@ -22,7 +22,7 @@
   "upgrade.golems_arsenal.golem_weapon_alt": "Golem Atypical Weapon Upgrade",
   "upgrade.golems_arsenal.golem_weapon_alt.desc": "Golem spears splash area damage around the struck target, and the sculk golem scythe deals bonus damage",
   "upgrade.golems_arsenal.golem_weapon_ranged": "Golem Ranged Weapon Upgrade",
-  "upgrade.golems_arsenal.golem_weapon_ranged.desc": "Arrows shot by a golem bow fly faster, raising arrow damage through the vanilla velocity damage formula",
+  "upgrade.golems_arsenal.golem_weapon_ranged.desc": "Arrows shot by a golem bow fly faster, raising arrow damage through the vanilla velocity damage formula; reduces Sonic Cannon (Echo Cannon) cooldown",
   "upgrade.golems_arsenal.golem_weapon_shield": "Golem Shield Weapon Upgrade",
   "upgrade.golems_arsenal.golem_weapon_shield.desc": "Successful blocks restore shield durability based on the golem's armor and toughness, on a cooldown",
   "upgrade.golems_arsenal.golem_weapon_onslaught": "Golem Full-Onslaught Upgrade",

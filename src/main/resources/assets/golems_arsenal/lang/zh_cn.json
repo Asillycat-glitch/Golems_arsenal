@@ -21,7 +21,7 @@
   "upgrade.golems_arsenal.golem_weapon_alt": "异类武装升级",
   "upgrade.golems_arsenal.golem_weapon_alt.desc": "傀儡矛命中时对周围造成范围伤害；渊鸣骨镰获得额外伤害加成",
   "upgrade.golems_arsenal.golem_weapon_ranged": "远程武器升级",
-  "upgrade.golems_arsenal.golem_weapon_ranged.desc": "傀儡弓射出的箭矢飞行速度提升，并按原版伤害公式同步提升箭矢伤害",
+  "upgrade.golems_arsenal.golem_weapon_ranged.desc": "傀儡弓射出的箭矢飞行速度提升，并按原版伤害公式同步提升箭矢伤害；回响炮（声波炮）冷却时间缩短",
   "upgrade.golems_arsenal.golem_weapon_shield": "盾类武装升级",
   "upgrade.golems_arsenal.golem_weapon_shield.desc": "格挡成功时按傀儡护甲与韧性恢复盾牌耐久（有冷却）",
   "upgrade.golems_arsenal.golem_weapon_onslaught": "全装猛攻升级",
