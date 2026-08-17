@@ -40,6 +40,7 @@ import a_silly_cat.golems_arsenal.upgrade.GolemWeaponRangedModifier;
 import a_silly_cat.golems_arsenal.upgrade.GolemWeaponShieldModifier;
 import dev.xkmc.l2library.init.events.GeneralEventHandler;
 import dev.xkmc.modulargolems.content.entity.humanoid.HumanoidGolemEntity;
+import dev.xkmc.modulargolems.content.item.ranged.SonicCannonItem;
 import dev.xkmc.modulargolems.content.item.golem.GolemHolder;
 import dev.xkmc.modulargolems.events.event.GolemDamageShieldEvent;
 import net.minecraft.core.particles.ParticleTypes;
@@ -90,6 +91,8 @@ public final class WeaponEventHandler {
             UUID.nameUUIDFromBytes("golems_arsenal:sword_sweep".getBytes());
     private static final UUID RANGED_VELOCITY_UUID =
             UUID.nameUUIDFromBytes("golems_arsenal:ranged_velocity".getBytes());
+    private static final UUID RANGED_MAGIC_UUID =
+            UUID.nameUUIDFromBytes("golems_arsenal:ranged_magic".getBytes());
     private static final ResourceKey<DamageType> FLAME_MAGIC =
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("flame_magic"));
     private static final TagKey<DamageType> TACZ_BULLETS =
@@ -472,6 +475,7 @@ public final class WeaponEventHandler {
         updateWeaponAttributes(golem, stack);
         updateSwordAttributes(golem, stack);
         updateRangedVelocityAttributes(golem, stack);
+        updateCannonMagicAttributes(golem);
         hammerRegen(golem, stack);
     }
 
@@ -642,6 +646,57 @@ public final class WeaponEventHandler {
                 GolemEnergyItemProvider.energyOf(stack), capacity).withStyle(ChatFormatting.AQUA));
     }
 
+    /** L2lib magic damage factor, resolved by reflection so this mod stays optional. */
+    private static Attribute magicDamageAttributeCache;
+
+    private static Attribute magicDamageAttribute() {
+        if (magicDamageAttributeCache == null) {
+            magicDamageAttributeCache = resolveMagicDamageAttribute();
+        }
+        return magicDamageAttributeCache;
+    }
+
+    private static Attribute resolveMagicDamageAttribute() {
+        try {
+            Class<?> tracker = Class.forName("dev.xkmc.l2damagetracker.init.L2DamageTracker");
+            Object entry = tracker.getField("MAGIC_FACTOR").get(null);
+            Object attribute = entry.getClass().getMethod("get").invoke(entry);
+            return attribute instanceof Attribute value ? value : null;
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Ranged weapon upgrade extra effect for the Sonic Cannon (Echo Cannon): while the golem
+     * holds the cannon, raise the L2lib magic damage factor so its magic damage scales up.
+     */
+    private static void updateCannonMagicAttributes(AbstractGolemEntity<?, ?> golem) {
+        Attribute magic = magicDamageAttribute();
+        if (magic == null) {
+            return;
+        }
+        AttributeInstance attr = golem.getAttribute(magic);
+        if (attr == null) {
+            return;
+        }
+        if (GolemWeaponRangedModifier.hasUpgrade(golem) && isHoldingCannon(golem)) {
+            setModifier(attr, RANGED_MAGIC_UUID, "golems_arsenal_ranged_magic",
+                    Config.RANGED_CANNON_MAGIC_BONUS.get());
+        } else {
+            attr.removeModifier(RANGED_MAGIC_UUID);
+        }
+    }
+
+    private static boolean isHoldingCannon(AbstractGolemEntity<?, ?> golem) {
+        if (golem.getMainHandItem().getItem() instanceof SonicCannonItem
+                || golem.getOffhandItem().getItem() instanceof SonicCannonItem) {
+            return true;
+        }
+        return golem instanceof MetalGolemEntity metal
+                && (metal.getLeftShoulder().getItem().getItem() instanceof SonicCannonItem
+                || metal.getRightShoulder().getItem().getItem() instanceof SonicCannonItem);
+    }
     @SubscribeEvent
     public static void onArrowJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide() || !(event.getEntity() instanceof AbstractArrow arrow)) {

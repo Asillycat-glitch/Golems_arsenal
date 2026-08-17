@@ -48,7 +48,7 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue SPEAR_AOE_DAMAGE;
     public static final ForgeConfigSpec.DoubleValue SCULK_SCYTHE_BONUS;
     public static final ForgeConfigSpec.DoubleValue RANGED_ARROW_SPEED;
-    public static final ForgeConfigSpec.DoubleValue RANGED_CANNON_CD_MULTIPLIER;
+    public static final ForgeConfigSpec.DoubleValue RANGED_CANNON_MAGIC_BONUS;
     public static final ForgeConfigSpec.DoubleValue SHIELD_REPAIR_PER_ARMOR;
     public static final ForgeConfigSpec.IntValue SHIELD_REPAIR_MAX;
     public static final ForgeConfigSpec.IntValue SHIELD_REPAIR_COOLDOWN;
@@ -165,8 +165,8 @@ public final class Config {
                 .defineInRange("sculk_scythe_bonus", 0.25, 0.0, 10.0);
         RANGED_ARROW_SPEED = BUILDER.comment("Arrow velocity multiplier for golem bows with the ranged weapon upgrade; vanilla arrow damage scales with velocity, so damage rises together with speed")
                 .defineInRange("ranged_arrow_speed", 1.5, 1.0, 10.0);
-        RANGED_CANNON_CD_MULTIPLIER = BUILDER.comment("Cooldown multiplier for the golem Sonic Cannon (Echo Cannon) while the ranged weapon upgrade is installed; lower = faster firing")
-                .defineInRange("ranged_cannon_cd_multiplier", 0.5, 0.05, 1.0);
+        RANGED_CANNON_MAGIC_BONUS = BUILDER.comment("Magic damage bonus for golems holding the Sonic Cannon (Echo Cannon) while the ranged weapon upgrade is installed; multiplier on the L2lib magic damage factor")
+                .defineInRange("ranged_cannon_magic_bonus", 0.5, 0.0, 10.0);
         SHIELD_REPAIR_PER_ARMOR = BUILDER.comment("Shield durability restored per combined armor and toughness point on a successful block (humanoid golems, shield weapon upgrade)")
                 .defineInRange("shield_repair_per_armor", 0.2, 0.0, 10.0);
         SHIELD_REPAIR_MAX = BUILDER.comment("Maximum shield durability restored per successful block")

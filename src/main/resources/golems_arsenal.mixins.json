@@ -5,8 +5,7 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "golems_arsenal.refmap.json",
   "mixins": [
-    "AbstractGolemEnergyMixin",
-    "SonicCannonBehaviorMixin"
+    "AbstractGolemEnergyMixin"
   ],
   "client": [],
   "injectors": {
