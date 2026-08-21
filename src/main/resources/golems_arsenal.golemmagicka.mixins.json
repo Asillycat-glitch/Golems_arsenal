@@ -6,7 +6,8 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "golems_arsenal.refmap.json",
   "mixins": [
-    "SpellCategoryUtilMixin"
+    "SpellCategoryUtilMixin",
+    "GolemSpellManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
