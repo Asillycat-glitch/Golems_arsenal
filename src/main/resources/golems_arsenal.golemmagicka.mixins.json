@@ -1,5 +1,5 @@
 {
-  "required": false,
+  "required": true,
   "minVersion": "0.8",
   "package": "a_silly_cat.golems_arsenal.mixin.golemmagicka",
   "plugin": "a_silly_cat.golems_arsenal.mixin.GolemMagickaMixinPlugin",
