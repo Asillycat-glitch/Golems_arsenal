@@ -29,12 +29,15 @@ public final class GolemMagickaMixinPlugin implements IMixinConfigPlugin {
             return apply;
         }
         try {
-            Class.forName(targetClassName, false, getClass().getClassLoader());
-            LOGGER.info("[GolemsArsenal] mixin gate: {} -> true (target class present, ModList unavailable)",
-                    mixinClassName);
-            return true;
+            // Check for the class FILE without loading it: loading the target here (during mixin
+            // prepare) would cache it untransformed and silently prevent the mixin from applying.
+            ClassLoader loader = getClass().getClassLoader();
+            boolean present = loader.getResource(targetClassName.replace('.', '/') + ".class") != null;
+            LOGGER.info("[GolemsArsenal] mixin gate: {} -> {} (target class present={}, ModList unavailable)",
+                    mixinClassName, present, present);
+            return present;
         } catch (Throwable ignored) {
-            LOGGER.info("[GolemsArsenal] mixin gate: {} -> false (target class absent, ModList unavailable)",
+            LOGGER.info("[GolemsArsenal] mixin gate: {} -> false (lookup failed, ModList unavailable)",
                     mixinClassName);
             return false;
         }
