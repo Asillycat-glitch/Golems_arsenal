@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.compat;
 
 import a_silly_cat.golems_arsenal.compat.mekanism.MekanismCompat;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemMagickaCompat;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.ModList;
 
@@ -12,6 +13,9 @@ public final class CompatDispatch {
     public static void registerCommon(IEventBus modEventBus) {
         if (ModList.get().isLoaded("mekanism")) {
             MekanismCompat.register(modEventBus);
+        }
+        if (ModList.get().isLoaded("golemmagicka")) {
+            GolemMagickaCompat.register(modEventBus);
         }
     }
 }

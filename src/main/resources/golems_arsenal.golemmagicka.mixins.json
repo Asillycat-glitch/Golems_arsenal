@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "a_silly_cat.golems_arsenal.mixin.golemmagicka",
+  "plugin": "a_silly_cat.golems_arsenal.mixin.GolemMagickaMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "golems_arsenal.refmap.json",
+  "mixins": [
+    "SpellCategoryUtilMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
