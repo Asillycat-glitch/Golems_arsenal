@@ -15,7 +15,18 @@ import java.util.Set;
 public final class GolemMagickaMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return ModList.get().isLoaded("golemmagicka");
+        // ModList may not be initialized yet when the mixin config is prepared, so guard the
+        // normal lookup and fall back to checking whether the target class actually exists.
+        ModList list = ModList.get();
+        if (list != null) {
+            return list.isLoaded("golemmagicka");
+        }
+        try {
+            Class.forName(targetClassName, false, getClass().getClassLoader());
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     @Override
