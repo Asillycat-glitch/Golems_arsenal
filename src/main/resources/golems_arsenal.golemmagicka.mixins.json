@@ -7,7 +7,8 @@
   "refmap": "golems_arsenal.refmap.json",
   "mixins": [
     "SpellCategoryUtilMixin",
-    "GolemSpellManagerMixin"
+    "GolemSpellManagerMixin",
+    "GolemWizardGoalMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.mixin.golemmagicka;
 
 import a_silly_cat.golems_arsenal.upgrade.GolemScrollModifier;
+import com.mojang.logging.LogUtils;
 import dev.xkmc.golemmagicka.content.entity.GolemSpellManager;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.mob_weapon_api.registry.WeaponStatus;
@@ -11,6 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.slf4j.Logger;
 
 import java.util.Optional;
 
@@ -23,12 +25,17 @@ import java.util.Optional;
  */
 @Mixin(GolemSpellManager.class)
 public abstract class GolemSpellManagerMixin {
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     @Inject(method = "predicate", at = @At("HEAD"), cancellable = true)
     private static void golemsArsenal$enableScrollUpgradeCasting(LivingEntity entity, ItemStack stack,
                                                                  InteractionHand hand,
                                                                  CallbackInfoReturnable<Optional<WeaponStatus>> cir) {
         if (entity instanceof AbstractGolemEntity<?, ?> golem && GolemScrollModifier.hasUpgrade(golem)) {
+            if (golem.tickCount % 40 == 0) {
+                LOGGER.info("[GolemsArsenal] scroll golem {} weapon predicate override -> casting allowed (hand item: {})",
+                        golem, stack);
+            }
             cir.setReturnValue(WeaponStatus.OFFENSIVE.withPriority(1000).of(true));
         }
     }
