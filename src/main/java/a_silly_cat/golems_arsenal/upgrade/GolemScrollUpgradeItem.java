@@ -1,6 +1,6 @@
 package a_silly_cat.golems_arsenal.upgrade;
 
-import dev.xkmc.modulargolems.content.item.upgrade.IUpgradeItem;
+import dev.xkmc.modulargolems.content.item.upgrade.UpgradeItem;
 import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
 import dev.xkmc.modulargolems.content.modifier.base.ModifierInstance;
 import net.minecraft.network.chat.Component;
@@ -16,29 +16,20 @@ import java.util.function.Supplier;
 /**
  * Scroll upgrade item. Only registered when Golem Magicka is loaded. The recorded spell itself
  * is stored on the golem (Modular Golems only keeps upgrade item ids on installation), so this
- * item is a plain marker upgrade that enables recording/casting.
+ * item is a plain marker upgrade that enables recording/casting. Extends {@link UpgradeItem}
+ * (not just {@code IUpgradeItem}) so it can be installed in the golem workbench upgrade slots.
  */
-public class GolemScrollUpgradeItem extends Item implements IUpgradeItem {
+public class GolemScrollUpgradeItem extends UpgradeItem {
     private final Supplier<? extends GolemModifier> sup;
 
     public GolemScrollUpgradeItem(Properties properties, Supplier<? extends GolemModifier> sup) {
-        super(properties);
+        super(properties, false);
         this.sup = sup;
     }
 
     @Override
     public List<ModifierInstance> get() {
         return List.of(new ModifierInstance(sup.get(), 1));
-    }
-
-    // consumesSlot/canBeRemoved were added to IUpgradeItem in Modular Golems 2.7.x; the project
-    // compiles against 2.6.34 where they do not exist yet, so no @Override here.
-    public boolean consumesSlot() {
-        return true;
-    }
-
-    public boolean canBeRemoved() {
-        return true;
     }
 
     @Override

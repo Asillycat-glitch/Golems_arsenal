@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.init;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemMagickaCompat;
 import a_silly_cat.golems_arsenal.item.ExampleWeapon;
 import a_silly_cat.golems_arsenal.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.item.GolemEnergyHammerItem;
@@ -19,6 +20,7 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
+import net.minecraftforge.fml.ModList;
 
 public final class ModItems {
     public static final DeferredRegister<Item> ITEMS =
@@ -107,6 +109,9 @@ public final class ModItems {
                         output.accept(GOLEM_SHIELD_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_FULL_ONSLAUGHT_UPGRADE.get());
                         output.accept(TECH_EXPANSION_TEMPLATE.get());
+                        if (ModList.get().isLoaded("golemmagicka")) {
+                            output.accept(GolemMagickaCompat.GOLEM_SCROLL_UPGRADE.get());
+                        }
                     })
                     .build());
 
