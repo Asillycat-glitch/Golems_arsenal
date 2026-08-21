@@ -1,6 +1,6 @@
 package a_silly_cat.golems_arsenal.mixin.golemmagicka;
 
-import a_silly_cat.golems_arsenal.upgrade.GolemScrollModifier;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
 import com.mojang.logging.LogUtils;
 import dev.xkmc.golemmagicka.content.entity.GolemMagicData;
 import dev.xkmc.golemmagicka.content.entity.GolemWizardGoal;

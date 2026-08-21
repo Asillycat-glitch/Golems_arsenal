@@ -1,7 +1,7 @@
 package a_silly_cat.golems_arsenal.mixin;
 
-import a_silly_cat.golems_arsenal.energy.GolemEnergyProvider;
-import a_silly_cat.golems_arsenal.energy.GolemEnergyStorage;
+import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
+import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyStorage;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.nbt.CompoundTag;
 import org.spongepowered.asm.mixin.Mixin;

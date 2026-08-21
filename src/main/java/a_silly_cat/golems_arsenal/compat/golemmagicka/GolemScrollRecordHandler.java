@@ -1,7 +1,7 @@
 package a_silly_cat.golems_arsenal.compat.golemmagicka;
 
-import a_silly_cat.golems_arsenal.upgrade.GolemScrollData;
-import a_silly_cat.golems_arsenal.upgrade.GolemScrollModifier;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollData;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
 import com.mojang.logging.LogUtils;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import io.redspace.ironsspellbooks.api.registry.SpellRegistry;

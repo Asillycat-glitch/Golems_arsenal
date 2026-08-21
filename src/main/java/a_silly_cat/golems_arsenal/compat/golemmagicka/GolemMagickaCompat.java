@@ -1,9 +1,9 @@
 package a_silly_cat.golems_arsenal.compat.golemmagicka;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
-import a_silly_cat.golems_arsenal.upgrade.GolemScrollModifier;
-import a_silly_cat.golems_arsenal.upgrade.GolemScrollUpgradeItem;
-import a_silly_cat.golems_arsenal.upgrade.GolemUpgrades;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollUpgradeItem;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import com.tterrag.registrate.util.entry.RegistryEntry;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
 import net.minecraft.world.item.Item;

@@ -1,7 +1,7 @@
 package a_silly_cat.golems_arsenal.init;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
-import a_silly_cat.golems_arsenal.recipe.GolemRepeatableSmithAddSlotRecipe;
+import a_silly_cat.golems_arsenal.base.recipe.GolemRepeatableSmithAddSlotRecipe;
 import dev.xkmc.l2library.serial.recipe.AbstractSmithingRecipe;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraftforge.eventbus.api.IEventBus;

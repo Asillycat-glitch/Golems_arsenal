@@ -1,7 +1,7 @@
 package a_silly_cat.golems_arsenal.init;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
-import a_silly_cat.golems_arsenal.enchantment.FullOnslaughtEnchantment;
+import a_silly_cat.golems_arsenal.base.enchantment.FullOnslaughtEnchantment;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;

@@ -6,7 +6,7 @@ import a_silly_cat.golems_arsenal.init.ModAttributes;
 import a_silly_cat.golems_arsenal.init.ModEnchantments;
 import a_silly_cat.golems_arsenal.init.ModRecipeSerializers;
 import a_silly_cat.golems_arsenal.compat.CompatDispatch;
-import a_silly_cat.golems_arsenal.upgrade.GolemUpgrades;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
