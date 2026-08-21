@@ -61,7 +61,8 @@ public final class GolemScrollRecordHandler {
             return;
         }
         GolemScrollData.set(golem, id, slot.getLevel());
-        LOGGER.info("[GolemsArsenal] scroll upgrade: recorded spell {} level {} on golem {}", id, slot.getLevel(), golem);
+        LOGGER.info("[GolemsArsenal] scroll upgrade: recorded spell {} level {} on golem {} (mainhand: {}, offhand: {})",
+                id, slot.getLevel(), golem, golem.getMainHandItem(), golem.getOffhandItem());
         event.getEntity().displayClientMessage(
                 Component.translatable("message.golems_arsenal.scroll_record",
                         spell.getDisplayName(event.getEntity())), true);
