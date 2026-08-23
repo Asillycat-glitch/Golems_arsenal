@@ -29,6 +29,7 @@ import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.ProjectileImpactEvent;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.entity.EntityStruckByLightningEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyItemProvider;
@@ -39,6 +40,7 @@ import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponMainModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponOnslaughtModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponRangedModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponShieldModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemDeathExplosionModifier;
 import dev.xkmc.l2library.init.events.GeneralEventHandler;
 import dev.xkmc.modulargolems.content.entity.humanoid.HumanoidGolemEntity;
 import dev.xkmc.modulargolems.content.item.ranged.SonicCannonItem;
@@ -51,6 +53,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
@@ -698,6 +702,43 @@ public final class WeaponEventHandler {
                 && (metal.getLeftShoulder().getItem().getItem() instanceof SonicCannonItem
                 || metal.getRightShoulder().getItem().getItem() instanceof SonicCannonItem);
     }
+    /**
+     * Deathrattle upgrade: a golem with the upgrade detonates once on death. The blast never
+     * breaks blocks; damage is fixed plus a percentage of the golem's max health, with distance
+     * falloff like a real explosion.
+     */
+    @SubscribeEvent
+    public static void onGolemDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem) || golem.level().isClientSide) {
+            return;
+        }
+        if (!GolemDeathExplosionModifier.hasUpgrade(golem)) {
+            return;
+        }
+        float base = Config.DEATH_EXPLOSION_BASE_DAMAGE.get().floatValue();
+        float ratio = Config.DEATH_EXPLOSION_HP_RATIO.get().floatValue();
+        float radius = Config.DEATH_EXPLOSION_RADIUS.get().floatValue();
+        float damage = base + golem.getMaxHealth() * ratio;
+        Vec3 pos = golem.position();
+        if (golem.level() instanceof ServerLevel server) {
+            server.sendParticles(ParticleTypes.EXPLOSION, pos.x, pos.y, pos.z, 1, 0, 0, 0, 0);
+            server.playSound(null, pos.x, pos.y, pos.z, SoundEvents.GENERIC_EXPLODE,
+                    SoundSource.BLOCKS, 1.0F, 1.0F);
+        }
+        List<LivingEntity> targets = golem.level().getEntitiesOfClass(LivingEntity.class,
+                new AABB(pos, pos).inflate(radius),
+                target -> target != golem && target.isAlive());
+        for (LivingEntity target : targets) {
+            double dist = target.distanceTo(golem);
+            float factor = dist >= radius ? 0 : (float) (1.0 - dist / radius);
+            if (factor <= 0) {
+                continue;
+            }
+            target.hurt(golem.damageSources().explosion(golem, null), damage * factor);
+            target.knockback(0.6 * factor, target.getX() - pos.x, target.getZ() - pos.z);
+        }
+    }
+
     @SubscribeEvent
     public static void onArrowJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide() || !(event.getEntity() instanceof AbstractArrow arrow)) {

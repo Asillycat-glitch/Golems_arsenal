@@ -40,6 +40,8 @@ public final class GolemUpgrades {
             reg("golem_weapon_shield", GolemWeaponShieldModifier::new);
     public static final RegistryEntry<GolemWeaponOnslaughtModifier> WEAPON_ONSLAUGHT =
             reg("golem_weapon_onslaught", GolemWeaponOnslaughtModifier::new);
+    public static final RegistryEntry<GolemDeathExplosionModifier> DEATH_EXPLOSION =
+            reg("golem_death_explosion", GolemDeathExplosionModifier::new);
 
     /**
      * Tech expansion template modifier: up to 5 applications, each level +1 upgrade slot,
@@ -84,6 +86,10 @@ public final class GolemUpgrades {
 
     public static GolemWeaponOnslaughtModifier onslaughtModifier() {
         return WEAPON_ONSLAUGHT.get();
+    }
+
+    public static GolemDeathExplosionModifier deathExplosionModifier() {
+        return DEATH_EXPLOSION.get();
     }
 
     public static RepeatableExpansionModifier techExpansionModifier() {

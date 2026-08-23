@@ -9,6 +9,7 @@ import a_silly_cat.golems_arsenal.tech.item.GolemTrackingMechanicalBowItem;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechUpgradeItem;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemDeathExplosionUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.RepeatableExpansionItem;
 import net.minecraft.core.registries.Registries;
@@ -77,6 +78,10 @@ public final class ModItems {
             "golem_full_onslaught_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::onslaughtModifier));
 
+    public static final RegistryObject<GolemDeathExplosionUpgradeItem> GOLEM_DEATH_EXPLOSION_UPGRADE = ITEMS.register(
+            "golem_death_explosion_upgrade",
+            () -> new GolemDeathExplosionUpgradeItem(new Item.Properties().stacksTo(64), 1));
+
     /** Tech expansion template: forge it onto a golem holder repeatedly in a smithing table. */
     public static final RegistryObject<RepeatableExpansionItem> TECH_EXPANSION_TEMPLATE = ITEMS.register(
             "tech_expansion_template",
@@ -108,6 +113,7 @@ public final class ModItems {
                         output.accept(GOLEM_RANGED_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_SHIELD_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_FULL_ONSLAUGHT_UPGRADE.get());
+                        output.accept(GOLEM_DEATH_EXPLOSION_UPGRADE.get());
                         output.accept(TECH_EXPANSION_TEMPLATE.get());
                         if (ModList.get().isLoaded("golemmagicka")) {
                             output.accept(GolemMagickaCompat.GOLEM_SCROLL_UPGRADE.get());

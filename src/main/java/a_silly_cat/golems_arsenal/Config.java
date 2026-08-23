@@ -49,6 +49,9 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue SCULK_SCYTHE_BONUS;
     public static final ForgeConfigSpec.DoubleValue RANGED_ARROW_SPEED;
     public static final ForgeConfigSpec.DoubleValue RANGED_CANNON_MAGIC_BONUS;
+    public static final ForgeConfigSpec.DoubleValue DEATH_EXPLOSION_BASE_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue DEATH_EXPLOSION_HP_RATIO;
+    public static final ForgeConfigSpec.DoubleValue DEATH_EXPLOSION_RADIUS;
     public static final ForgeConfigSpec.DoubleValue SHIELD_REPAIR_PER_ARMOR;
     public static final ForgeConfigSpec.IntValue SHIELD_REPAIR_MAX;
     public static final ForgeConfigSpec.IntValue SHIELD_REPAIR_COOLDOWN;
@@ -167,6 +170,12 @@ public final class Config {
                 .defineInRange("ranged_arrow_speed", 1.5, 1.0, 10.0);
         RANGED_CANNON_MAGIC_BONUS = BUILDER.comment("Magic damage bonus for golems holding the Sonic Cannon (Echo Cannon) while the ranged weapon upgrade is installed; multiplier on the L2lib magic damage factor")
                 .defineInRange("ranged_cannon_magic_bonus", 0.5, 0.0, 10.0);
+        DEATH_EXPLOSION_BASE_DAMAGE = BUILDER.comment("Base damage of the golem death explosion (deathrattle upgrade)")
+                .defineInRange("death_explosion_base_damage", 10.0, 0.0, 1000.0);
+        DEATH_EXPLOSION_HP_RATIO = BUILDER.comment("Extra death-explosion damage as a fraction of the golem's max health")
+                .defineInRange("death_explosion_hp_ratio", 0.2, 0.0, 10.0);
+        DEATH_EXPLOSION_RADIUS = BUILDER.comment("Blast radius of the golem death explosion")
+                .defineInRange("death_explosion_radius", 3.0, 1.0, 16.0);
         SHIELD_REPAIR_PER_ARMOR = BUILDER.comment("Shield durability restored per combined armor and toughness point on a successful block (humanoid golems, shield weapon upgrade)")
                 .defineInRange("shield_repair_per_armor", 0.2, 0.0, 10.0);
         SHIELD_REPAIR_MAX = BUILDER.comment("Maximum shield durability restored per successful block")
