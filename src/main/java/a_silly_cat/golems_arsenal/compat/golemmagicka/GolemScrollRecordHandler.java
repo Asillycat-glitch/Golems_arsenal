@@ -1,7 +1,7 @@
 package a_silly_cat.golems_arsenal.compat.golemmagicka;
 
 import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollData;
-import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import io.redspace.ironsspellbooks.api.registry.SpellRegistry;
 import io.redspace.ironsspellbooks.api.spells.AbstractSpell;
@@ -29,7 +29,7 @@ public final class GolemScrollRecordHandler {
         if (!(event.getTarget() instanceof AbstractGolemEntity<?, ?> golem)) {
             return;
         }
-        if (!GolemScrollModifier.hasUpgrade(golem)) {
+        if (!GolemFlagModifier.hasUpgrade(golem, GolemMagickaCompat.SCROLL.get())) {
             return;
         }
         ItemStack stack = event.getEntity().getItemInHand(event.getHand());

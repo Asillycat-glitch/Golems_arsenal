@@ -1,10 +1,11 @@
 package a_silly_cat.golems_arsenal.compat.golemmagicka;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
-import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
 import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollUpgradeItem;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import com.tterrag.registrate.util.entry.RegistryEntry;
+import dev.xkmc.modulargolems.content.core.StatFilterType;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.common.MinecraftForge;
@@ -22,8 +23,9 @@ public final class GolemMagickaCompat {
     private static final DeferredRegister<Item> ITEMS =
             DeferredRegister.create(ForgeRegistries.ITEMS, Golems_arsenal.MODID);
 
-    public static final RegistryEntry<GolemScrollModifier> SCROLL = GolemUpgrades.REGISTRATE
-            .generic(GolemTypes.MODIFIERS, "golem_scroll", GolemScrollModifier::new)
+    public static final RegistryEntry<GolemFlagModifier> SCROLL = GolemUpgrades.REGISTRATE
+            .generic(GolemTypes.MODIFIERS, "golem_scroll",
+                    () -> new GolemFlagModifier(StatFilterType.MASS, "upgrade.golems_arsenal.golem_scroll"))
             .defaultLang()
             .register();
 

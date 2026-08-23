@@ -1,7 +1,8 @@
 package a_silly_cat.golems_arsenal.mixin.golemmagicka;
 
 import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollData;
-import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemMagickaCompat;
 import dev.xkmc.golemmagicka.content.entity.SpellEntry;
 import dev.xkmc.golemmagicka.util.SpellCategoryUtil;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
@@ -27,7 +28,8 @@ public abstract class SpellCategoryUtilMixin {
     @Inject(method = "getSpells", at = @At("RETURN"), cancellable = true)
     private static void golemsArsenal$addScrollSpell(LivingEntity entity,
                                                      CallbackInfoReturnable<List<SpellEntry>> cir) {
-        if (!(entity instanceof AbstractGolemEntity<?, ?> golem) || !GolemScrollModifier.hasUpgrade(golem)) {
+        if (!(entity instanceof AbstractGolemEntity<?, ?> golem)
+                || !GolemFlagModifier.hasUpgrade(golem, GolemMagickaCompat.SCROLL.get())) {
             return;
         }
         ResourceLocation spellId = GolemScrollData.getSpellId(golem);

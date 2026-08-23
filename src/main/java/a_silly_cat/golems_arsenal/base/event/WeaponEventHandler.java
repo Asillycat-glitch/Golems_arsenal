@@ -30,17 +30,15 @@ import net.minecraftforge.event.entity.ProjectileImpactEvent;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.entity.EntityStruckByLightningEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.energy.IEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyItemProvider;
+import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponAltModifier;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponMainModifier;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponOnslaughtModifier;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponRangedModifier;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponShieldModifier;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemDeathExplosionModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
 import dev.xkmc.l2library.init.events.GeneralEventHandler;
 import dev.xkmc.modulargolems.content.entity.humanoid.HumanoidGolemEntity;
 import dev.xkmc.modulargolems.content.item.ranged.SonicCannonItem;
@@ -158,7 +156,7 @@ public final class WeaponEventHandler {
                 lightningChain(golem, event.getEntity(), stack);
             }
         }
-        if (GolemWeaponMainModifier.hasUpgrade(golem)) {
+        if (GolemUpgrades.hasWeaponMain(golem)) {
             double bonus = mainClassHpBonus(golem, stack, id);
             if (bonus > 0) {
                 amount += (float) bonus;
@@ -167,7 +165,7 @@ public final class WeaponEventHandler {
                 scheduleFlameCloud(golem, event.getEntity());
             }
         }
-        if (GolemWeaponAltModifier.hasUpgrade(golem)) {
+        if (GolemUpgrades.hasWeaponAlt(golem)) {
             if (isSculkScythe(id)) {
                 amount *= (float) (1 + Config.SCULK_SCYTHE_BONUS.get());
             }
@@ -175,7 +173,7 @@ public final class WeaponEventHandler {
                 scheduleSpearAoe(golem, event.getEntity(), amount);
             }
         }
-        if (golem instanceof HumanoidGolemEntity && GolemWeaponOnslaughtModifier.hasUpgrade(golem)) {
+        if (golem instanceof HumanoidGolemEntity && GolemUpgrades.hasWeaponOnslaught(golem)) {
             amount = applyOnslaughtBonus(golem, event.getSource(), amount);
         }
         event.setAmount(amount);
@@ -306,15 +304,9 @@ public final class WeaponEventHandler {
 
     /** Big-hit reduction drains FE from the golem's energy storage. */
     private static boolean consumeHammerReductionEnergy(AbstractGolemEntity<?, ?> golem) {
-        int cost = Config.ENERGY_HAMMER_REDUCTION_COST.get();
-        return golem.getCapability(GolemEnergyProvider.CAPABILITY).map(cap -> {
-            GolemEnergyStorage storage = (GolemEnergyStorage) cap;
-            if (storage.extractEnergy(cost, true) < cost) {
-                return false;
-            }
-            storage.extractEnergy(cost, false);
-            return true;
-        }).orElse(false);
+        return golem.getCapability(GolemEnergyProvider.CAPABILITY).map(cap ->
+                ItemEnergyStorage.consume((IEnergyStorage) cap, Config.ENERGY_HAMMER_REDUCTION_COST.get())
+        ).orElse(false);
     }
 
     /** Extra damage from the main weapon upgrade, as a flat amount based on the golem's max health. */
@@ -437,7 +429,7 @@ public final class WeaponEventHandler {
     @SubscribeEvent
     public static void onGolemShieldBlock(GolemDamageShieldEvent event) {
         HumanoidGolemEntity golem = event.getEntity();
-        if (!GolemWeaponShieldModifier.hasUpgrade(golem)) {
+        if (!GolemUpgrades.hasWeaponShield(golem)) {
             return;
         }
         ItemStack stack = event.getStack();
@@ -489,11 +481,7 @@ public final class WeaponEventHandler {
         return golem.getModifiers().keySet().stream().anyMatch(mod ->
                 mod instanceof GolemEnergyModifier
                         || mod instanceof GolemEnergyTechModifier
-                        || mod instanceof GolemWeaponMainModifier
-                        || mod instanceof GolemWeaponAltModifier
-                        || mod instanceof GolemWeaponRangedModifier
-                        || mod instanceof GolemWeaponShieldModifier
-                        || mod instanceof GolemWeaponOnslaughtModifier);
+                        || mod instanceof GolemFlagModifier);
     }
 
     /**
@@ -548,7 +536,7 @@ public final class WeaponEventHandler {
      * the main weapon upgrade is installed. Both attributes exist on every golem type.
      */
     private static void updateSwordAttributes(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
-        boolean enabled = GolemWeaponMainModifier.hasUpgrade(golem) && stack.is(ItemTags.SWORDS);
+        boolean enabled = GolemUpgrades.hasWeaponMain(golem) && stack.is(ItemTags.SWORDS);
         AttributeInstance reach = golem.getAttribute(ForgeMod.ENTITY_REACH.get());
         if (reach != null) {
             if (enabled) {
@@ -597,7 +585,7 @@ public final class WeaponEventHandler {
         if (attr == null) {
             return;
         }
-        boolean enabled = GolemWeaponRangedModifier.hasUpgrade(golem)
+        boolean enabled = GolemUpgrades.hasWeaponRanged(golem)
                 && stack.getItem() instanceof BowItem
                 && !(stack.getItem() instanceof GolemTrackingMechanicalBowItem);
         if (enabled) {
@@ -685,7 +673,7 @@ public final class WeaponEventHandler {
         if (attr == null) {
             return;
         }
-        if (GolemWeaponRangedModifier.hasUpgrade(golem) && isHoldingCannon(golem)) {
+        if (GolemUpgrades.hasWeaponRanged(golem) && isHoldingCannon(golem)) {
             setModifier(attr, RANGED_MAGIC_UUID, "golems_arsenal_ranged_magic",
                     Config.RANGED_CANNON_MAGIC_BONUS.get());
         } else {
@@ -712,7 +700,7 @@ public final class WeaponEventHandler {
         if (!(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem) || golem.level().isClientSide) {
             return;
         }
-        if (!GolemDeathExplosionModifier.hasUpgrade(golem)) {
+        if (!GolemUpgrades.hasDeathExplosion(golem)) {
             return;
         }
         float base = Config.DEATH_EXPLOSION_BASE_DAMAGE.get().floatValue();
@@ -748,7 +736,7 @@ public final class WeaponEventHandler {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
-        if (GolemWeaponRangedModifier.hasUpgrade(golem)
+        if (GolemUpgrades.hasWeaponRanged(golem)
                 && stack.getItem() instanceof BowItem
                 && !(stack.getItem() instanceof GolemTrackingMechanicalBowItem)) {
             double velocity = golem.getAttributeValue(ModAttributes.ARROW_VELOCITY.get());

@@ -3,12 +3,13 @@ package a_silly_cat.golems_arsenal.tech.item;
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
+import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyCapability;
+import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyStorage;
 import com.google.common.collect.ImmutableMultimap;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.entity.metalgolem.MetalGolemEntity;
 import dev.xkmc.modulargolems.content.item.ranged.MetalGolemMechaBowItem;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -19,11 +20,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.common.capabilities.ICapabilityProvider;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.energy.IEnergyStorage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,7 +36,7 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
     public static final ResourceLocation ENERGY_CAPACITY_UNIT =
             new ResourceLocation(Golems_arsenal.MODID, "energy_capacity");
 
-    private static final String ENERGY_TAG = "Energy";
+
     private static Attribute explosionAttributeCache;
 
     public GolemTrackingMechanicalBowItem(Properties properties) {
@@ -101,13 +98,7 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
 
     public boolean consumeTrackingEnergy(ItemStack stack) {
         int cost = Config.TRACKING_BOW_ATTACK_COST.get();
-        return stack.getCapability(ForgeCapabilities.ENERGY).map(storage -> {
-            if (storage.extractEnergy(cost, true) < cost) {
-                return false;
-            }
-            storage.extractEnergy(cost, false);
-            return true;
-        }).orElse(false);
+        return ItemEnergyStorage.consume(stack, cost);
     }
 
     public int getEnergyCapacity(ItemStack stack) {
@@ -136,7 +127,7 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
         list.add(Component.translatable("tooltip.golems_arsenal.tracking_bow.projectile",
                 Math.round(Config.TECH_PROJECTILE_PER_LEVEL.get() * 100)).withStyle(ChatFormatting.GRAY));
         list.add(Component.translatable("tooltip.golems_arsenal.energy",
-                getStoredEnergy(stack), getEnergyCapacity(stack)).withStyle(ChatFormatting.AQUA));
+                ItemEnergyStorage.getStored(stack), getEnergyCapacity(stack)).withStyle(ChatFormatting.AQUA));
         list.add(Component.translatable("tooltip.golems_arsenal.tracking_bow.cost",
                 Config.TRACKING_BOW_ATTACK_COST.get()).withStyle(ChatFormatting.DARK_GRAY));
         list.add(Component.translatable("tooltip.golems_arsenal.units",
@@ -150,7 +141,7 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
 
     @Override
     public int getBarWidth(ItemStack stack) {
-        return Math.round(13.0f * getStoredEnergy(stack) / getEnergyCapacity(stack));
+        return Math.round(13.0f * ItemEnergyStorage.getStored(stack) / getEnergyCapacity(stack));
     }
 
     @Override
@@ -160,74 +151,6 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
 
     @Override
     public @Nullable ICapabilityProvider initCapabilities(ItemStack stack, @Nullable CompoundTag nbt) {
-        return new EnergyProvider(stack);
-    }
-
-    private static int getStoredEnergy(ItemStack stack) {
-        return Math.max(0, stack.getOrCreateTag().getInt(ENERGY_TAG));
-    }
-
-    private final class EnergyProvider implements ICapabilityProvider {
-        private final LazyOptional<IEnergyStorage> energy;
-
-        private EnergyProvider(ItemStack stack) {
-            energy = LazyOptional.of(() -> new EnergyStorage(stack));
-        }
-
-        @Override
-        public <T> @NotNull LazyOptional<T> getCapability(@NotNull Capability<T> capability,
-                                                          @Nullable Direction side) {
-            return capability == ForgeCapabilities.ENERGY ? energy.cast() : LazyOptional.empty();
-        }
-    }
-
-    private final class EnergyStorage implements IEnergyStorage {
-        private final ItemStack stack;
-
-        private EnergyStorage(ItemStack stack) {
-            this.stack = stack;
-        }
-
-        @Override
-        public int receiveEnergy(int maxReceive, boolean simulate) {
-            int accepted = Math.min(Math.max(maxReceive, 0), getMaxEnergyStored() - getEnergyStored());
-            if (!simulate && accepted > 0) {
-                setEnergy(getEnergyStored() + accepted);
-            }
-            return accepted;
-        }
-
-        @Override
-        public int extractEnergy(int maxExtract, boolean simulate) {
-            int extracted = Math.min(Math.max(maxExtract, 0), getEnergyStored());
-            if (!simulate && extracted > 0) {
-                setEnergy(getEnergyStored() - extracted);
-            }
-            return extracted;
-        }
-
-        @Override
-        public int getEnergyStored() {
-            return GolemTrackingMechanicalBowItem.getStoredEnergy(stack);
-        }
-
-        @Override
-        public int getMaxEnergyStored() {
-            return GolemTrackingMechanicalBowItem.this.getEnergyCapacity(stack);
-        }
-
-        @Override
-        public boolean canExtract() {
-            return true;
-        }
-
-        @Override
-        public boolean canReceive() {
-            return true;
-        }
-
-        private void setEnergy(int energy) {
-            stack.getOrCreateTag().putInt(ENERGY_TAG, Mth.clamp(energy, 0, getMaxEnergyStored()));
-        }
+        return new ItemEnergyCapability(stack, () -> getEnergyCapacity(stack));
     }
 }

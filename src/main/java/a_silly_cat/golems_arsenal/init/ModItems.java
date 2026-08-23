@@ -6,10 +6,7 @@ import a_silly_cat.golems_arsenal.base.item.ExampleWeapon;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyHammerItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemTrackingMechanicalBowItem;
-import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechUpgradeItem;
-import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
-import a_silly_cat.golems_arsenal.base.upgrade.GolemDeathExplosionUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.RepeatableExpansionItem;
 import net.minecraft.core.registries.Registries;
@@ -45,18 +42,18 @@ public final class ModItems {
             "golem_tracking_mechanical_bow",
             () -> new GolemTrackingMechanicalBowItem(new Item.Properties().stacksTo(1).fireResistant()));
 
-    public static final RegistryObject<GolemEnergyUpgradeItem> GOLEM_ENERGY_UPGRADE = ITEMS.register(
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_ENERGY_UPGRADE = ITEMS.register(
             "golem_energy_upgrade",
-            () -> new GolemEnergyUpgradeItem(new Item.Properties().stacksTo(64), 1));
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::modifier));
 
-    public static final RegistryObject<GolemEnergyTechUpgradeItem> GOLEM_ENERGY_TECH_UPGRADE = ITEMS.register(
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_ENERGY_TECH_UPGRADE = ITEMS.register(
             "golem_energy_tech_upgrade",
-            () -> new GolemEnergyTechUpgradeItem(new Item.Properties().stacksTo(64), 1));
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::techModifier));
 
     /** Hidden legacy item keeping old saves with the pre-rename id working. Behaves identically to the tech upgrade. */
-    public static final RegistryObject<GolemEnergyTechUpgradeItem> LEGACY_GOLEM_ENERGY_HEAL_UPGRADE = ITEMS.register(
+    public static final RegistryObject<GolemWeaponUpgradeItem> LEGACY_GOLEM_ENERGY_HEAL_UPGRADE = ITEMS.register(
             "golem_energy_heal_upgrade",
-            () -> new GolemEnergyTechUpgradeItem(new Item.Properties().stacksTo(64), 1));
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::techModifier));
 
     public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_MAIN_WEAPON_UPGRADE = ITEMS.register(
             "golem_main_weapon_upgrade",
@@ -78,9 +75,9 @@ public final class ModItems {
             "golem_full_onslaught_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::onslaughtModifier));
 
-    public static final RegistryObject<GolemDeathExplosionUpgradeItem> GOLEM_DEATH_EXPLOSION_UPGRADE = ITEMS.register(
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_DEATH_EXPLOSION_UPGRADE = ITEMS.register(
             "golem_death_explosion_upgrade",
-            () -> new GolemDeathExplosionUpgradeItem(new Item.Properties().stacksTo(64), 1));
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::deathExplosionModifier));
 
     /** Tech expansion template: forge it onto a golem holder repeatedly in a smithing table. */
     public static final RegistryObject<RepeatableExpansionItem> TECH_EXPANSION_TEMPLATE = ITEMS.register(

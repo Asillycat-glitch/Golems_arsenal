@@ -10,6 +10,7 @@ import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
+import dev.xkmc.modulargolems.content.core.StatFilterType;
 
 /**
  * Registers this mod's golem modifiers through its own {@link L2Registrate}, exactly like other
@@ -30,18 +31,25 @@ public final class GolemUpgrades {
     // modifiers from the upgrade items afterwards, so gameplay only ever sees the tech modifier.
     public static final RegistryEntry<GolemEnergyTechModifier> ENERGY_HEAL_LEGACY =
             reg("golem_energy_heal", GolemEnergyTechModifier::new);
-    public static final RegistryEntry<GolemWeaponMainModifier> WEAPON_MAIN =
-            reg("golem_weapon_main", GolemWeaponMainModifier::new);
-    public static final RegistryEntry<GolemWeaponAltModifier> WEAPON_ALT =
-            reg("golem_weapon_alt", GolemWeaponAltModifier::new);
-    public static final RegistryEntry<GolemWeaponRangedModifier> WEAPON_RANGED =
-            reg("golem_weapon_ranged", GolemWeaponRangedModifier::new);
-    public static final RegistryEntry<GolemWeaponShieldModifier> WEAPON_SHIELD =
-            reg("golem_weapon_shield", GolemWeaponShieldModifier::new);
-    public static final RegistryEntry<GolemWeaponOnslaughtModifier> WEAPON_ONSLAUGHT =
-            reg("golem_weapon_onslaught", GolemWeaponOnslaughtModifier::new);
-    public static final RegistryEntry<GolemDeathExplosionModifier> DEATH_EXPLOSION =
-            reg("golem_death_explosion", GolemDeathExplosionModifier::new);
+    public static final RegistryEntry<GolemFlagModifier> WEAPON_MAIN =
+            reg("golem_weapon_main", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.golem_weapon_main",
+                    "upgrade.golems_arsenal.golem_weapon_main.desc_sword"));
+    public static final RegistryEntry<GolemFlagModifier> WEAPON_ALT =
+            reg("golem_weapon_alt", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.golem_weapon_alt"));
+    public static final RegistryEntry<GolemFlagModifier> WEAPON_RANGED =
+            reg("golem_weapon_ranged", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.golem_weapon_ranged"));
+    public static final RegistryEntry<GolemFlagModifier> WEAPON_SHIELD =
+            reg("golem_weapon_shield", () -> new GolemFlagModifier(StatFilterType.HEALTH,
+                    "upgrade.golems_arsenal.golem_weapon_shield"));
+    public static final RegistryEntry<GolemFlagModifier> WEAPON_ONSLAUGHT =
+            reg("golem_weapon_onslaught", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.golem_weapon_onslaught"));
+    public static final RegistryEntry<GolemFlagModifier> DEATH_EXPLOSION =
+            reg("golem_death_explosion", () -> new GolemFlagModifier(StatFilterType.HEALTH,
+                    "upgrade.golems_arsenal.golem_death_explosion"));
 
     /**
      * Tech expansion template modifier: up to 5 applications, each level +1 upgrade slot,
@@ -68,28 +76,52 @@ public final class GolemUpgrades {
         return ENERGY_TECH.get();
     }
 
-    public static GolemWeaponMainModifier mainWeaponModifier() {
+    public static GolemFlagModifier mainWeaponModifier() {
         return WEAPON_MAIN.get();
     }
 
-    public static GolemWeaponAltModifier altWeaponModifier() {
+    public static GolemFlagModifier altWeaponModifier() {
         return WEAPON_ALT.get();
     }
 
-    public static GolemWeaponRangedModifier rangedWeaponModifier() {
+    public static GolemFlagModifier rangedWeaponModifier() {
         return WEAPON_RANGED.get();
     }
 
-    public static GolemWeaponShieldModifier shieldWeaponModifier() {
+    public static GolemFlagModifier shieldWeaponModifier() {
         return WEAPON_SHIELD.get();
     }
 
-    public static GolemWeaponOnslaughtModifier onslaughtModifier() {
+    public static GolemFlagModifier onslaughtModifier() {
         return WEAPON_ONSLAUGHT.get();
     }
 
-    public static GolemDeathExplosionModifier deathExplosionModifier() {
+    public static GolemFlagModifier deathExplosionModifier() {
         return DEATH_EXPLOSION.get();
+    }
+
+    public static boolean hasWeaponMain(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, WEAPON_MAIN.get());
+    }
+
+    public static boolean hasWeaponAlt(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, WEAPON_ALT.get());
+    }
+
+    public static boolean hasWeaponRanged(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, WEAPON_RANGED.get());
+    }
+
+    public static boolean hasWeaponShield(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, WEAPON_SHIELD.get());
+    }
+
+    public static boolean hasWeaponOnslaught(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, WEAPON_ONSLAUGHT.get());
+    }
+
+    public static boolean hasDeathExplosion(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, DEATH_EXPLOSION.get());
     }
 
     public static RepeatableExpansionModifier techExpansionModifier() {

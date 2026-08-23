@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.mixin.golemmagicka;
 
-import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
+import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemMagickaCompat;
 import dev.xkmc.golemmagicka.content.entity.GolemSpellManager;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.mob_weapon_api.registry.WeaponStatus;
@@ -27,7 +28,8 @@ public abstract class GolemSpellManagerMixin {
     private static void golemsArsenal$enableScrollUpgradeCasting(LivingEntity entity, ItemStack stack,
                                                                  InteractionHand hand,
                                                                  CallbackInfoReturnable<Optional<WeaponStatus>> cir) {
-        if (entity instanceof AbstractGolemEntity<?, ?> golem && GolemScrollModifier.hasUpgrade(golem)) {
+        if (entity instanceof AbstractGolemEntity<?, ?> golem
+                && GolemFlagModifier.hasUpgrade(golem, GolemMagickaCompat.SCROLL.get())) {
             cir.setReturnValue(WeaponStatus.OFFENSIVE.withPriority(1000).of(true));
         }
     }
