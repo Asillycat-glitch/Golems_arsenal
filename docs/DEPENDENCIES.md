@@ -8,7 +8,7 @@
 
 | 内容 | 位置 |
 |---|---|
-| 主类 / 异类 / 远程 / 盾类 / 全装猛攻升级、科技扩充模板 | `base/upgrade/` |
+| 主类 / 异类 / 远程 / 盾类 / 全装猛攻 / 黑猴架势 / 爆炸亡语升级、科技扩充模板 | `base/upgrade/` |
 | 全装猛攻附魔 | `base/enchantment/` |
 | 示例武器 | `base/item/` |
 | 战斗事件中枢（兼管科技武器与 TACZ 软引用） | `base/event/` |
@@ -51,7 +51,11 @@
 
 | 功能 | 依赖 | 位置 |
 |---|---|---|
-| 主类 / 异类 / 远程 / 盾类 / 猛攻 / 扩充 | 基础层四件套 | `base/` |
+| 主类 / 异类 / 远程 / 盾类 / 猛攻 / 架势 / 爆炸亡语 / 扩充 | 基础层四件套 | `base/` |
 | 能量武器 / 能量 / 科技升级 | 自带 FE；Mekanism 可选 | `tech/`、`compat/mekanism/` |
 | 卷轴升级 | 奥法魔像 + 铁魔法 | `compat/golemmagicka/`、`mixin/golemmagicka/` |
 | TACZ 枪械增伤（猛攻） | tacz（软引用，仅 tag 判断） | `base/event/` |
+
+武器触发清单（主类 / 锻锤 / 火焰剑 / 矛 / 镰 / 弓 / 炮）已数据包化：默认值写在
+`data/modulargolems/tags/items/weapon_*.json`（沿用傀儡装配自己的命名空间写法，
+mod 缺失对应物品时条目自动跳过），数据包可通过追加 `values` 扩展触发武器。

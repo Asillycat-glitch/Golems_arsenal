@@ -50,6 +50,15 @@ public final class GolemUpgrades {
     public static final RegistryEntry<GolemFlagModifier> DEATH_EXPLOSION =
             reg("golem_death_explosion", () -> new GolemFlagModifier(StatFilterType.HEALTH,
                     "upgrade.golems_arsenal.golem_death_explosion"));
+    public static final RegistryEntry<GolemStanceModifier> STANCE =
+            reg("golem_stance", GolemStanceModifier::new);
+    public static final RegistryEntry<GolemStanceSubModifier> STANCE_SUB =
+            reg("golem_stance_sub", GolemStanceSubModifier::new);
+    public static final RegistryEntry<GolemGrazeModifier> GRAZE =
+            reg("golem_graze", GolemGrazeModifier::new);
+    /** Start-the-Train: granted to the create:railway material via a material-config datapack. */
+    public static final RegistryEntry<GolemTrainModifier> TRAIN =
+            reg("golem_train", GolemTrainModifier::new);
 
     /**
      * Tech expansion template modifier: up to 5 applications, each level +1 upgrade slot,
@@ -100,6 +109,22 @@ public final class GolemUpgrades {
         return DEATH_EXPLOSION.get();
     }
 
+    public static GolemStanceModifier stanceModifier() {
+        return STANCE.get();
+    }
+
+    public static GolemStanceSubModifier stanceSubModifier() {
+        return STANCE_SUB.get();
+    }
+
+    public static GolemGrazeModifier grazeModifier() {
+        return GRAZE.get();
+    }
+
+    public static GolemTrainModifier trainModifier() {
+        return TRAIN.get();
+    }
+
     public static boolean hasWeaponMain(AbstractGolemEntity<?, ?> entity) {
         return GolemFlagModifier.hasUpgrade(entity, WEAPON_MAIN.get());
     }
@@ -122,6 +147,18 @@ public final class GolemUpgrades {
 
     public static boolean hasDeathExplosion(AbstractGolemEntity<?, ?> entity) {
         return GolemFlagModifier.hasUpgrade(entity, DEATH_EXPLOSION.get());
+    }
+
+    public static boolean hasStance(AbstractGolemEntity<?, ?> entity) {
+        return GolemStanceModifier.hasUpgrade(entity);
+    }
+
+    public static boolean hasStanceSub(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, STANCE_SUB.get());
+    }
+
+    public static boolean hasGraze(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, GRAZE.get());
     }
 
     public static RepeatableExpansionModifier techExpansionModifier() {

@@ -1,0 +1,69 @@
+{
+  "values": [
+    "#minecraft:swords",
+    {
+      "id": "modulargolems:diamond_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:iron_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:netherite_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:fiery_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:ironwood_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:knightmetal_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:steeleaf_golem_sword",
+      "required": false
+    },
+    {
+      "id": "modulargolems:diamond_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:iron_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:netherite_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:fiery_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:ironwood_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:knightmetal_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:steeleaf_golem_axe",
+      "required": false
+    },
+    {
+      "id": "modulargolems:golem_slicing_axe",
+      "required": false
+    },
+    {
+      "id": "golemdungeons:flame_sword",
+      "required": false
+    }
+  ]
+}

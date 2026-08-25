@@ -1,0 +1,13 @@
+{
+  "values": [
+    "minecraft:bow",
+    {
+      "id": "modulargolems:iron_mecha_bow",
+      "required": false
+    },
+    {
+      "id": "modulargolems:netherite_mecha_bow",
+      "required": false
+    }
+  ]
+}

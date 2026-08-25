@@ -2,6 +2,7 @@ package a_silly_cat.golems_arsenal.base.event;
 
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
+import a_silly_cat.golems_arsenal.base.item.ShenTongStaffItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyHammerItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemTrackingMechanicalBowItem;
@@ -24,6 +25,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.ProjectileImpactEvent;
@@ -39,9 +41,11 @@ import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemGrazeModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemStanceModifier;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemTrainModifier;
 import dev.xkmc.l2library.init.events.GeneralEventHandler;
 import dev.xkmc.modulargolems.content.entity.humanoid.HumanoidGolemEntity;
-import dev.xkmc.modulargolems.content.item.ranged.SonicCannonItem;
 import dev.xkmc.modulargolems.content.item.golem.GolemHolder;
 import dev.xkmc.modulargolems.events.event.GolemDamageShieldEvent;
 import net.minecraft.core.particles.ParticleTypes;
@@ -63,7 +67,9 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraftforge.event.AnvilUpdateEvent;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.living.LivingEquipmentChangeEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
+import net.minecraftforge.event.entity.living.LivingChangeTargetEvent;
 import net.minecraftforge.event.entity.player.ItemTooltipEvent;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -72,6 +78,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.event.TickEvent;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
 import java.util.List;
@@ -81,8 +89,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Mod.EventBusSubscriber(modid = Golems_arsenal.MODID)
 public final class WeaponEventHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(WeaponEventHandler.class);
+
     private static final String TRACKING_TAG = "GolemsArsenalTracking";
     private static final String EXPLOSIVE_TAG = "GolemsArsenalExplosive";
+    private static final String STANCE_ARROW_TAG = "GolemsArsenalStanceArrow";
+    private static final String STANCE_BOW_STRENGTH_TAG = "GolemsArsenalStanceBowStrength";
     private static final Set<UUID> TRACKING_ARROWS = ConcurrentHashMap.newKeySet();
     private static final UUID KATANA_PERCENT_UUID =
             UUID.nameUUIDFromBytes("golems_arsenal:katana_percent".getBytes());
@@ -96,6 +108,12 @@ public final class WeaponEventHandler {
             UUID.nameUUIDFromBytes("golems_arsenal:ranged_velocity".getBytes());
     private static final UUID RANGED_MAGIC_UUID =
             UUID.nameUUIDFromBytes("golems_arsenal:ranged_magic".getBytes());
+    private static final UUID TRAIN_ATTACK_UUID =
+            UUID.nameUUIDFromBytes("golems_arsenal:train_attack".getBytes());
+    private static final UUID STAFF_BLACK_MONKEY_UUID =
+            UUID.nameUUIDFromBytes("golems_arsenal:staff_black_monkey".getBytes());
+    /** Attack bonus percent indexed by buffed-golem count (incl. self): 2/3/4/5+ -> 40/70/90/100. */
+    private static final int[] TRAIN_ATTACK_BONUS = {0, 0, 40, 70, 90, 100};
     private static final ResourceKey<DamageType> FLAME_MAGIC =
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("flame_magic"));
     private static final TagKey<DamageType> TACZ_BULLETS =
@@ -129,6 +147,74 @@ public final class WeaponEventHandler {
     }
 
     /**
+     * Temporary diagnostic: dumps upgrades, equipment, weapon-tag matches and attribute modifiers
+     * every time a golem's equipment changes, and again ~6 ticks later (after the 5-tick attribute
+     * refresh) so stale-modifier bugs like "removing the weapon/upgrade does not restore stats"
+     * are visible in the log.
+     */
+    @SubscribeEvent
+    public static void onGolemEquipmentChange(LivingEquipmentChangeEvent event) {
+        if (event.getEntity() instanceof AbstractGolemEntity<?, ?> golem && !golem.level().isClientSide) {
+            // Refresh attribute modifiers immediately so equipping/removing weapons or upgrades
+            // applies or restores stats right away instead of waiting up to 5 ticks.
+            ItemStack stack = golem.getMainHandItem();
+            updateWeaponAttributes(golem, stack);
+            updateSwordAttributes(golem, stack);
+            updateRangedVelocityAttributes(golem, stack);
+            updateCannonMagicAttributes(golem);
+        }
+    }
+
+    /**
+     * Shen Tong Staff (玩家也可用): while the staff is held, each Black Monkey upgrade (stance or
+     * stance sub) grants +10% attack damage. Golems count installed upgrade items; players count
+     * such items anywhere in their inventory (one per stack).
+     */
+    @SubscribeEvent
+    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || event.player.level().isClientSide
+                || event.player.tickCount % 20 != 0) {
+            return;
+        }
+        updateStaffAttributes(event.player);
+    }
+
+    /** Clears leftover stance gauge/stacks when a golem joins without the stance upgrade installed. */
+    @SubscribeEvent
+    public static void onGolemJoin(EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide() || !(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
+            return;
+        }
+        if (!GolemUpgrades.hasStance(golem)) {
+            GolemStanceModifier.clearData(golem);
+        }
+        if (!GolemUpgrades.hasGraze(golem)) {
+            GolemGrazeModifier.clearBuff(golem);
+        }
+    }
+
+    /**
+     * Train formation taunt (defense effect, body buff 工业长路): when a monster picks a golem
+     * as its target and body-buffed train golems are nearby, redirect it to a random buffed golem
+     * so the train formation soaks the aggro.
+     */
+    @SubscribeEvent
+    public static void onMobSetAttackTarget(LivingChangeTargetEvent event) {
+        if (event.getEntity().level().isClientSide
+                || !(event.getNewTarget() instanceof AbstractGolemEntity<?, ?> targeted)) {
+            return;
+        }
+        double radius = Config.TRAIN_BUFF_RADIUS.get();
+        List<AbstractGolemEntity<?, ?>> buffed = GolemTrainModifier.nearbyGolems(targeted, radius,
+                e -> e.isAlive() && GolemTrainModifier.sameOwner(targeted, e)
+                        && GolemTrainModifier.hasBodyBuff(e));
+        if (buffed.isEmpty() || buffed.contains(targeted)) {
+            return;
+        }
+        event.setNewTarget(buffed.get(targeted.getRandom().nextInt(buffed.size())));
+    }
+
+    /**
      * All attack-side damage bonuses from this mod are fused into a single per-hit check: one
      * golem lookup, one main-hand fetch and one item registry id lookup, then the katana,
      * weapon-upgrade and onslaught effects are applied in order.
@@ -141,8 +227,10 @@ public final class WeaponEventHandler {
         if (!(event.getSource().getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
             return;
         }
+        if (GolemStanceModifier.isStanceMagic(event.getSource())) {
+            return;
+        }
         ItemStack stack = golem.getMainHandItem();
-        ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
         float amount = event.getAmount();
 
         if (golem instanceof MetalGolemEntity
@@ -157,19 +245,19 @@ public final class WeaponEventHandler {
             }
         }
         if (GolemUpgrades.hasWeaponMain(golem)) {
-            double bonus = mainClassHpBonus(golem, stack, id);
+            double bonus = mainClassHpBonus(golem, stack);
             if (bonus > 0) {
                 amount += (float) bonus;
             }
-            if (isFlameSword(id)) {
+            if (stack.is(ModTags.WEAPON_FLAME_SWORD)) {
                 scheduleFlameCloud(golem, event.getEntity());
             }
         }
         if (GolemUpgrades.hasWeaponAlt(golem)) {
-            if (isSculkScythe(id)) {
+            if (stack.is(ModTags.WEAPON_SCYTHE)) {
                 amount *= (float) (1 + Config.SCULK_SCYTHE_BONUS.get());
             }
-            if (isGolemSpear(id)) {
+            if (stack.is(ModTags.WEAPON_SPEAR)) {
                 scheduleSpearAoe(golem, event.getEntity(), amount);
             }
         }
@@ -219,13 +307,52 @@ public final class WeaponEventHandler {
         Enchantment enchantment = net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS
                 .getValue(new ResourceLocation(upgradeId.getNamespace(), enchantName));
         if (enchantment == null || !enchantment.canEnchant(left)) {
+            LOGGER.info("[Meme] anvil left={} right={} enchant={} skipped (null or cannot enchant)",
+                    left, right, upgradeId);
             return;
         }
         ItemStack output = left.copy();
-        output.enchant(enchantment, 1);
+        int existing = output.getEnchantmentLevel(enchantment);
+        LOGGER.info("[Meme] anvil left={} right={} enchant={} existing={} max={} before={}",
+                left, right, enchantment, existing, enchantment.getMaxLevel(),
+                output.getEnchantmentTags());
+        if (existing >= enchantment.getMaxLevel()) {
+            LOGGER.info("[Meme] anvil blocked: already max level");
+            return;
+        }
+        applyEnchantment(output, enchantment, existing + 1);
+        LOGGER.info("[Meme] anvil output={} after={}", output, output.getEnchantmentTags());
         event.setOutput(output);
         event.setMaterialCost(1);
         event.setCost(1);
+    }
+
+    /**
+     * Rebuilds the {@code Enchantments} list with the target enchantment set to the given level.
+     * Vanilla's {@code ItemStack.enchant} only appends, so this manual rebuild is required to keep
+     * a single entry per enchantment (otherwise {@code getEnchantmentLevel} reads a stale first
+     * entry and duplicates pile up).
+     */
+    private static void applyEnchantment(ItemStack stack, Enchantment enchantment, int level) {
+        net.minecraft.resources.ResourceLocation id =
+                net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS.getKey(enchantment);
+        if (id == null) {
+            return;
+        }
+        String idString = id.toString();
+        net.minecraft.nbt.CompoundTag tag = stack.getOrCreateTag();
+        net.minecraft.nbt.ListTag list = tag.getList("Enchantments", net.minecraft.nbt.Tag.TAG_LIST);
+        net.minecraft.nbt.ListTag kept = new net.minecraft.nbt.ListTag();
+        for (net.minecraft.nbt.Tag t : list) {
+            if (t instanceof net.minecraft.nbt.CompoundTag ct
+                    && idString.equals(ct.getString("id"))) {
+                continue;
+            }
+            kept.add(t);
+        }
+        kept.add(net.minecraft.world.item.enchantment.EnchantmentHelper
+                .storeEnchantment(id, (byte) level));
+        tag.put("Enchantments", kept);
     }
 
     /**
@@ -310,44 +437,16 @@ public final class WeaponEventHandler {
     }
 
     /** Extra damage from the main weapon upgrade, as a flat amount based on the golem's max health. */
-    private static double mainClassHpBonus(AbstractGolemEntity<?, ?> golem, ItemStack stack, ResourceLocation id) {
+    private static double mainClassHpBonus(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
         double percent;
-        if (isForgeHammer(id)) {
+        if (stack.is(ModTags.WEAPON_FORGE_HAMMER)) {
             percent = Config.FORGE_HAMMER_HP_PERCENT.get();
-        } else if (isMainClassWeapon(stack, id)) {
+        } else if (stack.is(ModTags.WEAPON_MAIN)) {
             percent = Config.MAIN_WEAPON_HP_PERCENT.get();
         } else {
             return 0;
         }
         return golem.getMaxHealth() * percent;
-    }
-
-    private static boolean isMainClassWeapon(ItemStack stack, ResourceLocation id) {
-        return stack.is(ItemTags.SWORDS) || isGolemSword(id) || isGolemAxe(id) || isFlameSword(id);
-    }
-
-    private static boolean isGolemSword(ResourceLocation id) {
-        return id != null && id.getPath().endsWith("_golem_sword");
-    }
-
-    private static boolean isGolemAxe(ResourceLocation id) {
-        return id != null && (id.getPath().endsWith("_golem_axe") || id.getPath().equals("golem_slicing_axe"));
-    }
-
-    private static boolean isFlameSword(ResourceLocation id) {
-        return id != null && id.getNamespace().equals("golemdungeons") && id.getPath().equals("flame_sword");
-    }
-
-    private static boolean isForgeHammer(ResourceLocation id) {
-        return id != null && id.getNamespace().equals("golemdungeons") && id.getPath().equals("ancient_forge");
-    }
-
-    private static boolean isGolemSpear(ResourceLocation id) {
-        return id != null && id.getPath().endsWith("_golem_spear");
-    }
-
-    private static boolean isSculkScythe(ResourceLocation id) {
-        return id != null && id.getNamespace().equals("golemdungeons") && id.getPath().equals("sculk_golem_scythe");
     }
 
     /**
@@ -464,15 +563,20 @@ public final class WeaponEventHandler {
             return;
         }
         syncGolemCapacity(golem);
-        if (!hasArsenalModifier(golem)) {
-            return;
-        }
         ItemStack stack = golem.getMainHandItem();
-        chargeEquipment(golem, stack);
+        // Attribute modifiers are always refreshed/cleaned, even when the last arsenal upgrade was
+        // removed: otherwise the transient modifiers (sword reach/sweep, arrow velocity, cannon
+        // magic bonus) would stay forever once hasArsenalModifier turns false.
         updateWeaponAttributes(golem, stack);
         updateSwordAttributes(golem, stack);
         updateRangedVelocityAttributes(golem, stack);
         updateCannonMagicAttributes(golem);
+        updateTrainAttackAttributes(golem);
+        updateStaffAttributes(golem);
+        if (!hasArsenalModifier(golem)) {
+            return;
+        }
+        chargeEquipment(golem, stack);
         hammerRegen(golem, stack);
     }
 
@@ -586,8 +690,7 @@ public final class WeaponEventHandler {
             return;
         }
         boolean enabled = GolemUpgrades.hasWeaponRanged(golem)
-                && stack.getItem() instanceof BowItem
-                && !(stack.getItem() instanceof GolemTrackingMechanicalBowItem);
+                && stack.is(ModTags.WEAPON_RANGED_BOW);
         if (enabled) {
             setModifier(attr, RANGED_VELOCITY_UUID, "golems_arsenal_ranged_velocity",
                     Config.RANGED_ARROW_SPEED.get() - 1);
@@ -681,14 +784,81 @@ public final class WeaponEventHandler {
         }
     }
 
+    /**
+     * Train formation attack scaling (attack effect, hand buff 汽鸣铁道): while carrying the hand
+     * buff, the golem gains +40/70/90/100% attack damage when 2/3/4/5+ hand-buffed allied golems
+     * (including itself) are within the train radius. Runs for every golem, so buffed "cars"
+     * without any arsenal upgrade still get the bonus.
+     */
+    private static void updateTrainAttackAttributes(AbstractGolemEntity<?, ?> golem) {
+        AttributeInstance attack = golem.getAttribute(Attributes.ATTACK_DAMAGE);
+        if (attack == null) {
+            return;
+        }
+        if (!GolemTrainModifier.hasHandBuff(golem)) {
+            attack.removeModifier(TRAIN_ATTACK_UUID);
+            return;
+        }
+        double radius = Config.TRAIN_BUFF_RADIUS.get();
+        int count = 1; // self
+        count += GolemTrainModifier.nearbyGolems(golem, radius,
+                e -> e.isAlive() && e != golem && GolemTrainModifier.sameOwner(golem, e)
+                        && GolemTrainModifier.hasHandBuff(e)).size();
+        int percent = count >= TRAIN_ATTACK_BONUS.length ? 100 : TRAIN_ATTACK_BONUS[count];
+        if (percent > 0) {
+            setModifier(attack, TRAIN_ATTACK_UUID, "golems_arsenal_train_attack", percent / 100.0);
+        } else {
+            attack.removeModifier(TRAIN_ATTACK_UUID);
+        }
+    }
+
+    /** Applies the staff's per-Black-Monkey-upgrade attack bonus; removes it when not holding it. */
+    private static void updateStaffAttributes(LivingEntity entity) {
+        AttributeInstance attack = entity.getAttribute(Attributes.ATTACK_DAMAGE);
+        if (attack == null) {
+            return;
+        }
+        boolean holding = entity.getMainHandItem().getItem() instanceof ShenTongStaffItem
+                || entity.getOffhandItem().getItem() instanceof ShenTongStaffItem;
+        int upgrades = blackMonkeyUpgradeCount(entity);
+        if (holding && upgrades > 0) {
+            setModifier(attack, STAFF_BLACK_MONKEY_UUID, "golems_arsenal_staff_black_monkey",
+                    0.1 * upgrades);
+        } else {
+            attack.removeModifier(STAFF_BLACK_MONKEY_UUID);
+        }
+    }
+
+    private static int blackMonkeyUpgradeCount(LivingEntity entity) {
+        if (entity instanceof AbstractGolemEntity<?, ?> golem) {
+            return (int) golem.getUpgrades().stream()
+                    .filter(item -> new ItemStack(item).is(ModTags.BLACK_MONKEY_UPGRADES))
+                    .count();
+        }
+        if (entity instanceof Player player) {
+            int count = 0;
+            for (ItemStack s : player.getInventory().items) {
+                if (!s.isEmpty() && s.is(ModTags.BLACK_MONKEY_UPGRADES)) {
+                    count++;
+                }
+            }
+            ItemStack off = player.getOffhandItem();
+            if (!off.isEmpty() && off.is(ModTags.BLACK_MONKEY_UPGRADES)) {
+                count++;
+            }
+            return count;
+        }
+        return 0;
+    }
+
     private static boolean isHoldingCannon(AbstractGolemEntity<?, ?> golem) {
-        if (golem.getMainHandItem().getItem() instanceof SonicCannonItem
-                || golem.getOffhandItem().getItem() instanceof SonicCannonItem) {
+        if (golem.getMainHandItem().is(ModTags.WEAPON_RANGED_CANNON)
+                || golem.getOffhandItem().is(ModTags.WEAPON_RANGED_CANNON)) {
             return true;
         }
         return golem instanceof MetalGolemEntity metal
-                && (metal.getLeftShoulder().getItem().getItem() instanceof SonicCannonItem
-                || metal.getRightShoulder().getItem().getItem() instanceof SonicCannonItem);
+                && (metal.getLeftShoulder().getItem().is(ModTags.WEAPON_RANGED_CANNON)
+                || metal.getRightShoulder().getItem().is(ModTags.WEAPON_RANGED_CANNON));
     }
     /**
      * Deathrattle upgrade: a golem with the upgrade detonates once on death. The blast never
@@ -736,9 +906,7 @@ public final class WeaponEventHandler {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
-        if (GolemUpgrades.hasWeaponRanged(golem)
-                && stack.getItem() instanceof BowItem
-                && !(stack.getItem() instanceof GolemTrackingMechanicalBowItem)) {
+        if (GolemUpgrades.hasWeaponRanged(golem) && stack.is(ModTags.WEAPON_RANGED_BOW)) {
             double velocity = golem.getAttributeValue(ModAttributes.ARROW_VELOCITY.get());
             if (velocity > 0) {
                 arrow.setDeltaMovement(arrow.getDeltaMovement().scale(velocity));
@@ -756,6 +924,18 @@ public final class WeaponEventHandler {
                 arrow.getPersistentData().putBoolean(EXPLOSIVE_TAG, true);
             }
         }
+        if (GolemUpgrades.hasStance(golem) && isBowLike(stack)) {
+            int stacks = GolemStanceModifier.consumeAll(golem);
+            if (stacks > 0) {
+                arrow.getPersistentData().putInt(STANCE_ARROW_TAG, stacks);
+                double bowStrength = GolemStanceModifier.bowStrengthOf(golem);
+                arrow.getPersistentData().putDouble(STANCE_BOW_STRENGTH_TAG, bowStrength);
+            }
+        }
+    }
+
+    private static boolean isBowLike(ItemStack stack) {
+        return stack.getItem() instanceof BowItem;
     }
 
     /** Powered arrows explode in a tiny blast on impact; stronger arrows scale the radius. */
@@ -763,6 +943,22 @@ public final class WeaponEventHandler {
     public static void onArrowImpact(ProjectileImpactEvent event) {
         if (!(event.getEntity() instanceof AbstractArrow arrow) || arrow.level().isClientSide) {
             return;
+        }
+        if (arrow.getPersistentData().contains(STANCE_ARROW_TAG)) {
+            int stacks = arrow.getPersistentData().getInt(STANCE_ARROW_TAG);
+            double bowStrength = arrow.getPersistentData().getDouble(STANCE_BOW_STRENGTH_TAG);
+            arrow.getPersistentData().remove(STANCE_ARROW_TAG);
+            arrow.getPersistentData().remove(STANCE_BOW_STRENGTH_TAG);
+            if (stacks > 0
+                    && event.getRayTraceResult() instanceof EntityHitResult hit
+                    && hit.getEntity() instanceof LivingEntity victim
+                    && victim.isAlive()) {
+                float bonus = (float) (stacks * bowStrength * Config.STANCE_BOW_RATIO.get());
+                if (bonus > 0) {
+                    Entity attacker = arrow.getOwner() != null ? arrow.getOwner() : arrow;
+                    victim.hurt(GolemStanceModifier.magicSource(attacker), bonus);
+                }
+            }
         }
         if (!arrow.getPersistentData().getBoolean(EXPLOSIVE_TAG)) {
             return;

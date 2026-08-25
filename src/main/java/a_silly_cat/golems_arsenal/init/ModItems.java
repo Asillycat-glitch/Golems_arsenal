@@ -3,6 +3,7 @@ package a_silly_cat.golems_arsenal.init;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemMagickaCompat;
 import a_silly_cat.golems_arsenal.base.item.ExampleWeapon;
+import a_silly_cat.golems_arsenal.base.item.ShenTongStaffItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyHammerItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemTrackingMechanicalBowItem;
@@ -29,6 +30,10 @@ public final class ModItems {
     public static final RegistryObject<ExampleWeapon> EXAMPLE_WEAPON = ITEMS.register(
             "example_weapon",
             () -> new ExampleWeapon(new Item.Properties().stacksTo(1), 7, 0.2, 1.5f, 2.0f));
+
+    public static final RegistryObject<ShenTongStaffItem> SHEN_TONG_STAFF = ITEMS.register(
+            "shen_tong_staff",
+            () -> new ShenTongStaffItem(new Item.Properties().stacksTo(1)));
 
     public static final RegistryObject<GolemEnergyKatanaItem> GOLEM_ENERGY_KATANA = ITEMS.register(
             "golem_energy_katana",
@@ -79,6 +84,27 @@ public final class ModItems {
             "golem_death_explosion_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::deathExplosionModifier));
 
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_STANCE_UPGRADE = ITEMS.register(
+            "golem_stance_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::stanceModifier));
+
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_STANCE_SUB_UPGRADE = ITEMS.register(
+            "golem_stance_sub_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::stanceSubModifier));
+
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_GRAZE_UPGRADE = ITEMS.register(
+            "golem_graze_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::grazeModifier));
+
+    /**
+     * Hidden legacy alias for the old train-upgrade item id, kept so holders/saved data from
+     * earlier builds resolve instead of producing unidentified mappings. Behaves like the current
+     * datapack-granted train modifier.
+     */
+    public static final RegistryObject<GolemWeaponUpgradeItem> LEGACY_GOLEM_TRAIN_UPGRADE = ITEMS.register(
+            "golem_train_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::trainModifier));
+
     /** Tech expansion template: forge it onto a golem holder repeatedly in a smithing table. */
     public static final RegistryObject<RepeatableExpansionItem> TECH_EXPANSION_TEMPLATE = ITEMS.register(
             "tech_expansion_template",
@@ -103,6 +129,7 @@ public final class ModItems {
                         output.accept(GOLEM_ENERGY_HAMMER.get());
                         output.accept(GOLEM_TRACKING_BOW.get());
                         output.accept(EXAMPLE_WEAPON.get());
+                        output.accept(SHEN_TONG_STAFF.get());
                         output.accept(GOLEM_ENERGY_UPGRADE.get());
                         output.accept(GOLEM_ENERGY_TECH_UPGRADE.get());
                         output.accept(GOLEM_MAIN_WEAPON_UPGRADE.get());
@@ -111,6 +138,9 @@ public final class ModItems {
                         output.accept(GOLEM_SHIELD_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_FULL_ONSLAUGHT_UPGRADE.get());
                         output.accept(GOLEM_DEATH_EXPLOSION_UPGRADE.get());
+                        output.accept(GOLEM_STANCE_UPGRADE.get());
+                        output.accept(GOLEM_STANCE_SUB_UPGRADE.get());
+                        output.accept(GOLEM_GRAZE_UPGRADE.get());
                         output.accept(TECH_EXPANSION_TEMPLATE.get());
                         if (ModList.get().isLoaded("golemmagicka")) {
                             output.accept(GolemMagickaCompat.GOLEM_SCROLL_UPGRADE.get());

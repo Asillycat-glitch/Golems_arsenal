@@ -5,6 +5,7 @@ import a_silly_cat.golems_arsenal.init.GolemEffects;
 import a_silly_cat.golems_arsenal.init.ModAttributes;
 import a_silly_cat.golems_arsenal.init.ModEnchantments;
 import a_silly_cat.golems_arsenal.init.ModRecipeSerializers;
+import a_silly_cat.golems_arsenal.init.ModNetwork;
 import a_silly_cat.golems_arsenal.compat.CompatDispatch;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -27,6 +28,7 @@ public class Golems_arsenal {
         ModAttributes.register(modEventBus);
         ModEnchantments.register(modEventBus);
         ModRecipeSerializers.register(modEventBus);
+        ModNetwork.register();
         modEventBus.addListener(ModAttributes::modifyAttributes);
         CompatDispatch.registerCommon(modEventBus);
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);

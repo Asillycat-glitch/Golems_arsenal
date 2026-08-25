@@ -60,6 +60,24 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue ONSLAUGHT_ATTACK_PERCENT_PER_POINT;
     public static final ForgeConfigSpec.DoubleValue ONSLAUGHT_ATTACK_FLAT_PER_POINT;
     public static final ForgeConfigSpec.DoubleValue ONSLAUGHT_GUN_PERCENT_PER_POINT;
+    public static final ForgeConfigSpec.DoubleValue STANCE_GAUGE_MAX;
+    public static final ForgeConfigSpec.DoubleValue STANCE_ATTACK_GAIN;
+    public static final ForgeConfigSpec.DoubleValue STANCE_HURT_GAIN;
+    public static final ForgeConfigSpec.DoubleValue STANCE_MOVE_GAIN;
+    public static final ForgeConfigSpec.DoubleValue STANCE_MELEE_RATIO;
+    public static final ForgeConfigSpec.DoubleValue STANCE_BOW_RATIO;
+    public static final ForgeConfigSpec.DoubleValue STANCE_SUB_IFRAME_GAIN;
+    public static final ForgeConfigSpec.DoubleValue GRAZE_RADIUS;
+    public static final ForgeConfigSpec.IntValue GRAZE_SCAN_INTERVAL;
+    public static final ForgeConfigSpec.DoubleValue GRAZE_MOVE_SPEED;
+    public static final ForgeConfigSpec.DoubleValue GRAZE_MOVE_SPEED_THRESHOLD;
+    public static final ForgeConfigSpec.DoubleValue GRAZE_MIN_PROJECTILE_SPEED;
+    public static final ForgeConfigSpec.DoubleValue GRAZE_ATTACK_SPEED;
+    public static final ForgeConfigSpec.DoubleValue GRAZE_IFRAME_SECONDS;
+    public static final ForgeConfigSpec.IntValue GRAZE_BUFF_DURATION;
+    public static final ForgeConfigSpec.IntValue GRAZE_COOLDOWN;
+    public static final ForgeConfigSpec.DoubleValue TRAIN_BUFF_RADIUS;
+    public static final ForgeConfigSpec.DoubleValue TRAIN_SHARE_RATIO;
     public static final ForgeConfigSpec.IntValue PART_CRUSHER_MATERIAL_LOSS;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_MATERIAL_LOSS;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_CLAY;
@@ -192,6 +210,42 @@ public final class Config {
                 .defineInRange("onslaught_attack_flat_per_point", 1.0, 0.0, 1000.0);
         ONSLAUGHT_GUN_PERCENT_PER_POINT = BUILDER.comment("TACZ gun damage bonus per armor point above the threshold, as a fraction (percentage only)")
                 .defineInRange("onslaught_gun_percent_per_point", 0.05, 0.0, 10.0);
+        STANCE_GAUGE_MAX = BUILDER.comment("Stance gauge points needed to gain one stance stack (Black Monkey stance upgrade)")
+                .defineInRange("stance_gauge_max", 100.0, 1.0, 10000.0);
+        STANCE_ATTACK_GAIN = BUILDER.comment("Stance gauge gained each melee attack")
+                .defineInRange("stance_attack_gain", 25.0, 0.0, 10000.0);
+        STANCE_HURT_GAIN = BUILDER.comment("Stance gauge gained each time the golem is hurt")
+                .defineInRange("stance_hurt_gain", 15.0, 0.0, 10000.0);
+        STANCE_MOVE_GAIN = BUILDER.comment("Stance gauge gained per block the golem moves")
+                .defineInRange("stance_move_gain", 3.0, 0.0, 10000.0);
+        STANCE_MELEE_RATIO = BUILDER.comment("Magic damage per stance stack, as a fraction of the melee hit damage (e.g. a 100-damage hit with 3 stacks and 0.1 adds 30 magic damage)")
+                .defineInRange("stance_melee_ratio", 0.5, 0.0, 100.0);
+        STANCE_BOW_RATIO = BUILDER.comment("Magic damage per stance stack on arrows, multiplied by the golem's L2lib BOW_STRENGTH attribute value; e.g. 3 stacks at BOW_STRENGTH 1.5 with 4.0 adds 18 magic damage")
+                .defineInRange("stance_bow_ratio", 6.0, 0.0, 1000.0);
+        STANCE_SUB_IFRAME_GAIN = BUILDER.comment("Stance gauge gained each time an attack is absorbed by the golem's invulnerability frames (stance sub-upgrade); 100 = one full stack")
+                .defineInRange("stance_sub_iframe_gain", 100.0, 0.0, 10000.0);
+        GRAZE_RADIUS = BUILDER.comment("Radius in blocks around the golem inside which a passing projectile counts as a graze (graze upgrade)")
+                .defineInRange("graze_radius", 1.5, 0.25, 16.0);
+        GRAZE_SCAN_INTERVAL = BUILDER.comment("Ticks between projectile scans per golem (graze upgrade)")
+                .defineInRange("graze_scan_interval", 4, 1, 100);
+        GRAZE_MOVE_SPEED = BUILDER.comment("Movement speed granted on graze, as an additive modifier")
+                .defineInRange("graze_move_speed", 0.05, 0.0, 10.0);
+        GRAZE_MOVE_SPEED_THRESHOLD = BUILDER.comment("Golems whose movement speed already reaches this value skip the movement speed part of the graze buff")
+                .defineInRange("graze_move_speed_threshold", 0.35, 0.0, 10.0);
+        GRAZE_MIN_PROJECTILE_SPEED = BUILDER.comment("Minimum projectile speed (blocks/tick) for a nearby projectile to count as a graze; resting/embedded arrows are ignored")
+                .defineInRange("graze_min_projectile_speed", 0.5, 0.0, 100.0);
+        GRAZE_ATTACK_SPEED = BUILDER.comment("Attack speed granted on graze, as an additive modifier")
+                .defineInRange("graze_attack_speed", 2.0, 0.0, 100.0);
+        GRAZE_IFRAME_SECONDS = BUILDER.comment("Invulnerability granted on graze, in seconds (0.5 = half a second)")
+                .defineInRange("graze_iframe_seconds", 0.5, 0.0, 10.0);
+        GRAZE_BUFF_DURATION = BUILDER.comment("Duration in ticks of the graze movement/attack speed buff")
+                .defineInRange("graze_buff_duration", 40, 1, 72000);
+        GRAZE_COOLDOWN = BUILDER.comment("Ticks between graze grants while projectiles keep passing by")
+                .defineInRange("graze_cooldown", 20, 1, 72000);
+        TRAIN_BUFF_RADIUS = BUILDER.comment("Radius in blocks for the train buff: buff granting, attack scaling and damage share (train upgrade)")
+                .defineInRange("train_buff_radius", 16.0, 1.0, 64.0);
+        TRAIN_SHARE_RATIO = BUILDER.comment("Fraction of damage a train golem passes to a random buffed golem (train upgrade)")
+                .defineInRange("train_share_ratio", 0.3, 0.0, 1.0);
         BUILDER.pop();
 
         BUILDER.push("part_recycling");
