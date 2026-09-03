@@ -34,6 +34,11 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue TECH_DAMAGE_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue TECH_PROJECTILE_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue TECH_CHARGE_PIERCE_PER_LEVEL;
+    public static final ForgeConfigSpec.DoubleValue BACKUP_ENERGY_SHIELD_PER_LEVEL;
+    public static final ForgeConfigSpec.IntValue BACKUP_ENERGY_RECHARGE_INTERVAL;
+    public static final ForgeConfigSpec.DoubleValue BACKUP_ENERGY_RECHARGE_PER_LEVEL;
+    public static final ForgeConfigSpec.IntValue BACKUP_ENERGY_FE_PER_POINT;
+    public static final ForgeConfigSpec.IntValue BACKUP_ENERGY_HURT_COOLDOWN;
     public static final ForgeConfigSpec.DoubleValue ENERGY_HAMMER_BIG_HIT_THRESHOLD;
     public static final ForgeConfigSpec.DoubleValue ENERGY_HAMMER_BIG_HIT_REDUCTION;
     public static final ForgeConfigSpec.DoubleValue ENERGY_HAMMER_FLAT_IMMUNITY;
@@ -78,6 +83,31 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue GRAZE_COOLDOWN;
     public static final ForgeConfigSpec.DoubleValue TRAIN_BUFF_RADIUS;
     public static final ForgeConfigSpec.DoubleValue TRAIN_SHARE_RATIO;
+    public static final ForgeConfigSpec.IntValue KEY_SWORD_SPECIAL_COOLDOWN;
+    public static final ForgeConfigSpec.IntValue KEY_SWORD_FIREBALL_COUNT_MIN;
+    public static final ForgeConfigSpec.IntValue KEY_SWORD_FIREBALL_COUNT_MAX;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_FIREBALL_FIXED;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_FIREBALL_ATTACK_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_LIGHTNING_FIXED;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_LIGHTNING_ATTACK_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_FROST_FIXED;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_FROST_ATTACK_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_FROST_RADIUS;
+    public static final ForgeConfigSpec.IntValue KEY_SWORD_FROST_DURATION_BASE;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_FROST_DURATION_PER_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_SPELL_POWER_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_ELEMENTAL_SPELL_POWER_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_EXECUTE_MAX_BONUS;
+    public static final ForgeConfigSpec.DoubleValue KEY_SWORD_EXECUTE_HP_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_FIXED_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_ATTACK_DAMAGE_RATIO;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_THROW_SPEED;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_THROW_RANGE;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_THROW_MID_FACTOR;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_THROW_END_FACTOR;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_ORBIT_RADIUS;
+    public static final ForgeConfigSpec.IntValue KEY_BLADE_ORBIT_TICKS;
+    public static final ForgeConfigSpec.DoubleValue KEY_BLADE_ORBIT_TRIGGER_RANGE;
     public static final ForgeConfigSpec.IntValue PART_CRUSHER_MATERIAL_LOSS;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_MATERIAL_LOSS;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_CLAY;
@@ -152,6 +182,19 @@ public final class Config {
                 .defineInRange("projectile_per_level", 0.10, 0.0, 10.0);
         TECH_CHARGE_PIERCE_PER_LEVEL = BUILDER.comment("Chance per charge amplifier level for the charge effect to pierce protection and resistance on an attack")
                 .defineInRange("charge_pierce_per_level", 0.2, 0.0, 1.0);
+        BUILDER.pop();
+
+        BUILDER.push("golem_backup_energy_upgrade");
+        BACKUP_ENERGY_SHIELD_PER_LEVEL = BUILDER.comment("Max shield points per upgrade level (2 points = 1 heart)")
+                .defineInRange("shield_per_level", 20.0, 1.0, 10000.0);
+        BACKUP_ENERGY_RECHARGE_INTERVAL = BUILDER.comment("Ticks between shield recharges (fixed 2s = 40 ticks)")
+                .defineInRange("recharge_interval", 40, 1, 72000);
+        BACKUP_ENERGY_RECHARGE_PER_LEVEL = BUILDER.comment("Shield points restored per recharge interval per level")
+                .defineInRange("recharge_per_level", 5.0, 0.1, 10000.0);
+        BACKUP_ENERGY_FE_PER_POINT = BUILDER.comment("FE consumed from the golem per shield point restored")
+                .defineInRange("fe_per_point", 50, 1, Integer.MAX_VALUE);
+        BACKUP_ENERGY_HURT_COOLDOWN = BUILDER.comment("Ticks after taking damage during which the shield stops recharging (damage interrupts recharge)")
+                .defineInRange("hurt_cooldown", 100, 0, 72000);
         BUILDER.pop();
 
         BUILDER.push("energy_hammer");
@@ -246,6 +289,62 @@ public final class Config {
                 .defineInRange("train_buff_radius", 16.0, 1.0, 64.0);
         TRAIN_SHARE_RATIO = BUILDER.comment("Fraction of damage a train golem passes to a random buffed golem (train upgrade)")
                 .defineInRange("train_share_ratio", 0.3, 0.0, 1.0);
+        BUILDER.pop();
+
+        BUILDER.push("key_sword");
+        KEY_SWORD_SPECIAL_COOLDOWN = BUILDER.comment("Shared internal cooldown in ticks between special-attack triggers (40 ticks = 2 seconds); the execute damage bonus is not affected")
+                .defineInRange("special_cooldown", 40, 0, 72000);
+        KEY_SWORD_FIREBALL_COUNT_MIN = BUILDER.comment("Minimum blaze fireballs spawned per fireball trigger")
+                .defineInRange("fireball_count_min", 3, 1, 16);
+        KEY_SWORD_FIREBALL_COUNT_MAX = BUILDER.comment("Maximum blaze fireballs spawned per fireball trigger")
+                .defineInRange("fireball_count_max", 4, 1, 16);
+        KEY_SWORD_FIREBALL_FIXED = BUILDER.comment("Fixed damage of each blaze fireball")
+                .defineInRange("fireball_fixed", 4.0, 0.0, 1024.0);
+        KEY_SWORD_FIREBALL_ATTACK_RATIO = BUILDER.comment("Blaze fireball damage per point of the attacker's attack damage")
+                .defineInRange("fireball_attack_ratio", 0.5, 0.0, 100.0);
+        KEY_SWORD_LIGHTNING_FIXED = BUILDER.comment("Fixed damage of the lightning strike")
+                .defineInRange("lightning_fixed", 8.0, 0.0, 1024.0);
+        KEY_SWORD_LIGHTNING_ATTACK_RATIO = BUILDER.comment("Lightning damage per point of the attacker's attack damage")
+                .defineInRange("lightning_attack_ratio", 0.5, 0.0, 100.0);
+        KEY_SWORD_FROST_FIXED = BUILDER.comment("Fixed damage of the frost nova")
+                .defineInRange("frost_fixed", 4.0, 0.0, 1024.0);
+        KEY_SWORD_FROST_ATTACK_RATIO = BUILDER.comment("Frost nova damage per point of the attacker's attack damage")
+                .defineInRange("frost_attack_ratio", 0.5, 0.0, 100.0);
+        KEY_SWORD_FROST_RADIUS = BUILDER.comment("Radius in blocks of the frost nova freeze/push effect")
+                .defineInRange("frost_radius", 4.0, 1.0, 32.0);
+        KEY_SWORD_FROST_DURATION_BASE = BUILDER.comment("Base freeze/ice duration in ticks of the frost nova (the L2Complements frost effect needs a long enough duration to actually freeze; the freeze meter is always raised to at least 140 ticks = full freeze)")
+                .defineInRange("frost_duration_base", 100, 1, 72000);
+        KEY_SWORD_FROST_DURATION_PER_DAMAGE = BUILDER.comment("Extra freeze/ice ticks per point of the attacker's attack damage (the winterstorm effect duration scales with attack damage)")
+                .defineInRange("frost_duration_per_damage", 5.0, 0.0, 1000.0);
+        KEY_SWORD_SPELL_POWER_RATIO = BUILDER.comment("Generic spell power (irons_spellbooks:spell_power, default 1.0) contribution to special attack damage when Golem Magicka / Iron's Spells is installed")
+                .defineInRange("spell_power_ratio", 0.5, 0.0, 100.0);
+        KEY_SWORD_ELEMENTAL_SPELL_POWER_RATIO = BUILDER.comment("Elemental spell power (fire/ice/lightning_spell_power, default 1.0) contribution to special attack damage; larger than spell_power_ratio by default")
+                .defineInRange("elemental_spell_power_ratio", 1.0, 0.0, 100.0);
+        KEY_SWORD_EXECUTE_MAX_BONUS = BUILDER.comment("Maximum extra damage fraction of the execute effect, reached when the target is at execute_hp_ratio HP")
+                .defineInRange("execute_max_bonus", 0.5, 0.0, 100.0);
+        KEY_SWORD_EXECUTE_HP_RATIO = BUILDER.comment("Target HP fraction at which the execute bonus reaches its maximum")
+                .defineInRange("execute_hp_ratio", 0.10, 0.01, 1.0);
+        BUILDER.pop();
+
+        BUILDER.push("key_blade_spin");
+        KEY_BLADE_FIXED_DAMAGE = BUILDER.comment("Fixed damage of each enemy hit by the key blade spin special move")
+                .defineInRange("fixed_damage", 6.0, 0.0, 1024.0);
+        KEY_BLADE_ATTACK_DAMAGE_RATIO = BUILDER.comment("Key blade damage per point of the golem's attack damage")
+                .defineInRange("attack_damage_ratio", 0.8, 0.0, 100.0);
+        KEY_BLADE_THROW_SPEED = BUILDER.comment("Key blade flight speed in blocks per tick (throw mode)")
+                .defineInRange("throw_speed", 1.3, 0.2, 10.0);
+        KEY_BLADE_THROW_RANGE = BUILDER.comment("Distance in blocks the thrown key blade flies before turning back")
+                .defineInRange("throw_range", 12.0, 3.0, 64.0);
+        KEY_BLADE_THROW_MID_FACTOR = BUILDER.comment("Speed multiplier of the thrown key blade at the middle of the flight (acceleration phase; the base speed is throw_speed)")
+                .defineInRange("throw_mid_factor", 1.2, 0.1, 10.0);
+        KEY_BLADE_THROW_END_FACTOR = BUILDER.comment("Speed multiplier of the thrown key blade near the turning point and near the owner (deceleration phase)")
+                .defineInRange("throw_end_factor", 0.4, 0.05, 1.0);
+        KEY_BLADE_ORBIT_RADIUS = BUILDER.comment("Base radius in blocks of the key blade orbit around the golem; half of the golem's own width is added automatically. 0 keeps the orbit hugging the golem so the blade overlaps the golem's melee attacks; raise it to widen the circle (melee mode)")
+                .defineInRange("orbit_radius", 0.5, 0.0, 16.0);
+        KEY_BLADE_ORBIT_TICKS = BUILDER.comment("Ticks for one full key blade orbit around the golem (40 = 2 seconds)")
+                .defineInRange("orbit_ticks", 40, 10, 200);
+        KEY_BLADE_ORBIT_TRIGGER_RANGE = BUILDER.comment("Enemies at or below this distance trigger the melee orbit; farther targets trigger the throw")
+                .defineInRange("orbit_trigger_range", 3.5, 1.0, 32.0);
         BUILDER.pop();
 
         BUILDER.push("part_recycling");

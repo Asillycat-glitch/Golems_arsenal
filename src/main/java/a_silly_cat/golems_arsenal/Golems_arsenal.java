@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal;
 
 import a_silly_cat.golems_arsenal.init.ModItems;
+import a_silly_cat.golems_arsenal.init.ModEntities;
 import a_silly_cat.golems_arsenal.init.GolemEffects;
 import a_silly_cat.golems_arsenal.init.ModAttributes;
 import a_silly_cat.golems_arsenal.init.ModEnchantments;
@@ -24,6 +25,7 @@ public class Golems_arsenal {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         GolemUpgrades.register();
         ModItems.register(modEventBus);
+        ModEntities.register(modEventBus);
         GolemEffects.register(modEventBus);
         ModAttributes.register(modEventBus);
         ModEnchantments.register(modEventBus);

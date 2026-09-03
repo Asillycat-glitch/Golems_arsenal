@@ -112,6 +112,7 @@
       "id": "l2weaponry:blade_of_illusion",
       "required": false
     },
-    "golems_arsenal:shen_tong_staff"
+    "golems_arsenal:shen_tong_staff",
+    "golems_arsenal:key_sword"
   ]
 }

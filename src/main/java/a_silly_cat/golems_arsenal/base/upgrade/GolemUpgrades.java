@@ -8,6 +8,7 @@ import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.modifier.base.AttributeGolemModifier;
 import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
+import a_silly_cat.golems_arsenal.tech.upgrade.GolemBackupEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
 import dev.xkmc.modulargolems.content.core.StatFilterType;
@@ -31,6 +32,8 @@ public final class GolemUpgrades {
     // modifiers from the upgrade items afterwards, so gameplay only ever sees the tech modifier.
     public static final RegistryEntry<GolemEnergyTechModifier> ENERGY_HEAL_LEGACY =
             reg("golem_energy_heal", GolemEnergyTechModifier::new);
+    public static final RegistryEntry<GolemBackupEnergyModifier> BACKUP_ENERGY =
+            reg("golem_backup_energy", GolemBackupEnergyModifier::new);
     public static final RegistryEntry<GolemFlagModifier> WEAPON_MAIN =
             reg("golem_weapon_main", () -> new GolemFlagModifier(StatFilterType.ATTACK,
                     "upgrade.golems_arsenal.golem_weapon_main",
@@ -56,6 +59,10 @@ public final class GolemUpgrades {
             reg("golem_stance_sub", GolemStanceSubModifier::new);
     public static final RegistryEntry<GolemGrazeModifier> GRAZE =
             reg("golem_graze", GolemGrazeModifier::new);
+    /** Special-move upgrade (example: key blade spin). Effects live in KeySwordEventHandler. */
+    public static final RegistryEntry<GolemFlagModifier> KEY_BLADE_SPIN =
+            reg("golem_key_blade_spin", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.golem_key_blade_spin"));
     /** Start-the-Train: granted to the create:railway material via a material-config datapack. */
     public static final RegistryEntry<GolemTrainModifier> TRAIN =
             reg("golem_train", GolemTrainModifier::new);
@@ -83,6 +90,9 @@ public final class GolemUpgrades {
 
     public static GolemEnergyTechModifier techModifier() {
         return ENERGY_TECH.get();
+    }
+    public static GolemBackupEnergyModifier backupEnergyModifier() {
+        return BACKUP_ENERGY.get();
     }
 
     public static GolemFlagModifier mainWeaponModifier() {
@@ -119,6 +129,10 @@ public final class GolemUpgrades {
 
     public static GolemGrazeModifier grazeModifier() {
         return GRAZE.get();
+    }
+
+    public static GolemFlagModifier keyBladeSpinModifier() {
+        return KEY_BLADE_SPIN.get();
     }
 
     public static GolemTrainModifier trainModifier() {

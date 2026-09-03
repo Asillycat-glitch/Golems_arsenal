@@ -64,6 +64,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraftforge.event.AnvilUpdateEvent;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
@@ -81,8 +82,10 @@ import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -230,6 +233,11 @@ public final class WeaponEventHandler {
         if (GolemStanceModifier.isStanceMagic(event.getSource())) {
             return;
         }
+        // Key-sword magic already includes every scaling factor; skip so the main-hand
+        // upgrade bonuses are not applied to it a second time.
+        if ("key_sword_magic".equals(event.getSource().getMsgId())) {
+            return;
+        }
         ItemStack stack = golem.getMainHandItem();
         float amount = event.getAmount();
 
@@ -280,6 +288,9 @@ public final class WeaponEventHandler {
         if (!(event.getSource().getEntity() instanceof Player player)) {
             return;
         }
+        if ("key_sword_magic".equals(event.getSource().getMsgId())) {
+            return;
+        }
         ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
         if (chest.getEnchantmentLevel(ModEnchantments.FULL_ONSLAUGHT.get()) <= 0) {
             return;
@@ -328,31 +339,17 @@ public final class WeaponEventHandler {
     }
 
     /**
-     * Rebuilds the {@code Enchantments} list with the target enchantment set to the given level.
-     * Vanilla's {@code ItemStack.enchant} only appends, so this manual rebuild is required to keep
-     * a single entry per enchantment (otherwise {@code getEnchantmentLevel} reads a stale first
-     * entry and duplicates pile up).
+     * Sets the target enchantment to the given level while preserving every other enchantment.
+     * Uses {@link EnchantmentHelper}'s map read/write instead of manually touching the NBT list:
+     * the previous rebuild passed {@code Tag.TAG_LIST} as the element type to
+     * {@code CompoundTag.getList}, which mismatched the list's actual compound elements and
+     * silently returned an empty list, wiping all existing enchantments.
      */
     private static void applyEnchantment(ItemStack stack, Enchantment enchantment, int level) {
-        net.minecraft.resources.ResourceLocation id =
-                net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS.getKey(enchantment);
-        if (id == null) {
-            return;
-        }
-        String idString = id.toString();
-        net.minecraft.nbt.CompoundTag tag = stack.getOrCreateTag();
-        net.minecraft.nbt.ListTag list = tag.getList("Enchantments", net.minecraft.nbt.Tag.TAG_LIST);
-        net.minecraft.nbt.ListTag kept = new net.minecraft.nbt.ListTag();
-        for (net.minecraft.nbt.Tag t : list) {
-            if (t instanceof net.minecraft.nbt.CompoundTag ct
-                    && idString.equals(ct.getString("id"))) {
-                continue;
-            }
-            kept.add(t);
-        }
-        kept.add(net.minecraft.world.item.enchantment.EnchantmentHelper
-                .storeEnchantment(id, (byte) level));
-        tag.put("Enchantments", kept);
+        Map<Enchantment, Integer> enchantments =
+                new HashMap<>(EnchantmentHelper.getEnchantments(stack));
+        enchantments.put(enchantment, level);
+        EnchantmentHelper.setEnchantments(enchantments, stack);
     }
 
     /**
@@ -573,6 +570,7 @@ public final class WeaponEventHandler {
         updateCannonMagicAttributes(golem);
         updateTrainAttackAttributes(golem);
         updateStaffAttributes(golem);
+        KeySwordEventHandler.updateKeyBladeThrow(golem, stack);
         if (!hasArsenalModifier(golem)) {
             return;
         }

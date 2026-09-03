@@ -19,6 +19,14 @@ public final class ModTags {
             TagKey.create(Registries.ITEM, new ResourceLocation(Golems_arsenal.MODID, "black_monkey_upgrades"));
 
     /**
+     * Special-move upgrades (the key blade spin is the first example). Effects check this tag, so
+     * datapacks can register additional special moves by tagging their upgrade items here.
+     */
+    public static final TagKey<Item> SPECIAL_MOVE_UPGRADES =
+            TagKey.create(Registries.ITEM, new ResourceLocation(Golems_arsenal.MODID,
+                    "special_move_upgrades"));
+
+    /**
      * Weapon trigger tags live in the {@code modulargolems} namespace (mirroring Modular Golems'
      * own tag style), so they are treated as part of the dependency's data and datapacks can
      * extend them the same way they extend Modular Golems tags.

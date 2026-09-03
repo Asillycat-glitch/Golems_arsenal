@@ -4,7 +4,7 @@
 
 ## 1. base/ — 基础层
 
-**前置（必装）**：`modulargolems`、`l2library`、`l2damagetracker`、`mob_weapon_api`
+**前置（必装）**：`modulargolems`（≥2.7.3，编译/运行基线 2.7.3）、`l2library`、`l2damagetracker`、`mob_weapon_api`
 
 | 内容 | 位置 |
 |---|---|

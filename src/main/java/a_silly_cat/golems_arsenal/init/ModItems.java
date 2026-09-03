@@ -3,6 +3,7 @@ package a_silly_cat.golems_arsenal.init;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemMagickaCompat;
 import a_silly_cat.golems_arsenal.base.item.ExampleWeapon;
+import a_silly_cat.golems_arsenal.base.item.KeySwordItem;
 import a_silly_cat.golems_arsenal.base.item.ShenTongStaffItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyHammerItem;
@@ -35,6 +36,10 @@ public final class ModItems {
             "shen_tong_staff",
             () -> new ShenTongStaffItem(new Item.Properties().stacksTo(1)));
 
+    public static final RegistryObject<KeySwordItem> KEY_SWORD = ITEMS.register(
+            "key_sword",
+            () -> new KeySwordItem(new Item.Properties().stacksTo(1)));
+
     public static final RegistryObject<GolemEnergyKatanaItem> GOLEM_ENERGY_KATANA = ITEMS.register(
             "golem_energy_katana",
             () -> new GolemEnergyKatanaItem(new Item.Properties().stacksTo(1).fireResistant()));
@@ -59,6 +64,9 @@ public final class ModItems {
     public static final RegistryObject<GolemWeaponUpgradeItem> LEGACY_GOLEM_ENERGY_HEAL_UPGRADE = ITEMS.register(
             "golem_energy_heal_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::techModifier));
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_BACKUP_ENERGY_UPGRADE = ITEMS.register(
+            "golem_backup_energy_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::backupEnergyModifier));
 
     public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_MAIN_WEAPON_UPGRADE = ITEMS.register(
             "golem_main_weapon_upgrade",
@@ -96,6 +104,12 @@ public final class ModItems {
             "golem_graze_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::grazeModifier));
 
+    /** Example special-move upgrade: throws / orbits the key blade (needs the key sword). */
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_KEY_BLADE_SPIN_UPGRADE = ITEMS.register(
+            "golem_key_blade_spin_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1,
+                    GolemUpgrades::keyBladeSpinModifier));
+
     /**
      * Hidden legacy alias for the old train-upgrade item id, kept so holders/saved data from
      * earlier builds resolve instead of producing unidentified mappings. Behaves like the current
@@ -130,8 +144,10 @@ public final class ModItems {
                         output.accept(GOLEM_TRACKING_BOW.get());
                         output.accept(EXAMPLE_WEAPON.get());
                         output.accept(SHEN_TONG_STAFF.get());
+                        output.accept(KEY_SWORD.get());
                         output.accept(GOLEM_ENERGY_UPGRADE.get());
                         output.accept(GOLEM_ENERGY_TECH_UPGRADE.get());
+                        output.accept(GOLEM_BACKUP_ENERGY_UPGRADE.get());
                         output.accept(GOLEM_MAIN_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_ALT_WEAPON_UPGRADE.get());
                         output.accept(GOLEM_RANGED_WEAPON_UPGRADE.get());
@@ -141,6 +157,7 @@ public final class ModItems {
                         output.accept(GOLEM_STANCE_UPGRADE.get());
                         output.accept(GOLEM_STANCE_SUB_UPGRADE.get());
                         output.accept(GOLEM_GRAZE_UPGRADE.get());
+                        output.accept(GOLEM_KEY_BLADE_SPIN_UPGRADE.get());
                         output.accept(TECH_EXPANSION_TEMPLATE.get());
                         if (ModList.get().isLoaded("golemmagicka")) {
                             output.accept(GolemMagickaCompat.GOLEM_SCROLL_UPGRADE.get());

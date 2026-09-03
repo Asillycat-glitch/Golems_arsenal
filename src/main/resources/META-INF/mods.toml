@@ -27,7 +27,7 @@ side="BOTH"
 [[dependencies.${mod_id}]]
 modId="modulargolems"
 mandatory=true
-versionRange="[2.6.34,)"
+versionRange="[2.7.3,)"
 ordering="AFTER"
 side="BOTH"
 

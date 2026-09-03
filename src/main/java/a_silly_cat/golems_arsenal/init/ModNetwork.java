@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.init;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
+import a_silly_cat.golems_arsenal.network.ClientboundShieldPacket;
 import a_silly_cat.golems_arsenal.network.ClientboundStancePacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.network.NetworkRegistry;
@@ -19,5 +20,8 @@ public final class ModNetwork {
         CHANNEL.registerMessage(0, ClientboundStancePacket.class,
                 ClientboundStancePacket::encode, ClientboundStancePacket::decode,
                 ClientboundStancePacket::handle);
+        CHANNEL.registerMessage(1, ClientboundShieldPacket.class,
+                ClientboundShieldPacket::encode, ClientboundShieldPacket::decode,
+                ClientboundShieldPacket::handle);
     }
 }

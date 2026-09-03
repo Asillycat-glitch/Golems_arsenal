@@ -1,9 +1,9 @@
 package a_silly_cat.golems_arsenal.compat.golemmagicka;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
-import a_silly_cat.golems_arsenal.compat.golemmagicka.GolemScrollUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponUpgradeItem;
 import com.tterrag.registrate.util.entry.RegistryEntry;
 import dev.xkmc.modulargolems.content.core.StatFilterType;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
@@ -29,9 +29,9 @@ public final class GolemMagickaCompat {
             .defaultLang()
             .register();
 
-    public static final RegistryObject<GolemScrollUpgradeItem> GOLEM_SCROLL_UPGRADE = ITEMS.register(
+    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_SCROLL_UPGRADE = ITEMS.register(
             "golem_scroll_upgrade",
-            () -> new GolemScrollUpgradeItem(new Item.Properties().stacksTo(64),
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1,
                     () -> SCROLL.get()));
 
     private GolemMagickaCompat() {

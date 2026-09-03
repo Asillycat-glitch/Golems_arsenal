@@ -2,6 +2,7 @@
   "replace": false,
   "values": [
     "golems_arsenal:flame_magic",
-    "golems_arsenal:stance_magic"
+    "golems_arsenal:stance_magic",
+    "golems_arsenal:key_sword_magic"
   ]
 }
