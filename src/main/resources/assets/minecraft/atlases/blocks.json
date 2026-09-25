@@ -1,0 +1,8 @@
+{
+  "sources": [
+    {
+      "type": "single",
+      "resource": "golems_arsenal:entity/genmu_zero"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+	"parent": "golems_arsenal:item/zero_sword_handle",
+	"overrides": [
+		{
+			"predicate": {
+				"golems_arsenal:charged": 1.0
+			},
+			"model": "golems_arsenal:item/zero_energy_sword_blade"
+		}
+	]
+}

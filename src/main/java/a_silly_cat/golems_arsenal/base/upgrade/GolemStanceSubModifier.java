@@ -28,13 +28,13 @@ public class GolemStanceSubModifier extends GolemModifier {
 
     @Override
     public Component getTooltip(int level) {
-        return Component.translatable("upgrade.golems_arsenal.golem_stance_sub")
+        return Component.translatable("upgrade.golems_arsenal.stance_sub")
                 .withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     @Override
     public List<MutableComponent> getDetail(int level) {
-        return List.of(Component.translatable("upgrade.golems_arsenal.golem_stance_sub.desc")
+        return List.of(Component.translatable("upgrade.golems_arsenal.stance_sub.desc")
                 .withStyle(ChatFormatting.GREEN));
     }
 

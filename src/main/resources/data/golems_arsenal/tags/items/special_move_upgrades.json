@@ -1,6 +1,10 @@
 {
   "replace": false,
   "values": [
-    "golems_arsenal:golem_key_blade_spin_upgrade"
+    "golems_arsenal:key_blade_spin_upgrade",
+    "golems_arsenal:lion_slash_upgrade",
+    "golems_arsenal:sword_rain_upgrade",
+    "golems_arsenal:charge_upgrade",
+    "golems_arsenal:phoenix_upgrade"
   ]
 }

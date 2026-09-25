@@ -26,7 +26,7 @@ public final class StanceHudOverlay {
 
     @SubscribeEvent
     public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
-        event.registerAbove(VanillaGuiOverlay.EXPERIENCE_BAR.id(), "golem_stance",
+        event.registerAbove(VanillaGuiOverlay.EXPERIENCE_BAR.id(), "stance",
                 StanceHudOverlay::render);
     }
 

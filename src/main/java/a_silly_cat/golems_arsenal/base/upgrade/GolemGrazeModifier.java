@@ -40,13 +40,13 @@ public class GolemGrazeModifier extends GolemModifier {
 
     @Override
     public Component getTooltip(int level) {
-        return Component.translatable("upgrade.golems_arsenal.golem_graze")
+        return Component.translatable("upgrade.golems_arsenal.graze")
                 .withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     @Override
     public List<MutableComponent> getDetail(int level) {
-        return List.of(Component.translatable("upgrade.golems_arsenal.golem_graze.desc")
+        return List.of(Component.translatable("upgrade.golems_arsenal.graze.desc")
                 .withStyle(ChatFormatting.GREEN));
     }
 

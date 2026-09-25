@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "golems_arsenal:item/upgrades/key_blade_spin_upgrade"
+  }
+}

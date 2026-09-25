@@ -40,8 +40,12 @@ public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
     }
 
     public boolean consumeAttackEnergy(ItemStack stack) {
-        int cost = getEnergyPerAttack(stack);
-        return ItemEnergyStorage.consume(stack, cost);
+        return consumeAttackEnergy(stack, getEnergyPerAttack(stack));
+    }
+
+    /** 带"节约能源"折扣的消耗入口。 */
+    public boolean consumeAttackEnergy(ItemStack stack, int cost) {
+        return ItemEnergyStorage.consume(stack, Math.max(1, cost));
     }
 
     public int getEnergyPerAttack(ItemStack stack) {
@@ -66,8 +70,11 @@ public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
 
     /** Extra FE consumed on top of the powered-hit cost when the lightning chain triggers. */
     public boolean consumeChainEnergy(ItemStack stack) {
-        int cost = Config.ENERGY_KATANA_CHAIN_COST.get();
-        return ItemEnergyStorage.consume(stack, cost);
+        return consumeChainEnergy(stack, Config.ENERGY_KATANA_CHAIN_COST.get());
+    }
+
+    public boolean consumeChainEnergy(ItemStack stack, int cost) {
+        return ItemEnergyStorage.consume(stack, Math.max(1, cost));
     }
 
     /** Lightning damage per chain strike. */
@@ -81,7 +88,9 @@ public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
      * methods instead of reusing the tech level for gating.
      */
     public boolean canTriggerChain(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
-        return GolemEnergyTechModifier.hasTechUpgrade(golem) && consumeChainEnergy(stack);
+        return GolemEnergyTechModifier.hasTechUpgrade(golem)
+                && consumeChainEnergy(stack, a_silly_cat.golems_arsenal.base.upgrade
+                        .GolemEnergySaverModifier.discount(golem, Config.ENERGY_KATANA_CHAIN_COST.get()));
     }
 
     public int getUnitLevel(ItemStack stack, ResourceLocation unitId) {

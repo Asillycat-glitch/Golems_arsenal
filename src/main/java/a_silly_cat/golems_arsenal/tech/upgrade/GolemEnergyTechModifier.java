@@ -68,6 +68,8 @@ public class GolemEnergyTechModifier extends AttributeGolemModifier {
         List<MutableComponent> ans = new ArrayList<>(super.getDetail(level));
         ans.add(Component.translatable("upgrade.golems_arsenal.golem_energy_tech.desc_katana")
                 .withStyle(ChatFormatting.GREEN));
+        ans.add(Component.translatable("upgrade.golems_arsenal.golem_energy_tech.desc_zero_sword")
+                .withStyle(ChatFormatting.GREEN));
         ans.add(Component.translatable("upgrade.golems_arsenal.golem_energy_tech.desc_hammer")
                 .withStyle(ChatFormatting.GREEN));
         ans.add(Component.translatable("upgrade.golems_arsenal.golem_energy_tech.desc_bow")
@@ -133,8 +135,7 @@ public class GolemEnergyTechModifier extends AttributeGolemModifier {
                     .anyMatch(mod -> mod instanceof GolemEnergyTechModifier);
         }
         for (Item item : upgrades) {
-            if (item == ModItems.GOLEM_ENERGY_TECH_UPGRADE.get()
-                    || item == ModItems.LEGACY_GOLEM_ENERGY_HEAL_UPGRADE.get()) {
+            if (item == ModItems.GOLEM_ENERGY_TECH_UPGRADE.get()) {
                 return true;
             }
         }

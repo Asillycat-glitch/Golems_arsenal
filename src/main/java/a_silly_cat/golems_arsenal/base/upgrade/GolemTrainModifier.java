@@ -39,13 +39,13 @@ public class GolemTrainModifier extends GolemModifier {
 
     @Override
     public Component getTooltip(int level) {
-        return Component.translatable("upgrade.golems_arsenal.golem_train")
+        return Component.translatable("upgrade.golems_arsenal.train")
                 .withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     @Override
     public List<MutableComponent> getDetail(int level) {
-        return List.of(Component.translatable("upgrade.golems_arsenal.golem_train.desc")
+        return List.of(Component.translatable("upgrade.golems_arsenal.train.desc")
                 .withStyle(ChatFormatting.GREEN));
     }
 

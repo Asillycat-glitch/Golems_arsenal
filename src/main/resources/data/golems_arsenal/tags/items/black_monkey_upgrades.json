@@ -1,11 +1,11 @@
 {
   "values": [
     {
-      "id": "golems_arsenal:golem_stance_upgrade",
+      "id": "golems_arsenal:stance_upgrade",
       "required": false
     },
     {
-      "id": "golems_arsenal:golem_stance_sub_upgrade",
+      "id": "golems_arsenal:stance_sub_upgrade",
       "required": false
     }
   ]

@@ -2,6 +2,8 @@ package a_silly_cat.golems_arsenal;
 
 import net.minecraftforge.common.ForgeConfigSpec;
 
+import java.util.List;
+
 public final class Config {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
@@ -54,9 +56,10 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue SCULK_SCYTHE_BONUS;
     public static final ForgeConfigSpec.DoubleValue RANGED_ARROW_SPEED;
     public static final ForgeConfigSpec.DoubleValue RANGED_CANNON_MAGIC_BONUS;
-    public static final ForgeConfigSpec.DoubleValue DEATH_EXPLOSION_BASE_DAMAGE;
-    public static final ForgeConfigSpec.DoubleValue DEATH_EXPLOSION_HP_RATIO;
-    public static final ForgeConfigSpec.DoubleValue DEATH_EXPLOSION_RADIUS;
+    public static final ForgeConfigSpec.DoubleValue CAVALRY_DAMAGE_PER_SPEED;
+    public static final ForgeConfigSpec.DoubleValue CAVALRY_SPEAR_MULTIPLIER_PER_SPEED;
+    public static final ForgeConfigSpec.DoubleValue CAVALRY_MAX_SPEED;
+    public static final ForgeConfigSpec.DoubleValue CAVALRY_ARROW_SPEED;
     public static final ForgeConfigSpec.DoubleValue SHIELD_REPAIR_PER_ARMOR;
     public static final ForgeConfigSpec.IntValue SHIELD_REPAIR_MAX;
     public static final ForgeConfigSpec.IntValue SHIELD_REPAIR_COOLDOWN;
@@ -111,6 +114,20 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue PART_CRUSHER_MATERIAL_LOSS;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_MATERIAL_LOSS;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_CLAY;
+    // 古遗物联动
+    public static final ForgeConfigSpec.DoubleValue PERFECTION_HEALTH_THRESHOLD;
+    public static final ForgeConfigSpec.DoubleValue PERFECTION_ABSORB_FLAT_MIN;
+    public static final ForgeConfigSpec.DoubleValue PERFECTION_ABSORB_FLAT_MAX;
+    public static final ForgeConfigSpec.DoubleValue PERFECTION_ABSORB_PERCENT_MIN;
+    public static final ForgeConfigSpec.DoubleValue PERFECTION_ABSORB_PERCENT_MAX;
+    public static final ForgeConfigSpec.DoubleValue PERFECTION_GUARD_THRESHOLD;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> PERFECTION_REGEN_UPGRADES;
+    public static final ForgeConfigSpec.DoubleValue MAGE_REFLECT_FLAT_MIN;
+    public static final ForgeConfigSpec.DoubleValue MAGE_REFLECT_FLAT_MAX;
+    public static final ForgeConfigSpec.DoubleValue MAGE_REFLECT_PERCENT_MIN;
+    public static final ForgeConfigSpec.DoubleValue MAGE_REFLECT_PERCENT_MAX;
+    public static final ForgeConfigSpec.DoubleValue EXECUTOR_DAMAGE_FACTOR;
+    public static final ForgeConfigSpec.DoubleValue EXECUTOR_MAX_HEALTH_REDUCTION;
     public static final ForgeConfigSpec SPEC;
 
     static {
@@ -184,7 +201,7 @@ public final class Config {
                 .defineInRange("charge_pierce_per_level", 0.2, 0.0, 1.0);
         BUILDER.pop();
 
-        BUILDER.push("golem_backup_energy_upgrade");
+        BUILDER.push("backup_energy_upgrade");
         BACKUP_ENERGY_SHIELD_PER_LEVEL = BUILDER.comment("Max shield points per upgrade level (2 points = 1 heart)")
                 .defineInRange("shield_per_level", 20.0, 1.0, 10000.0);
         BACKUP_ENERGY_RECHARGE_INTERVAL = BUILDER.comment("Ticks between shield recharges (fixed 2s = 40 ticks)")
@@ -231,12 +248,14 @@ public final class Config {
                 .defineInRange("ranged_arrow_speed", 1.5, 1.0, 10.0);
         RANGED_CANNON_MAGIC_BONUS = BUILDER.comment("Magic damage bonus for golems holding the Sonic Cannon (Echo Cannon) while the ranged weapon upgrade is installed; multiplier on the L2lib magic damage factor")
                 .defineInRange("ranged_cannon_magic_bonus", 0.5, 0.0, 10.0);
-        DEATH_EXPLOSION_BASE_DAMAGE = BUILDER.comment("Base damage of the golem death explosion (deathrattle upgrade)")
-                .defineInRange("death_explosion_base_damage", 10.0, 0.0, 1000.0);
-        DEATH_EXPLOSION_HP_RATIO = BUILDER.comment("Extra death-explosion damage as a fraction of the golem's max health")
-                .defineInRange("death_explosion_hp_ratio", 0.2, 0.0, 10.0);
-        DEATH_EXPLOSION_RADIUS = BUILDER.comment("Blast radius of the golem death explosion")
-                .defineInRange("death_explosion_radius", 3.0, 1.0, 16.0);
+        CAVALRY_DAMAGE_PER_SPEED = BUILDER.comment("Cavalry upgrade (枪骑, riding a golem mount): extra melee damage per 1.0 of the MOUNT's movement_speed attribute. That attribute is a per-tick movement scale, not blocks per second (0.1 = 4.317 blocks/s walking), and golem materials keep it inside 0..1, so 10.0 means +1 damage per 0.1 speed")
+                .defineInRange("cavalry_damage_per_speed", 10.0, 0.0, 1000.0);
+        CAVALRY_SPEAR_MULTIPLIER_PER_SPEED = BUILDER.comment("Cavalry upgrade: damage MULTIPLIER per 1.0 of the mount's movement_speed while the golem holds a golem spear (spear-type weapons are the only ones that get a multiplicative speed bonus): damage is multiplied by 1 + speed x this, so 2.0 means x1.5 at speed 0.25 and x3 at speed 1.0")
+                .defineInRange("cavalry_spear_multiplier_per_speed", 2.0, 0.0, 100.0);
+        CAVALRY_MAX_SPEED = BUILDER.comment("Cavalry upgrade: mount movement_speed used at most for the scaling, so an over-buffed mount cannot scale damage forever (the golem design range is 0..1)")
+                .defineInRange("cavalry_max_speed", 1.0, 0.05, 10.0);
+        CAVALRY_ARROW_SPEED = BUILDER.comment("Cavalry upgrade: arrow velocity multiplier for bows and crossbows fired from a golem mount (2.0 doubles the arrow speed and the vanilla velocity-based damage)")
+                .defineInRange("cavalry_arrow_speed", 2.0, 1.0, 10.0);
         SHIELD_REPAIR_PER_ARMOR = BUILDER.comment("Shield durability restored per combined armor and toughness point on a successful block (humanoid golems, shield weapon upgrade)")
                 .defineInRange("shield_repair_per_armor", 0.2, 0.0, 10.0);
         SHIELD_REPAIR_MAX = BUILDER.comment("Maximum shield durability restored per successful block")
@@ -354,6 +373,39 @@ public final class Config {
                 .defineInRange("sawmill_material_loss", 2, 0, 64);
         PART_SAWMILL_CLAY = BUILDER.comment("Clay balls produced as a byproduct when sawmilling a golem part (the golem template recipe uses 4 clay)")
                 .defineInRange("sawmill_clay", 4, 0, 64);
+        BUILDER.pop();
+
+        BUILDER.push("artifact_synergy");
+        PERFECTION_HEALTH_THRESHOLD = BUILDER.comment("Perfection synergy (regeneration upgrade lv5 + 4-piece perfection set): health fraction at or below which the stored regeneration bursts into absorption. Keep above 0.5")
+                .defineInRange("perfection_health_threshold", 0.65, 0.5, 1.0);
+        PERFECTION_ABSORB_FLAT_MIN = BUILDER.comment("Perfection synergy: flat part of the absorption cap at rarity tier 1")
+                .defineInRange("perfection_absorb_flat_min", 2.0, 0.0, 1000.0);
+        PERFECTION_ABSORB_FLAT_MAX = BUILDER.comment("Perfection synergy: flat part of the absorption cap at rarity tier 5")
+                .defineInRange("perfection_absorb_flat_max", 10.0, 0.0, 1000.0);
+        PERFECTION_ABSORB_PERCENT_MIN = BUILDER.comment("Perfection synergy: max-health percentage part of the absorption cap at rarity tier 1")
+                .defineInRange("perfection_absorb_percent_min", 0.01, 0.0, 10.0);
+        PERFECTION_ABSORB_PERCENT_MAX = BUILDER.comment("Perfection synergy: max-health percentage part of the absorption cap at rarity tier 5")
+                .defineInRange("perfection_absorb_percent_max", 0.03, 0.0, 10.0);
+        PERFECTION_GUARD_THRESHOLD = BUILDER.comment("Perfection synergy: absorption points the golem must hold before the damage limit kicks in. Once it holds at least this many, an incoming hit deals at most the golem's current absorption, so the absorption eats the hit whole and no health is lost. Tiers whose absorption cap stays below this value never reach it; 0 disables the limit")
+                .defineInRange("perfection_guard_threshold", 5.0, 0.0, 1000.0);
+        PERFECTION_REGEN_UPGRADES = BUILDER.comment("Perfection synergy: modifier ids that count as the golem's regeneration upgrade. Addon mods often ship their own \"Regeneration V\" apple upgrade under a different id (the MGDP netherite gold apples register modulargolems:netherite_gold and modulargolems:enchanted_netherite_gold), so all of them are listed here. The highest level found across these ids has to reach 5")
+                .defineList("perfection_regen_upgrades", List.of(
+                                "modulargolems:regeneration_up",
+                                "modulargolems:netherite_gold",
+                                "modulargolems:enchanted_netherite_gold"),
+                        o -> o instanceof String);
+        MAGE_REFLECT_FLAT_MIN = BUILDER.comment("Mage synergy (soul flame upgrade lv3 + 4-piece mage set): flat reflect damage at rarity tier 1")
+                .defineInRange("mage_reflect_flat_min", 2.0, 0.0, 1000.0);
+        MAGE_REFLECT_FLAT_MAX = BUILDER.comment("Mage synergy: flat reflect damage at rarity tier 5")
+                .defineInRange("mage_reflect_flat_max", 10.0, 0.0, 1000.0);
+        MAGE_REFLECT_PERCENT_MIN = BUILDER.comment("Mage synergy: reflect damage per point of the golem's missing health at rarity tier 1")
+                .defineInRange("mage_reflect_percent_min", 0.30, 0.0, 10.0);
+        MAGE_REFLECT_PERCENT_MAX = BUILDER.comment("Mage synergy: reflect damage per point of the golem's missing health at rarity tier 5")
+                .defineInRange("mage_reflect_percent_max", 0.50, 0.0, 10.0);
+        EXECUTOR_DAMAGE_FACTOR = BUILDER.comment("Executor synergy (damage upgrade lv5 + 5-piece executor set): additive damage multiplier per point of the target's missing health fraction (0.3 = +30% against an empty-health target)")
+                .defineInRange("executor_damage_factor", 0.30, 0.0, 100.0);
+        EXECUTOR_MAX_HEALTH_REDUCTION = BUILDER.comment("Executor synergy: permanent max health reduction taken as the cost of the bonus")
+                .defineInRange("executor_max_health_reduction", 0.10, 0.0, 1.0);
         BUILDER.pop();
 
         SPEC = BUILDER.build();

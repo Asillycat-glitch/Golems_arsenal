@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
-    "golems_arsenal:stance_magic"
+    "golems_arsenal:stance_magic",
+    "golems_arsenal:phoenix_fire"
   ]
 }

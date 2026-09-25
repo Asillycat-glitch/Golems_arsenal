@@ -27,45 +27,82 @@ public final class GolemUpgrades {
             reg("golem_energy", GolemEnergyModifier::new);
     public static final RegistryEntry<GolemEnergyTechModifier> ENERGY_TECH =
             reg("golem_energy_tech", GolemEnergyTechModifier::new);
-    // Legacy alias so holders saved before the rename keep working. Forge forbids registering one
-    // instance under two names, so this is a separate instance; updateAttributes always rebuilds
-    // modifiers from the upgrade items afterwards, so gameplay only ever sees the tech modifier.
-    public static final RegistryEntry<GolemEnergyTechModifier> ENERGY_HEAL_LEGACY =
-            reg("golem_energy_heal", GolemEnergyTechModifier::new);
     public static final RegistryEntry<GolemBackupEnergyModifier> BACKUP_ENERGY =
-            reg("golem_backup_energy", GolemBackupEnergyModifier::new);
+            reg("backup_energy", GolemBackupEnergyModifier::new);
+    /*
+     * Every upgrade keeps the id rule "modifier id = item id minus _upgrade" (item main_weapon_upgrade
+     * grants modifier main_weapon). Only the upgrades whose name actually says 傀儡 keep the golem_
+     * prefix (golem_energy / golem_energy_tech); the rest dropped it as framework-legacy noise.
+     */
     public static final RegistryEntry<GolemFlagModifier> WEAPON_MAIN =
-            reg("golem_weapon_main", () -> new GolemFlagModifier(StatFilterType.ATTACK,
-                    "upgrade.golems_arsenal.golem_weapon_main",
-                    "upgrade.golems_arsenal.golem_weapon_main.desc_sword"));
+            reg("main_weapon", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.main_weapon",
+                    "upgrade.golems_arsenal.main_weapon.desc_sword"));
     public static final RegistryEntry<GolemFlagModifier> WEAPON_ALT =
-            reg("golem_weapon_alt", () -> new GolemFlagModifier(StatFilterType.ATTACK,
-                    "upgrade.golems_arsenal.golem_weapon_alt"));
+            reg("alt_weapon", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.alt_weapon"));
     public static final RegistryEntry<GolemFlagModifier> WEAPON_RANGED =
-            reg("golem_weapon_ranged", () -> new GolemFlagModifier(StatFilterType.ATTACK,
-                    "upgrade.golems_arsenal.golem_weapon_ranged"));
+            reg("ranged_weapon", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.ranged_weapon"));
     public static final RegistryEntry<GolemFlagModifier> WEAPON_SHIELD =
-            reg("golem_weapon_shield", () -> new GolemFlagModifier(StatFilterType.HEALTH,
-                    "upgrade.golems_arsenal.golem_weapon_shield"));
+            reg("shield_weapon", () -> new GolemFlagModifier(StatFilterType.HEALTH,
+                    "upgrade.golems_arsenal.shield_weapon"));
     public static final RegistryEntry<GolemFlagModifier> WEAPON_ONSLAUGHT =
-            reg("golem_weapon_onslaught", () -> new GolemFlagModifier(StatFilterType.ATTACK,
-                    "upgrade.golems_arsenal.golem_weapon_onslaught"));
-    public static final RegistryEntry<GolemFlagModifier> DEATH_EXPLOSION =
-            reg("golem_death_explosion", () -> new GolemFlagModifier(StatFilterType.HEALTH,
-                    "upgrade.golems_arsenal.golem_death_explosion"));
+            reg("full_onslaught", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.full_onslaught"));
+    /** Cavalry (枪骑): speed-scaled melee damage while riding a golem mount, better with spears/bows. */
+    public static final RegistryEntry<GolemFlagModifier> CAVALRY =
+            reg("cavalry", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.cavalry"));
     public static final RegistryEntry<GolemStanceModifier> STANCE =
-            reg("golem_stance", GolemStanceModifier::new);
+            reg("stance", GolemStanceModifier::new);
     public static final RegistryEntry<GolemStanceSubModifier> STANCE_SUB =
-            reg("golem_stance_sub", GolemStanceSubModifier::new);
+            reg("stance_sub", GolemStanceSubModifier::new);
     public static final RegistryEntry<GolemGrazeModifier> GRAZE =
-            reg("golem_graze", GolemGrazeModifier::new);
+            reg("graze", GolemGrazeModifier::new);
+    /** E 罐：存储修复材料，战斗中自动消耗补血（两级：100% / 200% 最大生命容量）。 */
+    public static final RegistryEntry<GolemETankModifier> E_TANK =
+            reg("e_tank", GolemETankModifier::new);
+    /** 光柱护体：受击召唤 4 道光柱，2 秒内免疫伤害，光柱本身也造成伤害。 */
+    public static final RegistryEntry<GolemLightPillarModifier> LIGHT_PILLAR =
+            reg("light_pillar", GolemLightPillarModifier::new);
+    /** 减震（X5 Shock Buffer）：抗击退。 */
+    public static final RegistryEntry<GolemShockBufferModifier> SHOCK_BUFFER =
+            reg("shock_buffer", GolemShockBufferModifier::new);
+    /** 节约能源（X5 Energy Saver）：所有 FE 消耗按等级打折。 */
+    public static final RegistryEntry<GolemEnergySaverModifier> ENERGY_SAVER =
+            reg("energy_saver", GolemEnergySaverModifier::new);
+    /** W 罐（E 罐附属）：把 E 罐的修复材料换成傀儡 FE。 */
+    public static final RegistryEntry<GolemWTankModifier> W_TANK =
+            reg("w_tank", GolemWTankModifier::new);
     /** Special-move upgrade (example: key blade spin). Effects live in KeySwordEventHandler. */
     public static final RegistryEntry<GolemFlagModifier> KEY_BLADE_SPIN =
-            reg("golem_key_blade_spin", () -> new GolemFlagModifier(StatFilterType.ATTACK,
-                    "upgrade.golems_arsenal.golem_key_blade_spin"));
+            reg("key_blade_spin", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.key_blade_spin",
+                    "upgrade.golems_arsenal.special_move.note"));
+    /** Special-move upgrade: lion slash (forward flip + downward slam AoE). */
+    public static final RegistryEntry<GolemFlagModifier> LION_SLASH =
+            reg("lion_slash", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.lion_slash",
+                    "upgrade.golems_arsenal.special_move.note"));
+    /** Special-move upgrade: sword rain (key blade spirals up, then iron swords rain down). */
+    public static final RegistryEntry<GolemFlagModifier> SWORD_RAIN =
+            reg("sword_rain", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.sword_rain",
+                    "upgrade.golems_arsenal.special_move.note"));
+    /** Special-move upgrade: charge (dash to a spot behind the target, damaging the path). */
+    public static final RegistryEntry<GolemFlagModifier> CHARGE =
+            reg("charge", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.charge",
+                    "upgrade.golems_arsenal.special_move.note"));
+    /** Special-move upgrade: phoenix rush (backward leap, hover, dive, fire impact). */
+    public static final RegistryEntry<GolemFlagModifier> PHOENIX =
+            reg("phoenix", () -> new GolemFlagModifier(StatFilterType.ATTACK,
+                    "upgrade.golems_arsenal.phoenix",
+                    "upgrade.golems_arsenal.special_move.note"));
     /** Start-the-Train: granted to the create:railway material via a material-config datapack. */
     public static final RegistryEntry<GolemTrainModifier> TRAIN =
-            reg("golem_train", GolemTrainModifier::new);
+            reg("train", GolemTrainModifier::new);
 
     /**
      * Tech expansion template modifier: up to 5 applications, each level +1 upgrade slot,
@@ -95,6 +132,26 @@ public final class GolemUpgrades {
         return BACKUP_ENERGY.get();
     }
 
+    public static GolemETankModifier eTankModifier() {
+        return E_TANK.get();
+    }
+
+    public static GolemLightPillarModifier lightPillarModifier() {
+        return LIGHT_PILLAR.get();
+    }
+
+    public static GolemShockBufferModifier shockBufferModifier() {
+        return SHOCK_BUFFER.get();
+    }
+
+    public static GolemEnergySaverModifier energySaverModifier() {
+        return ENERGY_SAVER.get();
+    }
+
+    public static GolemWTankModifier wTankModifier() {
+        return W_TANK.get();
+    }
+
     public static GolemFlagModifier mainWeaponModifier() {
         return WEAPON_MAIN.get();
     }
@@ -115,8 +172,8 @@ public final class GolemUpgrades {
         return WEAPON_ONSLAUGHT.get();
     }
 
-    public static GolemFlagModifier deathExplosionModifier() {
-        return DEATH_EXPLOSION.get();
+    public static GolemFlagModifier cavalryModifier() {
+        return CAVALRY.get();
     }
 
     public static GolemStanceModifier stanceModifier() {
@@ -133,6 +190,22 @@ public final class GolemUpgrades {
 
     public static GolemFlagModifier keyBladeSpinModifier() {
         return KEY_BLADE_SPIN.get();
+    }
+
+    public static GolemFlagModifier lionSlashModifier() {
+        return LION_SLASH.get();
+    }
+
+    public static GolemFlagModifier swordRainModifier() {
+        return SWORD_RAIN.get();
+    }
+
+    public static GolemFlagModifier chargeModifier() {
+        return CHARGE.get();
+    }
+
+    public static GolemFlagModifier phoenixModifier() {
+        return PHOENIX.get();
     }
 
     public static GolemTrainModifier trainModifier() {
@@ -159,8 +232,8 @@ public final class GolemUpgrades {
         return GolemFlagModifier.hasUpgrade(entity, WEAPON_ONSLAUGHT.get());
     }
 
-    public static boolean hasDeathExplosion(AbstractGolemEntity<?, ?> entity) {
-        return GolemFlagModifier.hasUpgrade(entity, DEATH_EXPLOSION.get());
+    public static boolean hasCavalry(AbstractGolemEntity<?, ?> entity) {
+        return GolemFlagModifier.hasUpgrade(entity, CAVALRY.get());
     }
 
     public static boolean hasStance(AbstractGolemEntity<?, ?> entity) {

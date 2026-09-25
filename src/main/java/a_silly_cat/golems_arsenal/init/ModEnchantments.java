@@ -14,10 +14,10 @@ public final class ModEnchantments {
             DeferredRegister.create(ForgeRegistries.ENCHANTMENTS, Golems_arsenal.MODID);
 
     public static final RegistryObject<FullOnslaughtEnchantment> FULL_ONSLAUGHT =
-            ENCHANTMENTS.register("golem_full_onslaught", FullOnslaughtEnchantment::new);
+            ENCHANTMENTS.register("full_onslaught", FullOnslaughtEnchantment::new);
 
     public static final RegistryObject<StanceEnchantment> STANCE =
-            ENCHANTMENTS.register("golem_stance", StanceEnchantment::new);
+            ENCHANTMENTS.register("stance", StanceEnchantment::new);
 
     public static void register(IEventBus modEventBus) {
         ENCHANTMENTS.register(modEventBus);

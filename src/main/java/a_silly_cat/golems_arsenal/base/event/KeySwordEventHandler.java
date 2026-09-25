@@ -7,7 +7,9 @@ import a_silly_cat.golems_arsenal.base.item.KeySwordItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import a_silly_cat.golems_arsenal.compat.golemmagicka.ScrollSchoolHelper;
+import a_silly_cat.golems_arsenal.init.ModNetwork;
 import a_silly_cat.golems_arsenal.init.ModTags;
+import a_silly_cat.golems_arsenal.network.ClientboundFlipPacket;
 import dev.xkmc.l2library.init.events.GeneralEventHandler;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.core.particles.ParticleTypes;
@@ -16,6 +18,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.effect.MobEffect;
@@ -27,16 +31,19 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.SmallFireball;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.ProjectileImpactEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModList;
+import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.List;
@@ -51,17 +58,54 @@ import java.util.List;
  */
 @Mod.EventBusSubscriber(modid = Golems_arsenal.MODID)
 public final class KeySwordEventHandler {
+
     private static final String FIREBALL_TAG = "GolemsArsenalKeyFireball";
     private static final String FIREBALL_DAMAGE_TAG = "GolemsArsenalKeyFireballDamage";
     private static final String COOLDOWN_KEY = "GolemsArsenalKeySwordCooldown";
     private static final String KEY_BLADE_CD_KEY = "GolemsArsenalKeyBladeCooldown";
     private static final String MAGIC_MSG_ID = "key_sword_magic";
+    private static final String LION_SLASH_CD_KEY = "GolemsArsenalLionSlashCooldown";
+    private static final String LION_FLIP_START_KEY = "GolemsArsenalLionFlipStart";
+    private static final String LION_FLIP_BASE_KEY = "GolemsArsenalLionFlipBaseY";
+    private static final String LION_FLIP_FROM_X_KEY = "GolemsArsenalLionFlipFromX";
+    private static final String LION_FLIP_FROM_Z_KEY = "GolemsArsenalLionFlipFromZ";
+    private static final String LION_FLIP_DIR_X_KEY = "GolemsArsenalLionFlipDirX";
+    private static final String LION_FLIP_DIR_Z_KEY = "GolemsArsenalLionFlipDirZ";
+    private static final String LION_FLIP_ADVANCE_KEY = "GolemsArsenalLionFlipAdvance";
+    private static final String LION_MSG_ID = "lion_slash";
+    private static final String SWORD_RAIN_CD_KEY = "GolemsArsenalSwordRainCooldown";
+    private static final String SWORD_RAIN_MSG_ID = "sword_rain";
     /** Fixed internal cooldown (ticks) between key blade spin uses; not configurable. */
     private static final int KEY_BLADE_SPIN_COOLDOWN_TICKS = 80;
+    /** Fixed internal cooldown (ticks) between lion slash uses; not configurable. */
+    private static final int LION_SLASH_COOLDOWN_TICKS = 80;
+    /** Fixed internal cooldown (ticks) between sword rain uses; not configurable. */
+    private static final int SWORD_RAIN_COOLDOWN_TICKS = 100;
+    /**
+     * Lion-slash flip clearance: apex height of the somersault as a multiple of the golem's model
+     * height, so the flip always clears the ground regardless of golem size.
+     */
+    public static final double LION_SLASH_HEIGHT_FACTOR = 0.8;
     /** Wind-up turn (ticks) before the ranged throw; the blade spawns only after the turn. */
     private static final int FAST_SPIN_TICKS = 8;
+    /** Radius (blocks) of the lion slash downward-slam area. */
+    private static final double LION_SLASH_RANGE = 3.5;
+    /** Lion slash damage as a fraction of the golem's attack damage. */
+    private static final double LION_SLASH_DAMAGE_RATIO = 1.5;
+    /** Fixed damage of each falling sword of the sword rain special move. */
+    private static final double SWORD_RAIN_FIXED_DAMAGE = 4.0;
+    /** Falling sword damage per point of the golem's attack damage. */
+    private static final double SWORD_RAIN_ATTACK_RATIO = 0.5;
+    /** Number of iron swords spawned by one sword rain. */
+    private static final int SWORD_RAIN_COUNT = 8;
+    /** Horizontal spread radius of the falling swords around the aim point. */
+    private static final double SWORD_RAIN_SPREAD = 4.0;
     private static final ResourceKey<DamageType> KEY_SWORD_MAGIC =
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id(MAGIC_MSG_ID));
+    private static final ResourceKey<DamageType> LION_SLASH =
+            ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id(LION_MSG_ID));
+    private static final ResourceKey<DamageType> SWORD_RAIN =
+            ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id(SWORD_RAIN_MSG_ID));
 
     private static Attribute spellPowerCache;
     private static Attribute fireSpellPowerCache;
@@ -77,7 +121,7 @@ public final class KeySwordEventHandler {
         if (event.getEntity().level().isClientSide) {
             return;
         }
-        if (MAGIC_MSG_ID.equals(event.getSource().getMsgId())) {
+        if (isOwnDamage(event.getSource())) {
             return;
         }
         if (!(event.getSource().getEntity() instanceof LivingEntity attacker)) {
@@ -114,6 +158,7 @@ public final class KeySwordEventHandler {
         // orbit the key blade around the golem once; ranged targets are thrown at from the
         // per-golem tick (updateKeyBladeThrow).
         if (attacker instanceof AbstractGolemEntity<?, ?> golem
+                && !golem.isInRangedMode()
                 && GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.KEY_BLADE_SPIN.get())
                 && keyBladeReady(golem)) {
             double damage = Config.KEY_BLADE_FIXED_DAMAGE.get()
@@ -124,6 +169,175 @@ public final class KeySwordEventHandler {
         }
 
         event.setAmount(amount);
+    }
+
+    /**
+     * Lion Slash special move: on any golem melee hit the golem hops up and performs a rendered
+     * front somersault (client animation driven by {@link ClientboundFlipPacket}); when the flip
+     * ends it slams down, damaging every enemy within range for 1.5x its attack damage (once per
+     * trigger). Works with any weapon.
+     */
+    @SubscribeEvent
+    public static void onGolemLionSlash(LivingHurtEvent event) {
+        if (event.getEntity().level().isClientSide
+                || isOwnDamage(event.getSource())
+                || !(event.getSource().getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
+            return;
+        }
+        LivingEntity victim = event.getEntity();
+        if (victim == golem
+                || golem.isInRangedMode()
+                || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.LION_SLASH.get())
+                || golem.level().getGameTime()
+                < golem.getPersistentData().getLong(LION_SLASH_CD_KEY)) {
+            return;
+        }
+        golem.getPersistentData().putLong(LION_SLASH_CD_KEY,
+                golem.level().getGameTime() + LION_SLASH_COOLDOWN_TICKS);
+        golem.swing(InteractionHand.MAIN_HAND);
+        // Lunge toward the struck enemy: horizontal advance so the flip is a forward dash that
+        // ends roughly one block in front of the enemy, not an in-place somersault.
+        double dx = victim.getX() - golem.getX();
+        double dz = victim.getZ() - golem.getZ();
+        double hd = Math.sqrt(dx * dx + dz * dz);
+        double advance = Math.max(0.0, Math.min(4.0, hd - 1.2));
+        double dirX = hd > 1.0E-4 ? dx / hd : 0;
+        double dirZ = hd > 1.0E-4 ? dz / hd : 0;
+        startLionSlash(golem, dirX, dirZ, advance);
+    }
+
+    /**
+     * Starts the flip: records the start tick / base height on the golem and notifies clients.
+     * The per-tick arc itself is driven inside {@link #onGolemLionSlashTick} (i.e. during the
+     * entity's own tick), so every position change is broadcast in the same tick and the client
+     * renderer never lags a whole flight behind.
+     */
+    private static void startLionSlash(AbstractGolemEntity<?, ?> golem, double dirX, double dirZ,
+                                       double advance) {
+        if (golem.level().isClientSide) {
+            return;
+        }
+        ModNetwork.CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> golem),
+                new ClientboundFlipPacket(golem.getId()));
+        int air = lionSlashAirTicks(golem);
+        double apex = LION_SLASH_HEIGHT_FACTOR * Math.max(1.0, golem.getBbHeight());
+        CompoundTag tag = golem.getPersistentData();
+        tag.putLong(LION_FLIP_START_KEY, golem.level().getGameTime());
+        tag.putDouble(LION_FLIP_BASE_KEY, golem.getY());
+        tag.putDouble(LION_FLIP_FROM_X_KEY, golem.getX());
+        tag.putDouble(LION_FLIP_FROM_Z_KEY, golem.getZ());
+        tag.putDouble(LION_FLIP_DIR_X_KEY, dirX);
+        tag.putDouble(LION_FLIP_DIR_Z_KEY, dirZ);
+        tag.putDouble(LION_FLIP_ADVANCE_KEY, advance);
+        golem.setNoGravity(true);
+        golem.setDeltaMovement(Vec3.ZERO);
+    }
+
+    /**
+     * Per-tick driver of the lion-slash somersault. Runs inside the golem's own tick so the sine
+     * arc position is broadcast immediately: y = apex * sin(pi * progress), progress = elapsed /
+     * airTicks, so 0° is on the ground, 180° at the apex and 360° back on the ground. No-gravity
+     * is only used while climbing (progress < 0.5); after 180° the golem is under real gravity
+     * again, with Y pinned to the sine arc.
+     */
+    @SubscribeEvent
+    public static void onGolemLionSlashTick(LivingEvent.LivingTickEvent event) {
+        if (event.getEntity().level().isClientSide
+                || !(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
+            return;
+        }
+        CompoundTag tag = golem.getPersistentData();
+        if (!tag.contains(LION_FLIP_START_KEY)) {
+            return;
+        }
+        long now = golem.level().getGameTime();
+        long start = tag.getLong(LION_FLIP_START_KEY);
+        double baseY = tag.getDouble(LION_FLIP_BASE_KEY);
+        double fromX = tag.getDouble(LION_FLIP_FROM_X_KEY);
+        double fromZ = tag.getDouble(LION_FLIP_FROM_Z_KEY);
+        double dirX = tag.getDouble(LION_FLIP_DIR_X_KEY);
+        double dirZ = tag.getDouble(LION_FLIP_DIR_Z_KEY);
+        double advance = tag.getDouble(LION_FLIP_ADVANCE_KEY);
+        int air = lionSlashAirTicks(golem);
+        double progress = (double) (now - start) / air;
+        if (!golem.isAlive() || progress >= 2.0) {
+            // Aborted (died / left / stale data from an old save): just clean up.
+            tag.remove(LION_FLIP_START_KEY);
+            tag.remove(LION_FLIP_BASE_KEY);
+            tag.remove(LION_FLIP_FROM_X_KEY);
+            tag.remove(LION_FLIP_FROM_Z_KEY);
+            tag.remove(LION_FLIP_DIR_X_KEY);
+            tag.remove(LION_FLIP_DIR_Z_KEY);
+            tag.remove(LION_FLIP_ADVANCE_KEY);
+            golem.setNoGravity(false);
+            return;
+        }
+        if (progress < 1.0) {
+            double disp = LION_SLASH_HEIGHT_FACTOR * Math.max(1.0, golem.getBbHeight())
+                    * Math.sin(Math.PI * Math.max(0.0, progress));
+            // Horizontal lunge eases the same way as the vertical arc: starts slow, accelerates
+            // through the flip, and stops as the golem touches down in front of the enemy.
+            double ease = 0.5 * (1.0 - Math.cos(Math.PI * Math.max(0.0, progress)));
+            double targetX = fromX + dirX * advance * ease;
+            double targetZ = fromZ + dirZ * advance * ease;
+            golem.setNoGravity(progress < 0.5);
+            golem.setPos(targetX, baseY + disp, targetZ);
+            golem.setDeltaMovement(Vec3.ZERO);
+            return;
+        }
+        // Flip finished (360°): back at the starting height, then the ground slam.
+        tag.remove(LION_FLIP_START_KEY);
+        tag.remove(LION_FLIP_BASE_KEY);
+        tag.remove(LION_FLIP_FROM_X_KEY);
+        tag.remove(LION_FLIP_FROM_Z_KEY);
+        tag.remove(LION_FLIP_DIR_X_KEY);
+        tag.remove(LION_FLIP_DIR_Z_KEY);
+        tag.remove(LION_FLIP_ADVANCE_KEY);
+        golem.setNoGravity(false);
+        golem.setPos(fromX + dirX * advance, baseY, fromZ + dirZ * advance);
+        golem.setDeltaMovement(Vec3.ZERO);
+        golem.fallDistance = 0;
+        lionSlashLand(golem);
+    }
+
+    /**
+     * Total airtime in ticks of the lion-slash somersault. Both the server's parabola and the
+     * client renderer derive the same value from the golem's model height, so the flip animation
+     * and the actual flight always stay in sync.
+     */
+    public static int lionSlashAirTicks(LivingEntity golem) {
+        double height = Math.max(1.0, golem.getBbHeight());
+        return (int) Math.ceil(10.0 * Math.sqrt(LION_SLASH_HEIGHT_FACTOR * height));
+    }
+
+    /** Ground slam after the flip: AoE damage, burst particles and a heavy impact sound. */
+    private static void lionSlashLand(AbstractGolemEntity<?, ?> golem) {
+        double damage = LION_SLASH_DAMAGE_RATIO
+                * golem.getAttributeValue(Attributes.ATTACK_DAMAGE);
+        double radius = LION_SLASH_RANGE;
+        List<LivingEntity> targets = golem.level().getEntitiesOfClass(LivingEntity.class,
+                AABB.ofSize(golem.position(), radius * 2, radius * 2, radius * 2),
+                e -> e.isAlive() && e != golem && !e.isAlliedTo(golem));
+        for (LivingEntity target : targets) {
+            target.hurt(lionSlashSource(golem), (float) damage);
+        }
+        if (golem.level() instanceof ServerLevel server) {
+            Vec3 pos = golem.position();
+            server.sendParticles(ParticleTypes.EXPLOSION, pos.x, pos.y + 0.2, pos.z,
+                    1, 0, 0, 0, 0);
+            server.sendParticles(ParticleTypes.CRIT, pos.x, pos.y + golem.getBbHeight() * 0.5,
+                    pos.z, 24, radius * 0.5, golem.getBbHeight() * 0.5, radius * 0.5, 0.02);
+            server.playSound(null, pos.x, pos.y, pos.z, SoundEvents.GENERIC_EXPLODE,
+                    SoundSource.HOSTILE, 1.0F, 1.0F);
+        }
+    }
+
+    /** True for damage types this mod applies itself; those must never retrigger our effects. */
+    private static boolean isOwnDamage(DamageSource source) {
+        String id = source.getMsgId();
+        return MAGIC_MSG_ID.equals(id) || LION_MSG_ID.equals(id)
+                || SWORD_RAIN_MSG_ID.equals(id)
+                || "stance_magic".equals(id) || "flame_magic".equals(id);
     }
 
     private static boolean specialReady(LivingEntity attacker) {
@@ -161,6 +375,34 @@ public final class KeySwordEventHandler {
         Vec3 aim = target.getBoundingBox().getCenter().add(0, target.getBbHeight() * 0.3, 0);
         spinThenThrow(golem, aim, damage);
         startKeyBladeCooldown(golem);
+    }
+
+    /**
+     * Sword Rain special move, driven from the golem's periodic tick like the ranged half of the
+     * key blade spin: with a key sword and a distant target, the golem tosses the key blade
+     * upward; it spirals up (fast then slow), then splits into falling iron swords over the target.
+     */
+    public static void updateSwordRain(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
+        if (!(stack.getItem() instanceof KeySwordItem)
+                || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.SWORD_RAIN.get())
+                || golem.level().getGameTime()
+                < golem.getPersistentData().getLong(SWORD_RAIN_CD_KEY)) {
+            return;
+        }
+        LivingEntity target = golem.getTarget();
+        if (target == null || !target.isAlive()) {
+            return;
+        }
+        double distSqr = golem.distanceToSqr(target);
+        if (distSqr > 40.0 * 40.0) {
+            return;
+        }
+        double damage = SWORD_RAIN_FIXED_DAMAGE
+                + SWORD_RAIN_ATTACK_RATIO * golem.getAttributeValue(Attributes.ATTACK_DAMAGE);
+        KeyBladeEntity.swordRainRise(golem, target.position(), damage,
+                SWORD_RAIN_COUNT, SWORD_RAIN_SPREAD);
+        golem.getPersistentData().putLong(SWORD_RAIN_CD_KEY,
+                golem.level().getGameTime() + SWORD_RAIN_COOLDOWN_TICKS);
     }
 
     /**
@@ -440,5 +682,15 @@ public final class KeySwordEventHandler {
     public static DamageSource keySwordMagicSource(Entity attacker) {
         var registry = attacker.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE);
         return new DamageSource(registry.getHolderOrThrow(KEY_SWORD_MAGIC), attacker);
+    }
+
+    public static DamageSource lionSlashSource(Entity attacker) {
+        var registry = attacker.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE);
+        return new DamageSource(registry.getHolderOrThrow(LION_SLASH), attacker);
+    }
+
+    public static DamageSource swordRainSource(Entity attacker) {
+        var registry = attacker.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE);
+        return new DamageSource(registry.getHolderOrThrow(SWORD_RAIN), attacker);
     }
 }

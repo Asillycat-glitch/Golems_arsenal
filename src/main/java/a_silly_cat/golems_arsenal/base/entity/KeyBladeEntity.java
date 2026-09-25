@@ -12,7 +12,9 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashSet;
@@ -32,6 +34,8 @@ import java.util.UUID;
 public class KeyBladeEntity extends ItemEntity {
     public static final int MODE_ORBIT = 0;
     public static final int MODE_THROW = 1;
+    public static final int MODE_RISE = 2;
+    public static final int MODE_FALL = 3;
     /** Visual spin speed in full rotations per second (render-only, not configurable). */
     private static final double SPIN_ROTATIONS_PER_SECOND = 3.0;
     /** The melee orbit sweeps this many full turns (2 = 720°) so no surrounding enemy is missed. */
@@ -43,6 +47,17 @@ public class KeyBladeEntity extends ItemEntity {
     private static final String TAG_ORBIT = "KeyBladeOrbit";
     private static final String TAG_RETURN = "KeyBladeReturning";
     private static final String TAG_OUT = "KeyBladeOutDist";
+    private static final String TAG_AIM_X = "KeyBladeAimX";
+    private static final String TAG_AIM_Y = "KeyBladeAimY";
+    private static final String TAG_AIM_Z = "KeyBladeAimZ";
+    private static final String TAG_SPREAD = "KeyBladeSpread";
+    private static final String TAG_COUNT = "KeyBladeCount";
+    private static final String TAG_RISE_VY = "KeyBladeRiseVy";
+    private static final String TAG_FALL_VX = "KeyBladeFallVx";
+    private static final String TAG_FALL_VY = "KeyBladeFallVy";
+    private static final String TAG_FALL_VZ = "KeyBladeFallVz";
+    private static final String TAG_CENTER_X = "KeyBladeCenterX";
+    private static final String TAG_CENTER_Z = "KeyBladeCenterZ";
 
     private int mode = MODE_THROW;
     private float damage;
@@ -50,6 +65,17 @@ public class KeyBladeEntity extends ItemEntity {
     private double orbitAngle;
     private boolean returning;
     private double outDistance;
+    private double aimX;
+    private double aimY;
+    private double aimZ;
+    private double spread;
+    private int fallCount;
+    private double riseVy;
+    private double fallVx;
+    private double fallVy;
+    private double fallVz;
+    private double centerX;
+    private double centerZ;
     private final Set<UUID> hit = new HashSet<>();
 
     public KeyBladeEntity(EntityType<? extends KeyBladeEntity> type, Level level) {
@@ -71,6 +97,24 @@ public class KeyBladeEntity extends ItemEntity {
         // caller before this entity is even created.
         blade.setDeltaMovement(dir.scale(Config.KEY_BLADE_THROW_SPEED.get()
                 * Config.KEY_BLADE_THROW_END_FACTOR.get()));
+        return blade;
+    }
+
+    /**
+     * Sword Rain part 1: the key blade spirals upward (fast at first, then slowing) until it
+     * stops, then splits into falling iron swords (see {@link #spawnRain()}).
+     */
+    public static KeyBladeEntity swordRainRise(AbstractGolemEntity<?, ?> golem, Vec3 aim,
+                                               double damage, int count, double spread) {
+        KeyBladeEntity blade = create(golem, MODE_RISE, damage);
+        blade.aimX = aim.x;
+        blade.aimY = aim.y;
+        blade.aimZ = aim.z;
+        blade.fallCount = count;
+        blade.spread = spread;
+        blade.riseVy = 1.1;
+        blade.centerX = golem.getX();
+        blade.centerZ = golem.getZ();
         return blade;
     }
 
@@ -109,9 +153,117 @@ public class KeyBladeEntity extends ItemEntity {
         }
         if (mode == MODE_ORBIT) {
             tickOrbit(owner);
-        } else {
+        } else if (mode == MODE_THROW) {
             tickThrow(owner);
+        } else if (mode == MODE_RISE) {
+            tickRise(owner);
+        } else if (mode == MODE_FALL) {
+            tickFall(owner);
         }
+    }
+
+    /** Spiral rise with decreasing vertical speed; splits into falling swords at the apex. */
+    private void tickRise(LivingEntity owner) {
+        riseVy -= 0.055;
+        if (riseVy <= 0) {
+            spawnRain();
+            discard();
+            return;
+        }
+        orbitAngle += 0.5;
+        double radius = 0.7;
+        setPos(centerX + Math.cos(orbitAngle) * radius,
+                getY() + riseVy,
+                centerZ + Math.sin(orbitAngle) * radius);
+        setDeltaMovement(Vec3.ZERO);
+    }
+
+    /** Split the rising blade into {@code fallCount} iron swords over the captured aim point. */
+    private void spawnRain() {
+        for (int i = 0; i < fallCount; i++) {
+            double angle = random.nextDouble() * Math.PI * 2;
+            double radius = random.nextDouble() * spread;
+            double x = aimX + Math.cos(angle) * radius;
+            double z = aimZ + Math.sin(angle) * radius;
+            double y = aimY + 9 + random.nextDouble() * 3;
+            createFallingSword(x, y, z);
+        }
+    }
+
+    private void createFallingSword(double x, double y, double z) {
+        KeyBladeEntity sword = new KeyBladeEntity(ModEntities.KEY_BLADE.get(), level());
+        sword.setItem(new ItemStack(Items.IRON_SWORD));
+        sword.setPos(x, y, z);
+        sword.setNoGravity(true);
+        sword.setNeverPickUp();
+        sword.setInvulnerable(true);
+        sword.mode = MODE_FALL;
+        sword.damage = damage;
+        sword.ownerId = ownerId;
+        sword.fallVy = -0.6;
+        level().addFreshEntity(sword);
+    }
+
+    /** Falling iron sword: accelerates downward, weakly homes to nearby enemies, hits once. */
+    private void tickFall(LivingEntity owner) {
+        // Downward acceleration (negative), capped so the swords do not reach absurd speed.
+        fallVy = Math.max(-2.6, fallVy - 0.12);
+        LivingEntity target = nearestHostile(owner, 12);
+        if (target != null) {
+            Vec3 to = target.getEyePosition().subtract(position());
+            double horizontal = Math.sqrt(to.x * to.x + to.z * to.z);
+            if (horizontal > 1.0E-4) {
+                double desiredX = to.x / horizontal * 0.55;
+                double desiredZ = to.z / horizontal * 0.55;
+                fallVx += (desiredX - fallVx) * 0.18;
+                fallVz += (desiredZ - fallVz) * 0.18;
+            }
+        }
+        // Face the current flight direction so the client renderer can tilt the blade toward it.
+        double hSpeed = Math.sqrt(fallVx * fallVx + fallVz * fallVz);
+        double speed = Math.sqrt(hSpeed * hSpeed + fallVy * fallVy);
+        if (speed > 1.0E-4) {
+            double nx = fallVx / speed;
+            double nz = fallVz / speed;
+            double ny = fallVy / speed;
+            setYRot((float) (Math.atan2(-nx, nz) * 180.0 / Math.PI));
+            setXRot((float) (Math.asin(Math.max(-1.0, Math.min(1.0, -ny))) * 180.0 / Math.PI));
+        }
+        moveRelative(fallVx, fallVy, fallVz);
+        List<LivingEntity> targets = level().getEntitiesOfClass(LivingEntity.class,
+                getBoundingBox().inflate(0.35),
+                e -> e.isAlive() && e != owner && !e.isAlliedTo(owner) && !hit.contains(e.getUUID()));
+        if (!targets.isEmpty()) {
+            hit.add(targets.get(0).getUUID());
+            targets.get(0).hurt(KeySwordEventHandler.swordRainSource(owner), damage);
+            discard();
+            return;
+        }
+        // Landed on a solid block: the sword sticks briefly in spirit and vanishes.
+        if (!level().getBlockState(blockPosition().below()).isAir()) {
+            discard();
+        }
+    }
+
+    private void moveRelative(double vx, double vy, double vz) {
+        setPos(getX() + vx, getY() + vy, getZ() + vz);
+        setDeltaMovement(Vec3.ZERO);
+    }
+
+    private LivingEntity nearestHostile(LivingEntity owner, double radius) {
+        List<LivingEntity> list = level().getEntitiesOfClass(LivingEntity.class,
+                AABB.ofSize(position(), radius * 2, radius * 2, radius * 2),
+                e -> e.isAlive() && e != owner && !e.isAlliedTo(owner));
+        LivingEntity best = null;
+        double bestDist = radius * radius;
+        for (LivingEntity e : list) {
+            double d = e.distanceToSqr(this);
+            if (d < bestDist) {
+                bestDist = d;
+                best = e;
+            }
+        }
+        return best;
     }
 
     private void tickThrow(LivingEntity owner) {
@@ -188,6 +340,11 @@ public class KeyBladeEntity extends ItemEntity {
      */
     @Override
     public float getSpin(float partialTick) {
+        // Falling rain swords (iron swords) drop normally without spinning. Checked by item so the
+        // client (which does not receive the mode field) also renders them static.
+        if (mode == MODE_FALL || getItem().is(Items.IRON_SWORD)) {
+            return 0.0F;
+        }
         double radiansPerTick = SPIN_ROTATIONS_PER_SECOND * Math.PI * 2 / 20.0;
         return (float) ((tickCount + partialTick) * radiansPerTick);
     }
@@ -203,6 +360,17 @@ public class KeyBladeEntity extends ItemEntity {
         tag.putDouble(TAG_ORBIT, orbitAngle);
         tag.putBoolean(TAG_RETURN, returning);
         tag.putDouble(TAG_OUT, outDistance);
+        tag.putDouble(TAG_AIM_X, aimX);
+        tag.putDouble(TAG_AIM_Y, aimY);
+        tag.putDouble(TAG_AIM_Z, aimZ);
+        tag.putDouble(TAG_SPREAD, spread);
+        tag.putInt(TAG_COUNT, fallCount);
+        tag.putDouble(TAG_RISE_VY, riseVy);
+        tag.putDouble(TAG_FALL_VX, fallVx);
+        tag.putDouble(TAG_FALL_VY, fallVy);
+        tag.putDouble(TAG_FALL_VZ, fallVz);
+        tag.putDouble(TAG_CENTER_X, centerX);
+        tag.putDouble(TAG_CENTER_Z, centerZ);
     }
 
     @Override
@@ -216,5 +384,16 @@ public class KeyBladeEntity extends ItemEntity {
         orbitAngle = tag.getDouble(TAG_ORBIT);
         returning = tag.getBoolean(TAG_RETURN);
         outDistance = tag.getDouble(TAG_OUT);
+        aimX = tag.getDouble(TAG_AIM_X);
+        aimY = tag.getDouble(TAG_AIM_Y);
+        aimZ = tag.getDouble(TAG_AIM_Z);
+        spread = tag.getDouble(TAG_SPREAD);
+        fallCount = tag.getInt(TAG_COUNT);
+        riseVy = tag.getDouble(TAG_RISE_VY);
+        fallVx = tag.getDouble(TAG_FALL_VX);
+        fallVy = tag.getDouble(TAG_FALL_VY);
+        fallVz = tag.getDouble(TAG_FALL_VZ);
+        centerX = tag.getDouble(TAG_CENTER_X);
+        centerZ = tag.getDouble(TAG_CENTER_Z);
     }
 }

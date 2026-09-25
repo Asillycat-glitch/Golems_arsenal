@@ -3,8 +3,11 @@ package a_silly_cat.golems_arsenal.base.event;
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.base.item.ShenTongStaffItem;
+import a_silly_cat.golems_arsenal.base.entity.PhantomBladeEntity;
+import a_silly_cat.golems_arsenal.base.upgrade.GolemEnergySaverModifier;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyHammerItem;
+import a_silly_cat.golems_arsenal.tech.item.GolemZeroSwordItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemTrackingMechanicalBowItem;
 import a_silly_cat.golems_arsenal.tech.item.WeaponUpgradeData;
 import a_silly_cat.golems_arsenal.init.GolemEffects;
@@ -31,7 +34,6 @@ import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.ProjectileImpactEvent;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.entity.EntityStruckByLightningEvent;
-import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.energy.IEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyStorage;
@@ -44,6 +46,8 @@ import a_silly_cat.golems_arsenal.base.upgrade.GolemFlagModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemGrazeModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemStanceModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemTrainModifier;
+import a_silly_cat.golems_arsenal.compat.l2artifacts.ArtifactSynergyHandler;
+import a_silly_cat.golems_arsenal.compat.l2artifacts.ArtifactSetHelper;
 import dev.xkmc.l2library.init.events.GeneralEventHandler;
 import dev.xkmc.modulargolems.content.entity.humanoid.HumanoidGolemEntity;
 import dev.xkmc.modulargolems.content.item.golem.GolemHolder;
@@ -55,14 +59,13 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraftforge.event.AnvilUpdateEvent;
@@ -79,8 +82,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.event.TickEvent;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import net.minecraft.nbt.CompoundTag;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -92,7 +94,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Mod.EventBusSubscriber(modid = Golems_arsenal.MODID)
 public final class WeaponEventHandler {
-    private static final Logger LOGGER = LoggerFactory.getLogger(WeaponEventHandler.class);
 
     private static final String TRACKING_TAG = "GolemsArsenalTracking";
     private static final String EXPLOSIVE_TAG = "GolemsArsenalExplosive";
@@ -233,17 +234,33 @@ public final class WeaponEventHandler {
         if (GolemStanceModifier.isStanceMagic(event.getSource())) {
             return;
         }
-        // Key-sword magic already includes every scaling factor; skip so the main-hand
-        // upgrade bonuses are not applied to it a second time.
-        if ("key_sword_magic".equals(event.getSource().getMsgId())) {
+        // Key-sword magic, lion-slash and sword-rain damage already include every scaling factor;
+        // skip so the main-hand upgrade bonuses are not applied to them a second time.
+        if ("key_sword_magic".equals(event.getSource().getMsgId())
+                || "lion_slash".equals(event.getSource().getMsgId())
+                || "sword_rain".equals(event.getSource().getMsgId())
+                || "genmu_zero".equals(event.getSource().getMsgId())) {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
         float amount = event.getAmount();
 
+        // Z 光剑蓄力：距上次攻击满 2 秒时，这一击吃电并翻倍。放在最前面，后面的武器升级/猛攻
+        // 等加成会照常叠在翻倍后的数值上（"可以吃绝大多数伤害加成"）。
+        if (stack.getItem() instanceof GolemZeroSwordItem zeroSword) {
+            if (GolemZeroSwordItem.isCharged(golem) && zeroSword.consumeChargeEnergy(stack,
+                    GolemEnergySaverModifier.discount(golem, GolemZeroSwordItem.CHARGE_ENERGY_COST))) {
+                amount *= GolemZeroSwordItem.CHARGE_DAMAGE_MULTIPLIER;
+                // 幻梦零改由 Omega 套装的 30 秒定时器触发（见 GolemsArsenalSetHandler），
+                // 这里只保留蓄力命中本身的 2 倍伤害。
+            }
+            GolemZeroSwordItem.markAttack(golem);
+        }
+
         if (golem instanceof MetalGolemEntity
                 && stack.getItem() instanceof GolemEnergyKatanaItem katana
-                && katana.consumeAttackEnergy(stack)) {
+                && katana.consumeAttackEnergy(stack,
+                        GolemEnergySaverModifier.discount(golem, katana.getEnergyPerAttack(stack)))) {
             amount *= (1.0f + katana.getPoweredHitBonus(stack));
             int tech = GolemEnergyTechModifier.levelOf(golem);
             golem.addEffect(new MobEffectInstance(GolemEffects.CHARGE.get(),
@@ -269,8 +286,26 @@ public final class WeaponEventHandler {
                 scheduleSpearAoe(golem, event.getEntity(), amount);
             }
         }
+        // 执行者的古遗物联动与猛攻共用同一个百分比池（加算）；未激活时为 0。
+        double synergyPct = ArtifactSynergyHandler.executorDamageBonus(golem, event.getEntity());
         if (golem instanceof HumanoidGolemEntity && GolemUpgrades.hasWeaponOnslaught(golem)) {
-            amount = applyOnslaughtBonus(golem, event.getSource(), amount);
+            // Full-onslaught is humanoid-golem only; with the 5-piece Gilded set equipped the
+            // bonus is weakened to x0.75 just like the player enchantment version.
+            double factor = ArtifactSetHelper.rank(golem, "gilded", GILDED_PIECES) > 0
+                    ? ONSLAUGHT_GILDED_REDUCTION : 1.0;
+            amount = applyOnslaughtBonus(golem, event.getSource(), amount, factor, synergyPct);
+        } else if (synergyPct > 0 && !event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
+            amount *= (float) (1 + synergyPct);
+        }
+        // 枪骑：骑在傀儡坐骑上时，近战伤害随坐骑的移动速度属性增加（该属性 0..1 量纲，系数按此定标）；
+        // 手持傀儡长枪时改走乘区（长枪系唯一的强项）。
+        double cavalrySpeed = cavalrySpeed(golem);
+        if (cavalrySpeed > 0 && !event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
+            amount += (float) (cavalrySpeed * Config.CAVALRY_DAMAGE_PER_SPEED.get());
+            if (stack.is(ModTags.WEAPON_SPEAR)) {
+                amount *= (float) (1.0
+                        + cavalrySpeed * Config.CAVALRY_SPEAR_MULTIPLIER_PER_SPEED.get());
+            }
         }
         event.setAmount(amount);
     }
@@ -295,12 +330,111 @@ public final class WeaponEventHandler {
         if (chest.getEnchantmentLevel(ModEnchantments.FULL_ONSLAUGHT.get()) <= 0) {
             return;
         }
-        event.setAmount(applyOnslaughtBonus(player, event.getSource(), event.getAmount()));
+        // With the full 5-piece Gilded (炉金) artifact set equipped, the onslaught bonus is
+        // weakened (x0.75) but damage taken starts charging the Gilded buff below.
+        double factor = ArtifactSetHelper.rank(player, "gilded", GILDED_PIECES) > 0
+                ? ONSLAUGHT_GILDED_REDUCTION : 1.0;
+        event.setAmount(applyOnslaughtBonus(player, event.getSource(), event.getAmount(), factor));
+    }
+
+    /**
+     * Gilded (炉金) crossover for players (full-onslaught chest enchant) and humanoid golems
+     * (full-onslaught upgrade; golems wear the artifact set through Modular Golems' curios
+     * slots). With the full 5-piece Gilded set equipped, every hit taken accumulates; at max
+     * health absorbed (30s cooldown permitting) the wearer gains +10/15/20/25/30% armor and
+     * armor toughness for 5 seconds, scaled by the set's rarity rank.
+     */
+    @SubscribeEvent
+    public static void onGildedDamageTaken(LivingHurtEvent event) {
+        if (event.getEntity().level().isClientSide) {
+            return;
+        }
+        LivingEntity victim = event.getEntity();
+        boolean onslaughtActive;
+        String type;
+        if (victim instanceof Player player) {
+            ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
+            onslaughtActive = chest.getEnchantmentLevel(ModEnchantments.FULL_ONSLAUGHT.get()) > 0;
+            type = "player";
+        } else if (victim instanceof HumanoidGolemEntity golem) {
+            onslaughtActive = GolemUpgrades.hasWeaponOnslaught(golem);
+            type = "humanoid_golem";
+        } else {
+            return;
+        }
+        if (!onslaughtActive) {
+            return;
+        }
+        int rank = ArtifactSetHelper.rank(victim, "gilded", GILDED_PIECES);
+        if (rank <= 0) {
+            return;
+        }
+        CompoundTag tag = victim.getPersistentData();
+        double accumulated = tag.getDouble(GILDED_DMG_KEY) + event.getAmount();
+        if (accumulated < victim.getMaxHealth()) {
+            tag.putDouble(GILDED_DMG_KEY, accumulated);
+            return;
+        }
+        // Threshold reached: reset the charge; on cooldown the charge is simply lost.
+        tag.putDouble(GILDED_DMG_KEY, 0.0);
+        long now = victim.level().getGameTime();
+        long cdUntil = tag.getLong(GILDED_CD_KEY);
+        if (cdUntil > now) {
+            return;
+        }
+        tag.putLong(GILDED_CD_KEY, now + GILDED_CD_TICKS);
+        grantGildedBuff(victim, rank);
+    }
+
+    private static void grantGildedBuff(LivingEntity entity, int rank) {
+        if (rank < 1 || rank > GILDED_RANK_BONUS.length) {
+            return;
+        }
+        double bonus = GILDED_RANK_BONUS[rank - 1];
+        AttributeInstance armor = entity.getAttribute(Attributes.ARMOR);
+        AttributeInstance toughness = entity.getAttribute(Attributes.ARMOR_TOUGHNESS);
+        if (armor == null || toughness == null
+                || armor.getModifier(GILDED_ARMOR_UUID) != null) {
+            return;
+        }
+        double armorBefore = armor.getValue();
+        double toughBefore = toughness.getValue();
+        armor.addTransientModifier(new AttributeModifier(GILDED_ARMOR_UUID,
+                "golems_arsenal_gilded_armor", bonus, AttributeModifier.Operation.MULTIPLY_BASE));
+        toughness.addTransientModifier(new AttributeModifier(GILDED_TOUGH_UUID,
+                "golems_arsenal_gilded_toughness", bonus,
+                AttributeModifier.Operation.MULTIPLY_BASE));
+        ServerLevel server = (ServerLevel) entity.level();
+        int[] ticks = {0};
+        GeneralEventHandler.schedulePersistent(() -> {
+            if (entity.level() != server || !entity.isAlive()) {
+                removeGildedBuff(entity, "removed/left world");
+                return true;
+            }
+            ticks[0]++;
+            if (ticks[0] < GILDED_BUFF_TICKS) {
+                return false;
+            }
+            removeGildedBuff(entity, "buff expired");
+            return true;
+        });
+    }
+
+    private static void removeGildedBuff(LivingEntity entity, String reason) {
+        AttributeInstance armor = entity.getAttribute(Attributes.ARMOR);
+        AttributeInstance toughness = entity.getAttribute(Attributes.ARMOR_TOUGHNESS);
+        boolean hadArmor = armor != null && armor.getModifier(GILDED_ARMOR_UUID) != null;
+        if (armor != null) {
+            armor.removeModifier(GILDED_ARMOR_UUID);
+        }
+        if (toughness != null) {
+            toughness.removeModifier(GILDED_TOUGH_UUID);
+        }
     }
 
     /**
      * Meme-upgrade items apply their matching enchantment on an anvil: the enchantment id is the
-     * item id with the trailing {@code _upgrade} removed (e.g. golem_full_onslaught_upgrade adds
+     * item id with the trailing {@code _upgrade} removed (e.g. full_onslaught_upgrade adds
      * full_onslaught). One meme-upgrade item is consumed per application.
      */
     @SubscribeEvent
@@ -318,21 +452,14 @@ public final class WeaponEventHandler {
         Enchantment enchantment = net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS
                 .getValue(new ResourceLocation(upgradeId.getNamespace(), enchantName));
         if (enchantment == null || !enchantment.canEnchant(left)) {
-            LOGGER.info("[Meme] anvil left={} right={} enchant={} skipped (null or cannot enchant)",
-                    left, right, upgradeId);
             return;
         }
         ItemStack output = left.copy();
         int existing = output.getEnchantmentLevel(enchantment);
-        LOGGER.info("[Meme] anvil left={} right={} enchant={} existing={} max={} before={}",
-                left, right, enchantment, existing, enchantment.getMaxLevel(),
-                output.getEnchantmentTags());
         if (existing >= enchantment.getMaxLevel()) {
-            LOGGER.info("[Meme] anvil blocked: already max level");
             return;
         }
         applyEnchantment(output, enchantment, existing + 1);
-        LOGGER.info("[Meme] anvil output={} after={}", output, output.getEnchantmentTags());
         event.setOutput(output);
         event.setMaterialCost(1);
         event.setCost(1);
@@ -352,28 +479,71 @@ public final class WeaponEventHandler {
         EnchantmentHelper.setEnchantments(enchantments, stack);
     }
 
+    private static final String GILDED_DMG_KEY = "GolemsArsenalGildedDmg";
+    private static final String GILDED_CD_KEY = "GolemsArsenalGildedCd";
+    private static final UUID GILDED_ARMOR_UUID =
+            UUID.nameUUIDFromBytes("golems_arsenal:gilded_armor".getBytes());
+    private static final UUID GILDED_TOUGH_UUID =
+            UUID.nameUUIDFromBytes("golems_arsenal:gilded_toughness".getBytes());
+    /** Onslaught bonus multiplier while the full Gilded set is equipped. */
+    private static final double ONSLAUGHT_GILDED_REDUCTION = 0.75;
+    /** Pieces required for the Gilded (炉金) 5-piece bonus. */
+    private static final int GILDED_PIECES = 5;
+    /** Duration of the Gilded armor/toughness buff in ticks (5s). */
+    private static final int GILDED_BUFF_TICKS = 100;
+    /** Cooldown between Gilded buff triggers in ticks (30s). */
+    private static final int GILDED_CD_TICKS = 600;
+    /** Armor/toughness bonus per Gilded rarity rank (common -> mythic). */
+    private static final double[] GILDED_RANK_BONUS = {0.10, 0.15, 0.20, 0.25, 0.30};
+
     /**
      * Shared onslaught math for golems and players: while armor exceeds the threshold, each excess
      * armor point plus toughness grants TACZ gun damage as a percentage, and melee attack bonus
      * (percentage or flat, per config). Projectiles other than TACZ bullets are excluded.
      */
-    private static float applyOnslaughtBonus(LivingEntity attacker, DamageSource source, float amount) {
+    private static float applyOnslaughtBonus(LivingEntity attacker, DamageSource source,
+                                             float amount, double factor) {
+        return applyOnslaughtBonus(attacker, source, amount, factor, 0.0);
+    }
+
+    /**
+     * Shared onslaught math for golems and players: while armor exceeds the threshold, each excess
+     * armor point plus toughness grants TACZ gun damage as a percentage, and melee attack bonus
+     * (percentage or flat, per config). Projectiles other than TACZ bullets are excluded.
+     * <p>
+     * {@code extraPct} carries percentage bonuses of other crossovers (the executor artifact
+     * synergy) so they are folded into the same multiplication instead of opening a second one.
+     */
+    private static float applyOnslaughtBonus(LivingEntity attacker, DamageSource source,
+                                             float amount, double factor, double extraPct) {
         double armor = attacker.getAttributeValue(Attributes.ARMOR);
-        if (armor <= Config.ONSLAUGHT_ARMOR_THRESHOLD.get()) {
-            return amount;
-        }
-        double excess = (armor - Config.ONSLAUGHT_ARMOR_THRESHOLD.get())
-                + attacker.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+        boolean above = armor > Config.ONSLAUGHT_ARMOR_THRESHOLD.get();
+        double excess = above
+                ? (armor - Config.ONSLAUGHT_ARMOR_THRESHOLD.get())
+                        + attacker.getAttributeValue(Attributes.ARMOR_TOUGHNESS)
+                : 0.0;
+        float result;
         if (source.is(TACZ_BULLETS)) {
-            return amount * (float) (1 + excess * Config.ONSLAUGHT_GUN_PERCENT_PER_POINT.get());
-        }
-        if (source.is(DamageTypeTags.IS_PROJECTILE)) {
+            if (!above) {
+                return amount;
+            }
+            result = amount * (float) (1 + excess * Config.ONSLAUGHT_GUN_PERCENT_PER_POINT.get()
+                    * factor);
+        } else if (source.is(DamageTypeTags.IS_PROJECTILE)) {
             return amount;
+        } else {
+            double pct = extraPct;
+            double flat = 0.0;
+            if (above) {
+                if (Config.ONSLAUGHT_ATTACK_PERCENT_MODE.get()) {
+                    pct += excess * Config.ONSLAUGHT_ATTACK_PERCENT_PER_POINT.get() * factor;
+                } else {
+                    flat = excess * Config.ONSLAUGHT_ATTACK_FLAT_PER_POINT.get() * factor;
+                }
+            }
+            result = amount * (float) (1 + pct) + (float) flat;
         }
-        if (Config.ONSLAUGHT_ATTACK_PERCENT_MODE.get()) {
-            return amount * (float) (1 + excess * Config.ONSLAUGHT_ATTACK_PERCENT_PER_POINT.get());
-        }
-        return amount + (float) (excess * Config.ONSLAUGHT_ATTACK_FLAT_PER_POINT.get());
+        return result;
     }
 
     private static int chargeAmplifier(int techLevel) {
@@ -571,6 +741,7 @@ public final class WeaponEventHandler {
         updateTrainAttackAttributes(golem);
         updateStaffAttributes(golem);
         KeySwordEventHandler.updateKeyBladeThrow(golem, stack);
+        KeySwordEventHandler.updateSwordRain(golem, stack);
         if (!hasArsenalModifier(golem)) {
             return;
         }
@@ -608,6 +779,17 @@ public final class WeaponEventHandler {
             }
         } else {
             attack.removeModifier(KATANA_PERCENT_UUID);
+        }
+        // Z 光剑同一套科技加成，但必须用独立 UUID：和武士刀共用会互相覆盖。
+        if (stack.getItem() instanceof GolemZeroSwordItem zeroSword) {
+            if (tech > 0) {
+                setModifier(attack, GolemZeroSwordItem.TECH_PERCENT_UUID,
+                        "golems_arsenal_zero_sword_percent", zeroSword.getTechAttackPercent(tech));
+            } else {
+                attack.removeModifier(GolemZeroSwordItem.TECH_PERCENT_UUID);
+            }
+        } else {
+            attack.removeModifier(GolemZeroSwordItem.TECH_PERCENT_UUID);
         }
         if (stack.getItem() instanceof GolemTrackingMechanicalBowItem) {
             if (tech > 0 && explosion != null) {
@@ -687,14 +869,51 @@ public final class WeaponEventHandler {
         if (attr == null) {
             return;
         }
-        boolean enabled = GolemUpgrades.hasWeaponRanged(golem)
-                && stack.is(ModTags.WEAPON_RANGED_BOW);
-        if (enabled) {
-            setModifier(attr, RANGED_VELOCITY_UUID, "golems_arsenal_ranged_velocity",
-                    Config.RANGED_ARROW_SPEED.get() - 1);
+        // Two independent sources feed the same arrow velocity attribute: the ranged weapon upgrade
+        // (bows only) and the cavalry upgrade (any bow or crossbow fired from a mount).
+        double bonus = 0.0;
+        if (GolemUpgrades.hasWeaponRanged(golem) && stack.is(ModTags.WEAPON_RANGED_BOW)) {
+            bonus += Config.RANGED_ARROW_SPEED.get() - 1;
+        }
+        if (GolemUpgrades.hasCavalry(golem) && isMountedOnGolem(golem) && isBowOrCrossbow(stack)) {
+            bonus += Config.CAVALRY_ARROW_SPEED.get() - 1;
+        }
+        if (bonus > 0) {
+            setModifier(attr, RANGED_VELOCITY_UUID, "golems_arsenal_ranged_velocity", bonus);
         } else {
             attr.removeModifier(RANGED_VELOCITY_UUID);
         }
+    }
+
+    /**
+     * Cavalry (枪骑) speed value, or 0 when the golem does not have the upgrade or is not riding a
+     * golem mount.
+     * <p>
+     * This reads the <b>mount's {@code minecraft:generic.movement_speed} attribute</b>, which is a
+     * per-tick movement scale rather than blocks per second (empirically 0.1 = 4.317 blocks/s while
+     * walking, so 1.0 is the theoretical ~43 blocks/s end of the scale). Golem materials and the
+     * movement AI keep it inside 0..1, which is the range the config numbers are calibrated for.
+     */
+    private static double cavalrySpeed(AbstractGolemEntity<?, ?> golem) {
+        if (!GolemUpgrades.hasCavalry(golem) || !isMountedOnGolem(golem)) {
+            return 0.0;
+        }
+        Entity vehicle = golem.getVehicle();
+        if (!(vehicle instanceof LivingEntity mount)) {
+            return 0.0;
+        }
+        double speed = mount.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        return Math.max(0.0, Math.min(speed, Config.CAVALRY_MAX_SPEED.get()));
+    }
+
+    /** True while the golem rides another golem (the dog golem mount and any other golem mount). */
+    private static boolean isMountedOnGolem(AbstractGolemEntity<?, ?> golem) {
+        return golem.getVehicle() instanceof AbstractGolemEntity<?, ?>;
+    }
+
+    /** Bows and crossbows both take the cavalry arrow speed bonus. */
+    private static boolean isBowOrCrossbow(ItemStack stack) {
+        return stack.getItem() instanceof BowItem || stack.getItem() instanceof CrossbowItem;
     }
 
     private static void hammerRegen(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
@@ -858,43 +1077,6 @@ public final class WeaponEventHandler {
                 && (metal.getLeftShoulder().getItem().is(ModTags.WEAPON_RANGED_CANNON)
                 || metal.getRightShoulder().getItem().is(ModTags.WEAPON_RANGED_CANNON));
     }
-    /**
-     * Deathrattle upgrade: a golem with the upgrade detonates once on death. The blast never
-     * breaks blocks; damage is fixed plus a percentage of the golem's max health, with distance
-     * falloff like a real explosion.
-     */
-    @SubscribeEvent
-    public static void onGolemDeath(LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem) || golem.level().isClientSide) {
-            return;
-        }
-        if (!GolemUpgrades.hasDeathExplosion(golem)) {
-            return;
-        }
-        float base = Config.DEATH_EXPLOSION_BASE_DAMAGE.get().floatValue();
-        float ratio = Config.DEATH_EXPLOSION_HP_RATIO.get().floatValue();
-        float radius = Config.DEATH_EXPLOSION_RADIUS.get().floatValue();
-        float damage = base + golem.getMaxHealth() * ratio;
-        Vec3 pos = golem.position();
-        if (golem.level() instanceof ServerLevel server) {
-            server.sendParticles(ParticleTypes.EXPLOSION, pos.x, pos.y, pos.z, 1, 0, 0, 0, 0);
-            server.playSound(null, pos.x, pos.y, pos.z, SoundEvents.GENERIC_EXPLODE,
-                    SoundSource.BLOCKS, 1.0F, 1.0F);
-        }
-        List<LivingEntity> targets = golem.level().getEntitiesOfClass(LivingEntity.class,
-                new AABB(pos, pos).inflate(radius),
-                target -> target != golem && target.isAlive());
-        for (LivingEntity target : targets) {
-            double dist = target.distanceTo(golem);
-            float factor = dist >= radius ? 0 : (float) (1.0 - dist / radius);
-            if (factor <= 0) {
-                continue;
-            }
-            target.hurt(golem.damageSources().explosion(golem, null), damage * factor);
-            target.knockback(0.6 * factor, target.getX() - pos.x, target.getZ() - pos.z);
-        }
-    }
-
     @SubscribeEvent
     public static void onArrowJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide() || !(event.getEntity() instanceof AbstractArrow arrow)) {
@@ -904,7 +1086,11 @@ public final class WeaponEventHandler {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
-        if (GolemUpgrades.hasWeaponRanged(golem) && stack.is(ModTags.WEAPON_RANGED_BOW)) {
+        // Ranged weapon upgrade (bows) or the cavalry upgrade (bow/crossbow from a mount) both raise
+        // the arrow speed attribute; scale the freshly spawned arrow by it here.
+        boolean spedUp = (GolemUpgrades.hasWeaponRanged(golem) && stack.is(ModTags.WEAPON_RANGED_BOW))
+                || (GolemUpgrades.hasCavalry(golem) && isMountedOnGolem(golem) && isBowOrCrossbow(stack));
+        if (spedUp) {
             double velocity = golem.getAttributeValue(ModAttributes.ARROW_VELOCITY.get());
             if (velocity > 0) {
                 arrow.setDeltaMovement(arrow.getDeltaMovement().scale(velocity));

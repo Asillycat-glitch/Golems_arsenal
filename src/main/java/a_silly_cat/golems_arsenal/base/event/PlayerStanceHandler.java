@@ -23,7 +23,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
 
 /**
- * Player counterpart of the Black Monkey stance upgrade, driven by the {@code golem_stance}
+ * Player counterpart of the Black Monkey stance upgrade, driven by the {@code stance}
  * enchantment applied to a Shen Tong Staff through the meme-upgrade anvil recipe. Only the player
  * holding an enchanted staff is affected (golems keep using the regular stance modifier). The
  * player's own gauge fills from attacking, moving and being hurt (+25% while holding the staff);

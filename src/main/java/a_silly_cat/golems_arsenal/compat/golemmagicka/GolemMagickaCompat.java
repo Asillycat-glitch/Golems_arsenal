@@ -24,13 +24,13 @@ public final class GolemMagickaCompat {
             DeferredRegister.create(ForgeRegistries.ITEMS, Golems_arsenal.MODID);
 
     public static final RegistryEntry<GolemFlagModifier> SCROLL = GolemUpgrades.REGISTRATE
-            .generic(GolemTypes.MODIFIERS, "golem_scroll",
-                    () -> new GolemFlagModifier(StatFilterType.MASS, "upgrade.golems_arsenal.golem_scroll"))
+            .generic(GolemTypes.MODIFIERS, "scroll",
+                    () -> new GolemFlagModifier(StatFilterType.MASS, "upgrade.golems_arsenal.scroll"))
             .defaultLang()
             .register();
 
-    public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_SCROLL_UPGRADE = ITEMS.register(
-            "golem_scroll_upgrade",
+    public static final RegistryObject<GolemWeaponUpgradeItem> SCROLL_UPGRADE = ITEMS.register(
+            "scroll_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1,
                     () -> SCROLL.get()));
 

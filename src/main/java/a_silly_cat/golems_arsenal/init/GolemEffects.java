@@ -16,23 +16,9 @@ public final class GolemEffects {
     public static final RegistryObject<MobEffect> CHARGE = EFFECTS.register("charge",
             ChargeEffect::new);
 
-    /**
-     * Hidden legacy alias for the old train-buff id, kept so saved data from builds that still
-     * used a custom {@code golem_train} effect resolves instead of producing unidentified
-     * mappings. The train mechanic now keys on the Create mechanical buffs (工业长路/汽鸣铁道).
-     */
-    public static final RegistryObject<MobEffect> TRAIN_LEGACY = EFFECTS.register("golem_train",
-            TrainEffect::new);
-
     private static final class ChargeEffect extends MobEffect {
         private ChargeEffect() {
             super(MobEffectCategory.BENEFICIAL, 0x55FFFF);
-        }
-    }
-
-    private static final class TrainEffect extends MobEffect {
-        private TrainEffect() {
-            super(MobEffectCategory.BENEFICIAL, 0xFFB300);
         }
     }
 

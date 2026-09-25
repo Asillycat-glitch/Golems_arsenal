@@ -83,6 +83,8 @@ dependencies {
     // Golem Magicka / Iron's Spells are present (see CompatDispatch and the mixin plugin).
     compileOnly fg.deobf(files("libs/golemmagicka-0.2.0.jar"))
     compileOnly fg.deobf(files("libs/irons_spellbooks-1.20.1-3.15.4.jar"))
+    compileOnly fg.deobf(files("libs/l2artifacts-2.4.28.jar"))
+    compileOnly fg.deobf(files("libs/jei-1.20.1-forge-15.20.0.130.jar"))
 }
 
 tasks.named('processResources', ProcessResources).configure {

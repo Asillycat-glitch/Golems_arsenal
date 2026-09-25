@@ -37,7 +37,7 @@ public class GolemBackupEnergyModifier extends GolemModifier {
 
     @Override
     public Component getTooltip(int level) {
-        return Component.translatable("upgrade.golems_arsenal.golem_backup_energy")
+        return Component.translatable("upgrade.golems_arsenal.backup_energy")
                 .withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
@@ -45,7 +45,7 @@ public class GolemBackupEnergyModifier extends GolemModifier {
     public List<MutableComponent> getDetail(int level) {
         int intervalSec = Math.max(1, Config.BACKUP_ENERGY_RECHARGE_INTERVAL.get() / 20);
         int hurtCooldownSec = Math.max(1, Config.BACKUP_ENERGY_HURT_COOLDOWN.get() / 20);
-        return List.of(Component.translatable("upgrade.golems_arsenal.golem_backup_energy.desc",
+        return List.of(Component.translatable("upgrade.golems_arsenal.backup_energy.desc",
                 Math.round(maxShield(level)),
                 intervalSec,
                 Math.round(rechargePerInterval(level)),
@@ -133,7 +133,9 @@ public class GolemBackupEnergyModifier extends GolemModifier {
             float target = Math.min(max, shield + rechargePerInterval(level));
             float need = target - shield;
             if (need > 0) {
-                int costPer = Config.BACKUP_ENERGY_FE_PER_POINT.get();
+                // "节约能源"升级在这里也生效（每级 -25%）。
+                int costPer = a_silly_cat.golems_arsenal.base.upgrade.GolemEnergySaverModifier
+                        .discount(golem, Config.BACKUP_ENERGY_FE_PER_POINT.get());
                 long requiredFe = (long) Math.ceil(need * costPer);
                 float restored = golem.getCapability(GolemEnergyProvider.CAPABILITY)
                         .map(storage -> {

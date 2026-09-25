@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "golems_arsenal:item/upgrades/e_tank_upgrade"
+  }
+}

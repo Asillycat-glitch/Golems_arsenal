@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "minecraft:iron_horse_armor"
+    },
+    {
+      "item": "modulargolems:empty_upgrade"
+    }
+  ],
+  "result": {
+    "item": "golems_arsenal:cavalry_upgrade"
+  }
+}

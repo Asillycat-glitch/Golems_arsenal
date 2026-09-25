@@ -52,18 +52,18 @@ public class GolemStanceModifier extends GolemModifier {
 
     @Override
     public Component getTooltip(int level) {
-        return Component.translatable("upgrade.golems_arsenal.golem_stance")
+        return Component.translatable("upgrade.golems_arsenal.stance")
                 .withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     @Override
     public List<MutableComponent> getDetail(int level) {
         List<MutableComponent> list = new ArrayList<>();
-        list.add(Component.translatable("upgrade.golems_arsenal.golem_stance.desc")
+        list.add(Component.translatable("upgrade.golems_arsenal.stance.desc")
                 .withStyle(ChatFormatting.GREEN));
         list.add(Component.translatable(level >= 2
-                        ? "upgrade.golems_arsenal.golem_stance.desc_lv2"
-                        : "upgrade.golems_arsenal.golem_stance.desc_lv1")
+                        ? "upgrade.golems_arsenal.stance.desc_lv2"
+                        : "upgrade.golems_arsenal.stance.desc_lv1")
                 .withStyle(ChatFormatting.GREEN));
         return list;
     }
