@@ -185,9 +185,12 @@ public final class KeySwordEventHandler {
             return;
         }
         LivingEntity victim = event.getEntity();
+        // 骑在别的傀儡身上时不放狮子斩：前空翻按绝对坐标把傀儡抛起来，乘客每 tick 会被载具拽回。
+        // 这里刻意只拦特技本身 —— 上面那段键刃回旋只驱动 KeyBladeEntity、不动傀儡，乘骑时照常生效。
         if (victim == golem
                 || golem.isInRangedMode()
                 || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.LION_SLASH.get())
+                || GolemFlagModifier.hasRiddenMount(golem)
                 || golem.level().getGameTime()
                 < golem.getPersistentData().getLong(LION_SLASH_CD_KEY)) {
             return;
@@ -383,8 +386,10 @@ public final class KeySwordEventHandler {
      * upward; it spirals up (fast then slow), then splits into falling iron swords over the target.
      */
     public static void updateSwordRain(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
+        // 骑在别的傀儡身上时不放剑雨：跃起阶段会把傀儡钉在原地并关掉重力，乘客会被来回拉扯。
         if (!(stack.getItem() instanceof KeySwordItem)
                 || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.SWORD_RAIN.get())
+                || GolemFlagModifier.hasRiddenMount(golem)
                 || golem.level().getGameTime()
                 < golem.getPersistentData().getLong(SWORD_RAIN_CD_KEY)) {
             return;

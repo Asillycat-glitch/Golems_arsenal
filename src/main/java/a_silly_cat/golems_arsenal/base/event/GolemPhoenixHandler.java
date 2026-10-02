@@ -193,9 +193,12 @@ public final class GolemPhoenixHandler {
             return;
         }
         LivingEntity victim = event.getEntity();
+        // 骑在别的傀儡身上时不放凤凰天驱：后跃与俯冲都是绝对坐标位移，乘客每 tick 会被载具拽回，
+        // 而且这条流程会长时间 setNoGravity(true)，乘骑状态容易被卡住。
         if (victim == golem
                 || golem.isInRangedMode()
                 || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.PHOENIX.get())
+                || GolemFlagModifier.hasRiddenMount(golem)
                 || isOwnDamage(event.getSource())) {
             return;
         }

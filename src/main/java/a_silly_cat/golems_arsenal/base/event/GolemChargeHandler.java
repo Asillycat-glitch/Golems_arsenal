@@ -133,9 +133,12 @@ public final class GolemChargeHandler {
             return;
         }
         LivingEntity victim = event.getEntity();
+        // 骑在别的傀儡身上时整套冲撞都不触发：本技按绝对坐标把傀儡挪 10 格，而乘客每 tick 会被
+        // 载具拽回去，两边对着拉。索敌那条路径也一并拦（见 tryAutoCharge）。
         if (victim == golem
                 || golem.isInRangedMode()
                 || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.CHARGE.get())
+                || GolemFlagModifier.hasRiddenMount(golem)
                 || isOwnDamage(event.getSource())) {
             return;
         }
@@ -164,7 +167,8 @@ public final class GolemChargeHandler {
     private static void tryAutoCharge(AbstractGolemEntity<?, ?> golem, CompoundTag tag) {
         if (golem.tickCount % TARGET_SCAN_INTERVAL != 0
                 || golem.isInRangedMode()
-                || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.CHARGE.get())) {
+                || !GolemFlagModifier.hasUpgrade(golem, GolemUpgrades.CHARGE.get())
+                || GolemFlagModifier.hasRiddenMount(golem)) {
             return;
         }
         long now = golem.level().getGameTime();
