@@ -8,6 +8,7 @@ import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -26,6 +27,7 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.common.ForgeMod;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.List;
 
@@ -35,16 +37,20 @@ import java.util.List;
  * golem attack hit, so the whole damage pipeline applies (weapon upgrades, full onslaught, executor
  * artifact synergy, crits) and all on-hit effects still trigger.
  * <p>
- * The dash is laid out with the struck enemy in the <b>middle</b> of the swept path, and the dash
- * distance additionally grows with the golem's attack reach ({@code forge:entity_reach}) and its
- * body size. Overshooting is intended: the extra travel is what lets a long-reach golem keep its
- * spacing after the lunge instead of parking on top of the enemy.
+ * The dash covers a fixed {@link #DASH_DISTANCE} blocks along the golem→target line, and its speed is
+ * the golem's own movement speed plus {@link #DASH_SPEED_BONUS}, so a faster golem lunges faster and
+ * the travel time comes out of distance ÷ speed. Overshooting past the target is intended: the extra
+ * travel is what lets the golem keep its spacing instead of parking on top of the enemy. Momentum is
+ * handed back when the lunge lands, so the golem does not stall on the spot afterwards.
  * <ul>
  *   <li>key blade in hand: three charges in a row, each re-aimed at the current target;</li>
- *   <li>energy katana in hand: the charge becomes a blink (instant teleport to the landing spot,
- *   the swept enemies still take the damage). A blink that kills always clears the charge cooldown,
- *   otherwise there is a small chance of it, so the golem can blink again on its very next hit
- *   instead of waiting out the cooldown;</li>
+ *   <li>energy katana in hand: the charge becomes a blink, landing {@link #BLINK_BEHIND_TARGET}
+ *   blocks behind the target (the swept enemies still take the damage). A blink that kills always
+ *   clears the charge cooldown, otherwise there is a small chance of it, so the golem can blink
+ *   again on its very next hit instead of waiting out the cooldown;</li>
+ *   <li>stellar apocalypse ({@code modulargolems:stellar_apocalypse}) in hand: we stand down
+ *   completely - that weapon brings its own 10s dash, and ours would pin the golem inside melee
+ *   range, which is exactly the condition its dash needs to <b>not</b> be met;</li>
  *   <li>any other weapon: a single charge.</li>
  * </ul>
  * The dash is stored on the golem's persistent data and advanced inside the golem's own tick (the
@@ -69,8 +75,8 @@ public final class GolemChargeHandler {
     private static final String TO_Z_KEY = "GolemsArsenalChargeToZ";
     private static final String HITS_KEY = "GolemsArsenalChargeHits";
 
-    /** Fixed internal cooldown (ticks) between charges; not configurable. */
-    private static final int COOLDOWN_TICKS = 80;
+    /** 冲撞冷却（tick）：8 秒。固定值，不做配置。 */
+    private static final int COOLDOWN_TICKS = 160;
     /** 索敌间隔（tick）：没在冲撞时，每隔这么久检查一次"攻击距离 + N 格"内有没有目标。 */
     private static final int TARGET_SCAN_INTERVAL = 10;
     /**
@@ -78,42 +84,27 @@ public final class GolemChargeHandler {
      * 不再必须打到才触发。固定 5 格。
      */
     private static final double TARGET_RANGE_BONUS = 5.0;
-    /** 冲刺距离加成：在原公式上再固定 +5 格。 */
-    private static final double DASH_RANGE_BONUS = 5.0;
+    /** 冲撞距离：固定 10 格，不再按目标距离 / 攻击距离 / 体型换算。 */
+    private static final double DASH_DISTANCE = 10.0;
     /**
-     * 冲刺速度（格/tick）：越小越慢。旧行为是"固定 6 tick"，距离长了能到 3.5 格/tick（很快），
-     * 现在改成按距离换算时长，长距离不会突然变快。
+     * 冲撞速度（格/tick）= 傀儡自身的移动速度 + 该值。傀儡走得快，冲得就快；
+     * 冲刺时长也由它和距离算出来，所以不会再"距离一长就突然飙速"。
      */
-    private static final double DASH_SPEED = 1.0;
-    /** 冲刺时长下限：短距离维持原来的手感（6 tick）。 */
-    private static final int DASH_MIN_TICKS = 6;
-    /** 冲刺时长上限：最长那档也不会拖太久。 */
-    private static final int DASH_MAX_TICKS = 24;
+    private static final double DASH_SPEED_BONUS = 0.3;
+    /** 闪现落点：目标身后这么远（格），也就是沿"傀儡→目标"方向走到"目标距离 + 该值"处。 */
+    private static final double BLINK_BEHIND_TARGET = 5.0;
     /** Ticks of stand-still between the charges of a key-blade combo, so the three read as three. */
     private static final int PAUSE_TICKS = 10;
     /** Charges per use with the key blade in hand. */
     private static final int KEY_BLADE_CHARGES = 3;
-    /**
-     * The victim sits in the middle of the swept path: the dash is this many times the distance to
-     * the victim, so half of it runs before the victim and half of it runs past it. That is what
-     * makes the charge reach the enemies standing around/behind the one the AI picked.
-     */
-    private static final double DASH_LENGTH_FACTOR = 2.0;
-    /**
-     * Attack-reach bonus: the golem's {@code forge:entity_reach} is added to the dash distance, so a
-     * golem with a long reach lunges that much further past its target instead of stopping on it.
-     * Overshooting past the middle is intended - the extra distance is what lets the golem keep its
-     * spacing (or kite) instead of parking on top of the enemy.
-     */
-    private static final double ATTACK_REACH_FACTOR = 1.0;
-    /** Size bonus added to the dash distance: this many blocks per block of golem width. */
-    private static final double LAND_BEHIND_SIZE_FACTOR = 0.5;
-    /** Shortest charge from the golem's current spot, so point-blank hits still carry it past. */
-    private static final double MIN_DISTANCE = 4.0;
-    /** Longest charge in blocks（原 16 格，加上 {@link #DASH_RANGE_BONUS}）。 */
-    private static final double MAX_DISTANCE = 16.0 + DASH_RANGE_BONUS;
     /** The golem never stops closer than this to where it started. */
     private static final double MIN_TRAVEL = 1.0;
+    /**
+     * 星辰之怒（{@code modulargolems:stellar_apocalypse}，傀儡装配 × 诡厄巫法：启示录 联动剑）。
+     * 它自己带一条 10 秒冷却的冲刺（{@code ApollyonSword.onTick}），所以拿着它时我们让位、不抢动作。
+     */
+    private static final ResourceLocation STELLAR_APOCALYPSE =
+            new ResourceLocation("modulargolems", "stellar_apocalypse");
     /**
      * Chance for a katana blink to clear its own cooldown (so the golem can blink again on its next
      * hit right away). Killing with the blink always refreshes it.
@@ -154,6 +145,9 @@ public final class GolemChargeHandler {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
+        if (yieldsToWeapon(stack)) {
+            return; // 星辰之怒自带冲刺，这里让位，别抢它的动作
+        }
         boolean blink = stack.getItem() instanceof GolemEnergyKatanaItem;
         boolean triple = !blink && stack.getItem() instanceof KeySwordItem;
         tag.putLong(CD_KEY, golem.level().getGameTime() + COOLDOWN_TICKS);
@@ -176,6 +170,9 @@ public final class GolemChargeHandler {
         long now = golem.level().getGameTime();
         if (now < tag.getLong(CD_KEY)) {
             return;
+        }
+        if (yieldsToWeapon(golem.getMainHandItem())) {
+            return; // 星辰之怒自带冲刺，主动索敌也让位
         }
         double range = entityReach(golem) + TARGET_RANGE_BONUS;
         LivingEntity victim = null;
@@ -283,7 +280,8 @@ public final class GolemChargeHandler {
         }
         // Landed: snap onto the landing spot and settle whatever stands there.
         golem.setPos(to.x, to.y, to.z);
-        golem.setDeltaMovement(Vec3.ZERO);
+        // 速度不清零：留一点向前的惯性，落地才不会"顿"一下，AI 接手时是连贯的。
+        pushForward(golem, to.subtract(from));
         golem.fallDistance = 0;
         damageAround(golem, to, tag);
         int left = tag.getInt(LEFT_KEY);
@@ -312,10 +310,8 @@ public final class GolemChargeHandler {
                                     boolean blink, boolean triple) {
         CompoundTag tag = golem.getPersistentData();
         Vec3 from = golem.position();
-        Vec3 aim = landingSpot(golem, victim);
-        String geometry = String.format("targetDist=%.2f reach=%.2f dash=%.2f",
-                Math.hypot(victim.getX() - from.x, victim.getZ() - from.z),
-                entityReach(golem), from.distanceTo(aim));
+        // 闪现落在"目标身后 5 格"，普通冲撞是固定 10 格。
+        Vec3 aim = blink ? blinkSpot(golem, victim) : landingSpot(golem, victim);
         tag.putBoolean(ACTIVE_KEY, true);
         if (blink) {
             // Katana form: one blink per swing, but a blink that kills (or gets lucky) clears its own
@@ -337,11 +333,9 @@ public final class GolemChargeHandler {
     /** Arms one dash segment: books the segment, clears the hit list and plays the lunge sound. */
     private static void beginDash(AbstractGolemEntity<?, ?> golem, CompoundTag tag, Vec3 from,
                                   Vec3 to, long now) {
-        // 时长按距离换算（DASH_SPEED 格/tick），再夹在上下限之间 —— 短距离仍是 6 tick，
-        // 长距离则均匀变慢，不会出现"冲得越远越快"。
         double length = from.distanceTo(to);
-        int ticks = (int) Math.max(DASH_MIN_TICKS,
-                Math.min(DASH_MAX_TICKS, Math.round(length / DASH_SPEED)));
+        // 时长由"距离 ÷ 冲撞速度"算出来；速度跟着傀儡自身的移动速度走（走得多快就冲得多快）。
+        int ticks = (int) Math.max(1, Math.round(length / dashSpeed(golem)));
         tag.putLong(START_KEY, now);
         tag.putInt(TICKS_KEY, ticks);
         tag.putDouble(FROM_X_KEY, from.x);
@@ -377,7 +371,7 @@ public final class GolemChargeHandler {
                     SoundSource.HOSTILE, 1.0F, 1.0F);
         }
         golem.teleportTo(to.x, to.y, to.z);
-        golem.setDeltaMovement(Vec3.ZERO);
+        pushForward(golem, to.subtract(from));
         golem.fallDistance = 0;
         faceTowards(golem, to.subtract(from));
         int kills = damageAlong(golem, from, to, tag);
@@ -391,11 +385,22 @@ public final class GolemChargeHandler {
     }
 
     /**
-     * Landing spot of a charge: straight through the enemy, with the enemy sitting in the middle of
-     * the swept path and the attack reach / body size pushing the landing further out. Clamped so the
-     * golem never overshoots absurdly far and never stops inside a wall.
+     * 冲撞落点：沿"傀儡→目标"的水平方向，从当前位置固定走 {@link #DASH_DISTANCE} 格。
+     * 目标会被甩在身后（冲过头是有意的：留着距离方便拉扯）。
      */
     private static Vec3 landingSpot(AbstractGolemEntity<?, ?> golem, LivingEntity victim) {
+        return spotAlong(golem, victim, DASH_DISTANCE);
+    }
+
+    /** 闪现落点：目标身后 {@link #BLINK_BEHIND_TARGET} 格，也就是走到"目标距离 + 该值"处。 */
+    private static Vec3 blinkSpot(AbstractGolemEntity<?, ?> golem, LivingEntity victim) {
+        Vec3 from = golem.position();
+        double distance = Math.hypot(victim.getX() - from.x, victim.getZ() - from.z);
+        return spotAlong(golem, victim, distance + BLINK_BEHIND_TARGET);
+    }
+
+    /** 沿"傀儡→目标"的水平方向走 {@code travel} 格；方向兜底用视线，落点撞墙会自动收回。 */
+    private static Vec3 spotAlong(AbstractGolemEntity<?, ?> golem, LivingEntity victim, double travel) {
         Vec3 from = golem.position();
         double dx = victim.getX() - from.x;
         double dz = victim.getZ() - from.z;
@@ -403,7 +408,6 @@ public final class GolemChargeHandler {
         Vec3 look = golem.getLookAngle();
         double nx = distance > 1.0E-4 ? dx / distance : look.x;
         double nz = distance > 1.0E-4 ? dz / distance : look.z;
-        double travel = dashLength(golem, distance);
         // Stay on the golem's own height unless the enemy is roughly on the same level, so a charge
         // never drops the golem down a cliff or lifts it onto a roof.
         double y = Math.abs(victim.getY() - from.y) <= 2.0 ? victim.getY() : from.y;
@@ -411,24 +415,46 @@ public final class GolemChargeHandler {
         return freeLanding(golem, from, wanted);
     }
 
-    /**
-     * Dash length in blocks: the victim ends up in the middle ({@link #DASH_LENGTH_FACTOR} times the
-     * distance to it), plus the golem's attack reach ({@code forge:entity_reach}) and half of its own
-     * width. The reach term is what the "long arm" golems get to feel: they lunge past their target
-     * instead of stopping on it.
-     */
-    private static double dashLength(AbstractGolemEntity<?, ?> golem, double distance) {
-        double size = golem.getBbWidth() * LAND_BEHIND_SIZE_FACTOR;
-        double reach = entityReach(golem);
-        double length = DASH_LENGTH_FACTOR * distance + reach * ATTACK_REACH_FACTOR + size
-                + DASH_RANGE_BONUS;
-        return Math.max(MIN_DISTANCE + size, Math.min(MAX_DISTANCE, length));
-    }
-
     /** {@code forge:entity_reach} (the attribute the sword upgrade and other mods push up), or 0. */
     private static double entityReach(AbstractGolemEntity<?, ?> golem) {
         Attribute reach = ForgeMod.ENTITY_REACH.get();
         return reach == null ? 0.0 : Math.max(0.0, golem.getAttributeValue(reach));
+    }
+
+    /** 傀儡自己的移动速度（格/tick），兜个底免得落地后完全不动。 */
+    private static double walkSpeed(AbstractGolemEntity<?, ?> golem) {
+        return Math.max(0.05, golem.getAttributeValue(Attributes.MOVEMENT_SPEED));
+    }
+
+    /** 冲撞速度（格/tick）= 傀儡移动速度 + {@link #DASH_SPEED_BONUS}。 */
+    private static double dashSpeed(AbstractGolemEntity<?, ?> golem) {
+        return walkSpeed(golem) + DASH_SPEED_BONUS;
+    }
+
+    /**
+     * 收招时把速度交还给傀儡：冲撞/闪现结束后留一点向前的惯性（按傀儡自己的移动速度），
+     * 别把速度清零 —— 清零那一下就是"冲完顿住"的来源，AI 还得重新起步。
+     */
+    private static void pushForward(AbstractGolemEntity<?, ?> golem, Vec3 dir) {
+        double hd = dir.horizontalDistance();
+        if (hd <= 1.0E-4) {
+            return;
+        }
+        golem.setDeltaMovement(new Vec3(dir.x / hd, 0, dir.z / hd).scale(walkSpeed(golem)));
+        golem.hurtMarked = true; // 让服务端把这次速度变化同步给客户端
+    }
+
+    /**
+     * 手里是不是星辰之怒（{@code modulargolems:stellar_apocalypse}，傀儡装配 × 诡厄巫法：启示录）。
+     * <p>
+     * 它自带一条 10 秒冷却的冲刺，拿着它时我们整套冲撞让位 —— 不只是"不抢动作"：我们的主动索敌会把
+     * 傀儡按在近战距离内，它自己的冲刺条件是"目标在近战距离<b>之外</b>"，两边一起开着它就再也冲不出来。
+     */
+    private static boolean yieldsToWeapon(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        return STELLAR_APOCALYPSE.equals(ForgeRegistries.ITEMS.getKey(stack.getItem()));
     }
 
     /** Pulls a landing spot back toward the golem until the golem's box fits there. */
@@ -439,7 +465,7 @@ public final class GolemChargeHandler {
             return from;
         }
         Vec3 dir = delta.scale(1.0 / length);
-        double allowed = Math.min(length, MAX_DISTANCE);
+        double allowed = length;
         Vec3 cursor = from.add(dir.scale(allowed));
         while (allowed > MIN_TRAVEL && !fits(golem, from, cursor)) {
             allowed = Math.max(MIN_TRAVEL, allowed - 0.25);
@@ -533,7 +559,6 @@ public final class GolemChargeHandler {
         tag.remove(TO_Z_KEY);
         tag.remove(HITS_KEY);
         golem.setNoGravity(false);
-        golem.setDeltaMovement(Vec3.ZERO);
         golem.fallDistance = 0;
     }
 
