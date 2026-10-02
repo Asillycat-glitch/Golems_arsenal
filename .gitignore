@@ -17,8 +17,11 @@ bin/
 # Local dependencies (fetch via Maven/Modrinth instead of committing jars)
 libs/
 
-# Upstream Modular Golems sources copied locally for reference
-dev/xkmc/
+# 开发期参考资料与建模资产，只留在开发机上，不进版本库：
+#   dev/xkmc/   = Modular Golems 的反编译源码（第三方，不能发布）
+#   dev/models/ = 早期自行建模的 .bbmodel 与中间产物（已改用本家机械弓，留作存档）
+#   dev/*.ps1   = bbmodel 转换脚本
+dev/
 
 # OS
 Thumbs.db
