@@ -109,7 +109,14 @@ public final class GolemsArsenalSetHandler {
         }
     }
 
-    /** 受击触发光柱（冷却 5 秒）。 */
+    /**
+     * 受击触发光柱（冷却 5 秒）。
+     * <p>
+     * 伤害 = 傀儡 {@code ATTACK_DAMAGE} × {@link #PILLAR_DAMAGE_RATIO}，<b>每根光柱对每个敌人只结算一次</b>
+     * （去重名单在 {@code LightPillarEntity} 里），所以 4 根全中是攻击力的 3 倍。
+     * 用的伤害类型与幻梦零共用（{@code golems_arsenal:genmu_zero}），且是普通伤害、不吃魔法标签 ——
+     * 原因与改动注意事项见 {@code LightPillarEntity} 中该常量的注释。
+     */
     @SubscribeEvent
     public static void onGolemDamaged(LivingDamageEvent event) {
         if (event.getEntity().level().isClientSide

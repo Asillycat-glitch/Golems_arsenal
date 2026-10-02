@@ -48,6 +48,18 @@ public class LightPillarEntity extends Entity {
     private static final String TAG_LIFE = "LightPillarLife";
     private static final String TAG_RADIUS = "LightPillarRadius";
 
+    /**
+     * 伤害类型：<b>有意与幻梦零（{@code PhantomBladeEntity}）共用 {@code golems_arsenal:genmu_zero}</b>，
+     * 两者是同一套"傀儡秘术"伤害，共用一条定义（见 {@code data/golems_arsenal/damage_type/genmu_zero.json}）。
+     * <p>
+     * ⚠️ 这个类型<b>刻意不登记</b>在任何 {@code is_magic} 伤害类型标签里
+     * （既不进 {@code forge:tags/damage_type/is_magic.json}，也不进 {@code minecraft} 的同名标签），
+     * 所以光柱与幻梦零的伤害是<b>普通伤害</b>：吃护甲、吃附魔、吃抗性，也不吃魔法增伤。
+     * 这是当前平衡下的取舍，不是漏配 —— 改之前请先想清楚它会让这两者同时被魔法抗性减免。
+     * <p>
+     * 另注：{@code genmu_zero} 没有 {@code death.attack.*} 文案（全 mod 的伤害类型都还没有），
+     * 所以傀儡用它击杀玩家时，死亡消息会退回显示原始 id。
+     */
     private static final ResourceKey<DamageType> DAMAGE_TYPE =
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("genmu_zero"));
 

@@ -85,6 +85,11 @@ public class PhantomBladeEntity extends Entity {
     private static final String TAG_DAMAGE = "PhantomBladeDamage";
     private static final String TAG_LIFE = "PhantomBladeLife";
 
+    /**
+     * 伤害类型：<b>有意与光柱（{@code LightPillarEntity}）共用 {@code golems_arsenal:genmu_zero}</b> ——
+     * 同一套"傀儡秘术"伤害共用一条定义。该类型刻意不登记进任何 {@code is_magic} 标签，因此是普通伤害；
+     * 完整说明与改动注意事项见 {@code LightPillarEntity} 里同名常量的注释。
+     */
     private static final ResourceKey<DamageType> DAMAGE_TYPE =
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("genmu_zero"));
 

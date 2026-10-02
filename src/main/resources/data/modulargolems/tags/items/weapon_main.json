@@ -64,6 +64,10 @@
     {
       "id": "golemdungeons:flame_sword",
       "required": false
+    },
+    {
+      "id": "modulargolems:stellar_apocalypse",
+      "required": false
     }
   ]
 }
