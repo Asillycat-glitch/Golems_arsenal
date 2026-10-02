@@ -234,12 +234,15 @@ public final class WeaponEventHandler {
         if (GolemStanceModifier.isStanceMagic(event.getSource())) {
             return;
         }
-        // Key-sword magic, lion-slash and sword-rain damage already include every scaling factor;
-        // skip so the main-hand upgrade bonuses are not applied to them a second time.
+        // 本 mod 自己造成的这几类伤害已经含了全部缩放，直接跳过，否则主手升级加成会被二次结算。
+        // flame_magic 尤其关键：火焰云的伤害会再触发一次 LivingHurtEvent，若不在闸门内，只要傀儡
+        // 手上还拿着火焰剑，就会在受害者处再排一朵云 —— 云打人、人再生云，无限自我复制（收回傀儡
+        // 也停不下来，因为云已经不依赖傀儡是否在场了）。
         if ("key_sword_magic".equals(event.getSource().getMsgId())
                 || "lion_slash".equals(event.getSource().getMsgId())
                 || "sword_rain".equals(event.getSource().getMsgId())
-                || "genmu_zero".equals(event.getSource().getMsgId())) {
+                || "genmu_zero".equals(event.getSource().getMsgId())
+                || "flame_magic".equals(event.getSource().getMsgId())) {
             return;
         }
         ItemStack stack = golem.getMainHandItem();
