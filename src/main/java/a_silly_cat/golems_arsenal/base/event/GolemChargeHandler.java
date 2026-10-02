@@ -264,12 +264,15 @@ public final class GolemChargeHandler {
             beginDash(golem, tag, nextFrom, aim, now);
             return;
         }
+        // 先插值再判结束（凤凰俯冲是同一种写法）：progress == 1.0 那一 tick 也要把位置设成
+        // from.lerp(to, ease(1.0)) == to，这样最后一步仍落在缓动曲线上，不会多出一记硬贴。
+        // 配合 beginDash 里的 ceil，傀儡每一段就都是均匀且连续地走完的。
+        Vec3 pos = from.lerp(to, ease(progress));
+        golem.setNoGravity(true);
+        golem.setPos(pos.x, pos.y, pos.z);
+        golem.fallDistance = 0;
         if (progress < 1.0) {
-            Vec3 pos = from.lerp(to, ease(progress));
-            golem.setNoGravity(true);
-            golem.setPos(pos.x, pos.y, pos.z);
             golem.setDeltaMovement(Vec3.ZERO);
-            golem.fallDistance = 0;
             faceTowards(golem, to.subtract(from));
             damageAround(golem, pos, tag);
             if (golem.level() instanceof ServerLevel server) {
@@ -278,11 +281,9 @@ public final class GolemChargeHandler {
             }
             return;
         }
-        // Landed: snap onto the landing spot and settle whatever stands there.
-        golem.setPos(to.x, to.y, to.z);
-        // 速度不清零：留一点向前的惯性，落地才不会"顿"一下，AI 接手时是连贯的。
+        // 冲到了：位置上面已经设成 to，这里只收尾。速度不清零 —— 留一点向前的惯性，
+        // 落地才不会"顿"一下，AI 接手时是连贯的。
         pushForward(golem, to.subtract(from));
-        golem.fallDistance = 0;
         damageAround(golem, to, tag);
         int left = tag.getInt(LEFT_KEY);
         if (left > 0) {
@@ -335,7 +336,10 @@ public final class GolemChargeHandler {
                                   Vec3 to, long now) {
         double length = from.distanceTo(to);
         // 时长由"距离 ÷ 冲撞速度"算出来；速度跟着傀儡自身的移动速度走（走得多快就冲得多快）。
-        int ticks = (int) Math.max(1, Math.round(length / dashSpeed(golem)));
+        // 用 ceil 而不是 round：进度是 (now - start) / ticks，所以第 ticks 个 tick 才刚好到 1.0。
+        // 若用 round 取整偏小，插值只会覆盖到 ease((ticks-1)/ticks)，终点就得靠一记硬贴补上 ——
+        // 那一步不经过缓动曲线，看起来就是"冲到最后莫名顿一下再窜出去"。
+        int ticks = (int) Math.max(1, Math.ceil(length / dashSpeed(golem)));
         tag.putLong(START_KEY, now);
         tag.putInt(TICKS_KEY, ticks);
         tag.putDouble(FROM_X_KEY, from.x);

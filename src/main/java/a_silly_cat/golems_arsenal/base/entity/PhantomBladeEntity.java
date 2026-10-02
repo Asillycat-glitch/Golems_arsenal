@@ -67,6 +67,14 @@ public class PhantomBladeEntity extends Entity {
     /** 剑气的绿色尾迹：每几 tick 撒一次、每次几颗（骨粉那种绿色小星星）。 */
     private static final int TRAIL_PARTICLE_INTERVAL = 2;
     private static final int TRAIL_PARTICLE_COUNT = 2;
+    /**
+     * 尾迹相对"剑体根部"再往飞行反方向甩出的距离（单位 = 模型缩放倍率）。
+     * <p>
+     * {@code 0} = 正好贴在根部，数值越大拖尾越长。0.3 大约是三成剑身长。
+     */
+    private static final double ROOT_TRAIL_LENGTH = 0.3;
+    /** 尾迹粒子的散布半径（格）：越小越像一条线，越大越像一团雾。 */
+    private static final double TRAIL_SCATTER = 0.09;
     /** 模型基础缩放（模型本身很小，靠这里放大）：2 倍。 */
     private static final float BASE_MODEL_SCALE = 2.0F;
     /** 飞行速度（格/tick）。 */
@@ -227,9 +235,18 @@ public class PhantomBladeEntity extends Entity {
             // 绿色尾迹：骨粉那种小星星（原版 FIREWORK 火星的颜色是写死的，染不了绿）
             if (this.tickCount % TRAIL_PARTICLE_INTERVAL == 0
                     && this.level() instanceof ServerLevel server) {
+                // 从**剑体根部**往外甩，形成"根部浓、尾端散"的拖尾，而不是围着剑身中心冒点。
+                //
+                // 模型几何（对应 GenmuZeroRenderer 的变换）：模型 +Z 对齐飞行方向，再绕 Y 转
+                // -(yaw + MODEL_YAW_OFFSET)，所以模型局部 +Y 就是世界飞行方向；中央枢轴修正
+                // VERTICAL_CENTER_FIX = -0.125 使模型 y=0 落在 entity Y + 0.51 × scale 处，
+                // 而模型向 +Y 延伸 —— 也就是**尖端朝前、根部在后**。
+                Vec3 dir = motion.normalize();
+                double scale = Math.max(0.01, this.bladeWidth());
+                Vec3 root = this.position().add(dir.scale(-ROOT_TRAIL_LENGTH * scale));
                 server.sendParticles(ParticleTypes.HAPPY_VILLAGER,
-                        this.getX(), this.getY(), this.getZ(),
-                        TRAIL_PARTICLE_COUNT, 0.05, 0.3, 0.05, 0.0);
+                        root.x, root.y, root.z,
+                        TRAIL_PARTICLE_COUNT, TRAIL_SCATTER, TRAIL_SCATTER, TRAIL_SCATTER, 0.0);
             }
         }
     }
