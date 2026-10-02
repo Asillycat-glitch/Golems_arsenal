@@ -44,8 +44,26 @@
 
 ## mixin/
 
-- `golems_arsenal.mixins.json`：能量持久化（`AbstractGolemEnergyMixin`）
-- `golems_arsenal.golemmagicka.mixins.json`：施法集成（法术池、施法目标、可用法术/魔力日志），由插件按模组存在性门控
+- `golems_arsenal.mixins.json`（`required: true`）：两个 mixin —— `AbstractGolemEnergyMixin`（傀儡 FE 能量的读写持久化，注入 vanilla `addAdditionalSaveData`/`readAdditionalSaveData`）与 `GolemUpgradeHandlerMixin`（特技升级互斥，注入本家 `GolemUpgradeItemHandler.appendUpgrade`）
+- `golems_arsenal.golemmagicka.mixins.json`（`required: false`）：施法集成（法术池、施法目标、可用法术/魔力日志），由 `GolemMagickaMixinPlugin` 按模组存在性门控
+- `AbstractGolemRendererFlipMixin` 在第一个 config 的 `client` 段里（狮子斩/凤凰的前后空翻）
+
+### ⚠️ refmap 是手工维护的
+
+`src/main/resources/golems_arsenal.refmap.json` **不是构建产物** —— Mixin 的注解处理器在本项目里不生成它
+（`build/generated/sources/annotationProcessor/` 是空的，实测用 `--rerun-tasks` 强制重编也仍然为空），
+它是手写并随源码提交的。
+
+它目前只覆盖 `AbstractGolemEnergyMixin`，**因为只有它注入了 vanilla 成员**：
+
+| mixin | 注入目标 | 需要 refmap？ |
+|---|---|---|
+| `AbstractGolemEnergyMixin` | vanilla `addAdditionalSaveData` → `m_7380_` / `readAdditionalSaveData` → `m_7378_` | **需要**（已写） |
+| `GolemUpgradeHandlerMixin` | 本家 `GolemUpgradeItemHandler.appendUpgrade` + 影子字段 `upgrades` | 不需要（mod 代码不重映射） |
+| `AbstractGolemRendererFlipMixin` | 本家 `AbstractGolemRenderer.setupRotations` | 不需要（同上） |
+
+**规则：凡是新增/修改注入 vanilla 成员的 mixin，必须手工往这个 refmap 里补对应条目**，
+否则会表现为"开发环境一切正常、打出来的 jar 在生产里静默不生效"。
 
 ## 功能 → 依赖速查表
 

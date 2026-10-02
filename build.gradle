@@ -24,6 +24,11 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+            // 本家与 l2library 都带 mixin，而它们的 refmap 里存的是 SRG 名。
+            // 开发环境跑的是 official 名，不告诉 Mixin 去哪张表做映射的话，
+            // 依赖里的 mixin 会报 "target not found"（l2library 的 EntityMixin 就是第一个撞上的）。
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
             mods {
                 "${mod_id}" {
                     source sourceSets.main
