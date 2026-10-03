@@ -134,6 +134,17 @@ public final class GolemPhoenixHandler {
     private static final int RISE_FIRE_SECONDS = 2;
     private static final int IMPACT_FIRE_SECONDS = 5;
 
+    // ---- 尾迹粒子：向上飘、无重力 ----
+    /** 取几层高度采样：一层只在脚下冒火，三层才像"整个人被火裹着"。 */
+    private static final int PHOENIX_TRAIL_RINGS = 3;
+    /** 火苗的向上初速度（格/tick，正 = 往上）。调大就窜得更高。 */
+    private static final double UP_DRAFT_FLAME = 0.06;
+    /**
+     * 粒子位置的垂直散布半径（格）。<b>这个值是"黑烟柱"的开关</b>：
+     * 旧实现用 {@code bbHeight * 0.4}（龙傀儡 ±0.88 格），加上多 tick 叠加就竖成一根柱子。
+     */
+    private static final double UP_DRAFT_SPREAD_Y = 0.12;
+
     /** 冷却从演出结束开始算。 */
     private static final int COOLDOWN_TICKS = 120;
 
@@ -493,13 +504,40 @@ public final class GolemPhoenixHandler {
         return targets;
     }
 
+    /**
+     * 凤凰全流程的火焰尾迹：火焰与烟尘<b>向上飘、不受重力</b>（参考岩浆湖那种从底下翻上来的感觉）。
+     * <p>
+     * 写法要点（{@code sendParticles} 的语义别搞混）：
+     * <ul>
+     *   <li>{@code count = 0} 时，后三个偏移量是<b>速度矢量</b>，末尾的 {@code speed} 再整体缩放 ——
+     *       这是唯一能给粒子一个定向初速度的写法（本家 SonicCannon 与秘术连爆都用它）。这里 vy 取
+     *       正值，所以火苗是往上窜的、不会被重力拽下去。</li>
+     *   <li>{@code count > 0} 时，三个偏移量变成<b>位置散布半径</b>（速度反而是随机的）。旧实现把
+     *       垂直散布写成 {@code bbHeight * 0.4}，龙傀儡就是 ±0.88 格，再叠加多个 tick，于是成了
+     *       一根竖着的黑烟柱 —— 现在压到 {@link UP_DRAFT_SPREAD_Y} 这一档。</li>
+     *   <li>烟（CLOUD / SMOKE）只给很小的散布，对应"别让黑色的烟飘太高"。</li>
+     * </ul>
+     */
     private static void flameTrail(ServerLevel server, AbstractGolemEntity<?, ?> golem, int count) {
         Vec3 pos = golem.position();
-        server.sendParticles(ParticleTypes.FLAME, pos.x, pos.y + golem.getBbHeight() * 0.5, pos.z,
-                count, golem.getBbWidth() * 0.5, golem.getBbHeight() * 0.4,
-                golem.getBbWidth() * 0.5, 0.02);
-        server.sendParticles(ParticleTypes.CLOUD, pos.x, pos.y + 0.1, pos.z,
-                3, golem.getBbWidth() * 0.3, 0.05, golem.getBbWidth() * 0.3, 0.01);
+        double half = golem.getBbWidth() * 0.5;
+        for (int i = 0; i < PHOENIX_TRAIL_RINGS; i++) {
+            double h = golem.getBbHeight() * (0.2 + 0.3 * i);
+            double spread = half * (0.6 + 0.35 * i);
+            server.sendParticles(ParticleTypes.FLAME,
+                    pos.x, pos.y + h, pos.z,
+                    0,
+                    0.0, UP_DRAFT_FLAME, 0.0,
+                    1.0);
+            server.sendParticles(ParticleTypes.FLAME,
+                    pos.x, pos.y + h, pos.z,
+                    Math.max(1, count / PHOENIX_TRAIL_RINGS),
+                    spread, UP_DRAFT_SPREAD_Y, spread,
+                    0.02);
+        }
+        // 烟往上走但高度压住：位置散布很小，只靠向上的初速度。
+        server.sendParticles(ParticleTypes.CLOUD, pos.x, pos.y + golem.getBbHeight() * 0.25, pos.z,
+                2, half * 0.25, UP_DRAFT_SPREAD_Y, half * 0.25, 0.01);
     }
 
     private static void pin(AbstractGolemEntity<?, ?> golem, double x, double y, double z) {

@@ -64,17 +64,27 @@ public class PhantomBladeEntity extends Entity {
     /** 平铺一波几道 / 相对中线的散开半角（度）。 */
     private static final int FLAT_BLADE_COUNT = 5;
     private static final double FLAT_SPREAD_DEGREES = 14.0;
-    /** 剑气的绿色尾迹：每几 tick 撒一次、每次几颗（骨粉那种绿色小星星）。 */
-    private static final int TRAIL_PARTICLE_INTERVAL = 2;
-    private static final int TRAIL_PARTICLE_COUNT = 2;
+    /** 剑气的尾迹：每 tick 撒一次，保证沿着剑的轨迹连成一条而不是断续几坨。 */
+    private static final int TRAIL_PARTICLE_INTERVAL = 1;
     /**
-     * 尾迹相对"剑体根部"再往飞行反方向甩出的距离（单位 = 模型缩放倍率）。
+     * 沿剑身长度采样的点数与间距（单位 = 模型缩放倍率）。
      * <p>
-     * {@code 0} = 正好贴在根部，数值越大拖尾越长。0.3 大约是三成剑身长。
+     * 只在根部一个点会显得像"从屁股冒烟"；沿剑身取 3 个点，出来的是**一道有宽度的残影**。
+     * 模型局部 +Y 就是飞行方向（尖端在前），所以采样点沿 +Y 排布。
      */
-    private static final double ROOT_TRAIL_LENGTH = 0.3;
-    /** 尾迹粒子的散布半径（格）：越小越像一条线，越大越像一团雾。 */
-    private static final double TRAIL_SCATTER = 0.09;
+    private static final int TRAIL_SAMPLES = 3;
+    private static final double TRAIL_SAMPLE_SPACING = 0.35;
+    /** 根部基准偏移：模型 y=0 落在 entity Y 上方这么多（乘缩放），尾迹从这附近起。 */
+    private static final double ROOT_TRAIL_LENGTH = 0.1;
+    /**
+     * 交给粒子自身的下落速度（格/tick），让尾迹受重力、自然往下沉。
+     * <p>
+     * 这是"受重力"的实现方式：原版粒子带 vy &lt; 0 就会自行下坠，所以不需要另写 tick 逻辑。
+     * {@code speed = 0} 时粒子会飘在原地不动（旧行为）。
+     */
+    private static final double TRAIL_GRAVITY = 0.12;
+    /** 尾迹额外沿飞行反方向甩出的分量，让粒子落在剑后方而不是糊在剑身上。 */
+    private static final double TRAIL_BACKWARD_DRIFT = 0.1;
     /** 模型基础缩放（模型本身很小，靠这里放大）：2 倍。 */
     private static final float BASE_MODEL_SCALE = 2.0F;
     /** 飞行速度（格/tick）。 */
@@ -235,18 +245,29 @@ public class PhantomBladeEntity extends Entity {
             // 绿色尾迹：骨粉那种小星星（原版 FIREWORK 火星的颜色是写死的，染不了绿）
             if (this.tickCount % TRAIL_PARTICLE_INTERVAL == 0
                     && this.level() instanceof ServerLevel server) {
-                // 从**剑体根部**往外甩，形成"根部浓、尾端散"的拖尾，而不是围着剑身中心冒点。
+                // 沿剑身取几个采样点，粒子带下落速度 —— 出来是一条会往下沉的残影带。
                 //
                 // 模型几何（对应 GenmuZeroRenderer 的变换）：模型 +Z 对齐飞行方向，再绕 Y 转
                 // -(yaw + MODEL_YAW_OFFSET)，所以模型局部 +Y 就是世界飞行方向；中央枢轴修正
                 // VERTICAL_CENTER_FIX = -0.125 使模型 y=0 落在 entity Y + 0.51 × scale 处，
                 // 而模型向 +Y 延伸 —— 也就是**尖端朝前、根部在后**。
+                //
+                // 速度写法：sendParticles 没有"按分量给速度"的重载，唯一的办法是 count = 0，
+                // 此时后三个偏移量被当作速度矢量，末尾的 speed 再整体缩放（本家 SonicCannon 与
+                // 秘奥义都是这个用法）。TRAIL_GRAVITY 取正、这里取负，粒子就会自己往下沉。
                 Vec3 dir = motion.normalize();
                 double scale = Math.max(0.01, this.bladeWidth());
-                Vec3 root = this.position().add(dir.scale(-ROOT_TRAIL_LENGTH * scale));
-                server.sendParticles(ParticleTypes.HAPPY_VILLAGER,
-                        root.x, root.y, root.z,
-                        TRAIL_PARTICLE_COUNT, TRAIL_SCATTER, TRAIL_SCATTER, TRAIL_SCATTER, 0.0);
+                Vec3 base = this.position().add(dir.scale(ROOT_TRAIL_LENGTH * scale));
+                double vx = -dir.x * TRAIL_BACKWARD_DRIFT;
+                double vz = -dir.z * TRAIL_BACKWARD_DRIFT;
+                for (int i = 0; i < TRAIL_SAMPLES; i++) {
+                    Vec3 at = base.add(dir.scale(TRAIL_SAMPLE_SPACING * scale * i));
+                    server.sendParticles(ParticleTypes.HAPPY_VILLAGER,
+                            at.x, at.y, at.z,
+                            0,
+                            vx, -TRAIL_GRAVITY, vz,
+                            1.0);
+                }
             }
         }
     }
