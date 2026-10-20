@@ -114,36 +114,64 @@ tintB = b * 0.35;
 
 **旧版本的 QUADS bug** 已不存在：`ShockwaveShell` 已删除，不再有可见球壳/三角面板。
 
+**“两拨冲击波”**：之前 `ImpactShockwaveFx` 对每个 `OrbitalImpactEntity` 都起一圈；
+同一次打击如果同时/连续出现两个冲击实体，就会看到两圈同心波。现在加了一个合并条件：
+**16 格内、16 tick 内只保留最早的一圈**，后续实体不会再加环。
+
+### 2.5 金色闪电：参考「五雷天罚」
+
+`mgdp` 的 `LightningStormModifier` 本质是**瞬间生成纯视觉 `LightningBolt`**，
+不是靠一个大白球。这里用客户端几何画 6 道金色闪电（`ImpactLightningFx`）：
+
+- 从落点上空约 52 格劈下，收敛到落点；
+- 6 道，带横向摆动/闪烁，持续 12 tick；
+- 加法混合、不造成伤害、不写深度；
+- 颜色用暖金/白金，和引导光柱同色，所以引导不需要改色；
+- 落点同时播放 `LIGHTNING_BOLT_THUNDER`（服务端声音，所有玩家都能听到）。
+
+这样落点的主视觉是：**闪电 + 爆炸粒子 + 48 条火星 + 短促震屏**，
+冲击波只是无色折射环，不再承担"亮"的职责。
+
 ## 3. 涉及的文件
 
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
-client/ImpactShockwaveFx.java           屏幕拷贝 + 无色折射 + 屏幕震动
+client/ImpactShockwaveFx.java           屏幕拷贝 + 无色折射 + 屏幕震动 + 同心波合并
+client/ImpactLightningFx.java           金色闪电（参考五雷天罚的纯视觉闪电）
 client/OrbitalImpactRenderer.java       只保留热痕和火星；白热球/光罩已删除
 client/GuidanceBeamRenderer.java        压 alpha / 暖色 / 背面剔除
 client/OrbitalBeamRenderer.java         同上
 client/OrbitalProjectileRenderer.java   同上
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
 assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
+base/entity/OrbitalImpactEntity.java    落点雷声
 ```
 
 ## 4. 怎么测
 
-1. 进游戏，开 MakeUp（Oculus 光影设置里选 `MakeUp-UltraFast-9.1e.zip`）；
-2. `/ga full 14`；
-3. 看**落点**（不是 `/gafx all` 的试验球）：
-   - 命中瞬间：没有白色/蓝色光罩，只有背景被**径向推开一圈**的无色折射；
-   - 折射环在约 0.6 秒内扩到很远，然后消失；
-   - 屏幕有一次很短的震动；
-   - 弹体热痕和 48 条火星还在，承担爆炸/破坏的观感；
-   - 引导光柱本身仍是金色/暖白，不是白柱。
-4. 如果**完全看不到折射环**：
-   - 先看日志有没有 `[GA-Shockwave] shader loaded`；
-   - 没有的话是自定义 core shader 没加载/被 Oculus 替换，把日志发我；
-   - 有的话调大 `impact_shockwave.fsh` 里的 `0.075`（这是最大屏幕偏移比例）。
-5. 如果光柱还是白：把 `config/golems_arsenal-common.toml` 里 `shader_effect_brightness` 调到 `0.25`。
-6. 如果太暗：调到 `0.45`~`0.55`，或临时设为 `1.0` 对比。
+光影部分暂时不用管，直接进游戏：
+
+```
+/ga shot 14
+```
+或
+```
+/ga full 14
+```
+
+看**落点**：
+
+- 命中瞬间：6 道金色闪电从天上劈下，伴随雷声；
+- 爆炸粒子 + 48 条火星；
+- 一圈**无色**折射环向外扩（没有白色/蓝色光罩）；
+- 屏幕短促震一下；
+- 只应该有**一圈**冲击波，不应该出现两圈同心波；
+- 引导光柱仍然和闪电同色（暖金）。
+
+如果看不到闪电：看日志有没有 `[GA-Shockwave]`；闪电不走 shader，正常应该直接可见。
+如果闪电太细/太暗，调 `ImpactLightningFx.WIDTH`（0.11）或 `BOLTS`（6）。
+如果还有两圈波，把 `/ga shot` 前后的日志和截图发我，我按实际实体数量再收一次。
 
 ## 5. 已知限制
 

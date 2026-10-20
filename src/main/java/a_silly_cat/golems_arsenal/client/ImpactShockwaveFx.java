@@ -77,9 +77,21 @@ public final class ImpactShockwaveFx {
             if (!impact.isAlive()) {
                 continue;
             }
-            WAVES.putIfAbsent(impact.getId(), new Wave(
-                    impact.position(), now,
-                    Math.max(8.0F, impact.radius() * MAX_RADIUS_MULT)));
+            Vec3 center = impact.position();
+            // 同一次打击可能同时/连续生成多个冲击实体；16 格内 16 tick 内只保留一圈，
+            // 避免画面里出现"两拨"同心的冲击波。
+            boolean duplicate = false;
+            for (Wave wave : WAVES.values()) {
+                if (now - wave.start < 16 && wave.center.distanceToSqr(center) < 256.0D) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                WAVES.putIfAbsent(impact.getId(), new Wave(
+                        center, now,
+                        Math.max(8.0F, impact.radius() * MAX_RADIUS_MULT)));
+            }
         }
     }
 
