@@ -138,10 +138,6 @@ public class OrbitalImpactEntity extends Entity {
             server.playSound(null, this.getX(), this.getY(), this.getZ(),
                     net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE,
                     net.minecraft.sounds.SoundSource.PLAYERS, 2.5F, 0.6F);
-            // 参考「五雷天罚」：落点不只是爆炸，还有一声从天上压下来的雷。
-            server.playSound(null, this.getX(), this.getY(), this.getZ(),
-                    net.minecraft.sounds.SoundEvents.LIGHTNING_BOLT_THUNDER,
-                    net.minecraft.sounds.SoundSource.WEATHER, 2.0F, 0.9F);
         }
     }
 

@@ -118,19 +118,24 @@ tintB = b * 0.35;
 同一次打击如果同时/连续出现两个冲击实体，就会看到两圈同心波。现在加了一个合并条件：
 **16 格内、16 tick 内只保留最早的一圈**，后续实体不会再加环。
 
-### 2.5 金色闪电：参考「五雷天罚」
+### 2.5 主体：按图 3–8 的「五雷天罚」恢复地面爆开
 
-`mgdp` 的 `LightningStormModifier` 本质是**瞬间生成纯视觉 `LightningBolt`**，
-不是靠一个大白球。这里用客户端几何画 6 道金色闪电（`ImpactLightningFx`）：
+这里说的「五雷天罚」指 19:56 那组图 3–8，不是别的模组：
 
-- 从落点上空约 52 格劈下，收敛到落点；
-- 6 道，带横向摆动/闪烁，持续 12 tick；
-- 加法混合、不造成伤害、不写深度；
-- 颜色用暖金/白金，和引导光柱同色，所以引导不需要改色；
-- 落点同时播放 `LIGHTNING_BOLT_THUNDER`（服务端声音，所有玩家都能听到）。
+- 图 3–4：光束/弹体下坠；
+- 图 5–7：落点**贴地爆开**，亮的地面波和火花重叠，形成看起来像罩子的上半部分；
+- 图 8：亮段消失。
 
-这样落点的主视觉是：**闪电 + 爆炸粒子 + 48 条火星 + 短促震屏**，
-冲击波只是无色折射环，不再承担"亮"的职责。
+所以主体恢复为：
+
+- 一圈**低矮的贴地光墙**（约 0.2R 高，不是半球）；
+- 多圈平面冲击环（4 圈，各自出生时间/速度/淡出）；
+- 64 条向外/向上的火星；
+- 弹体残留热痕；
+- 爆炸粒子 + 爆炸声。
+
+颜色保持暖金/白金，和引导光柱一致，所以引导不需要改。
+白色发光球没有回来——参考图里那个"罩子"是地面波 + 火花重叠，不是实心球。
 
 ## 3. 涉及的文件
 
@@ -138,14 +143,12 @@ tintB = b * 0.35;
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
 client/ImpactShockwaveFx.java           屏幕拷贝 + 无色折射 + 屏幕震动 + 同心波合并
-client/ImpactLightningFx.java           金色闪电（参考五雷天罚的纯视觉闪电）
-client/OrbitalImpactRenderer.java       只保留热痕和火星；白热球/光罩已删除
+client/OrbitalImpactRenderer.java       地面光墙/多圈环/热痕/64 条火星
 client/GuidanceBeamRenderer.java        压 alpha / 暖色 / 背面剔除
 client/OrbitalBeamRenderer.java         同上
 client/OrbitalProjectileRenderer.java   同上
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
 assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
-base/entity/OrbitalImpactEntity.java    落点雷声
 ```
 
 ## 4. 怎么测
@@ -162,16 +165,15 @@ base/entity/OrbitalImpactEntity.java    落点雷声
 
 看**落点**：
 
-- 命中瞬间：6 道金色闪电从天上劈下，伴随雷声；
-- 爆炸粒子 + 48 条火星；
+- 命中瞬间：地面亮墙 + 多圈冲击环爆开，和 64 条火星重叠；
+- 爆炸粒子 + 爆炸声 + 弹体热痕；
 - 一圈**无色**折射环向外扩（没有白色/蓝色光罩）；
 - 屏幕短促震一下；
-- 只应该有**一圈**冲击波，不应该出现两圈同心波；
-- 引导光柱仍然和闪电同色（暖金）。
+- 只应该有**一圈**无色冲击波，不应该出现两圈同心波；
+- 引导光柱保持暖金。
 
-如果看不到闪电：看日志有没有 `[GA-Shockwave]`；闪电不走 shader，正常应该直接可见。
-如果闪电太细/太暗，调 `ImpactLightningFx.WIDTH`（0.11）或 `BOLTS`（6）。
-如果还有两圈波，把 `/ga shot` 前后的日志和截图发我，我按实际实体数量再收一次。
+如果地面波不够亮/不够高：调 `OrbitalImpactRenderer` 里的 `wallAlpha`、`wallH`、`RINGS`。
+如果还是两圈波，把 `/ga shot` 前后的日志和截图发我，我按实际实体数量再收一次。
 
 ## 5. 已知限制
 

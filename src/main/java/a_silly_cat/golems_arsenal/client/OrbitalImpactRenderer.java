@@ -39,6 +39,25 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     private static final ResourceLocation TEXTURE =
             new ResourceLocation("golems_arsenal", "textures/entity/orbital_laser.png");
 
+    /** 贴地环的分段数。48 段在近处也够圆。 */
+    private static final int RING_SEGS = 48;
+
+    /**
+     * 贴地冲击环参数表：{出生进度, 速度系数, 带宽, R, G, B, 基础 alpha}。
+     *
+     * <p>参考图 3–8 的"五雷天罚"主体：亮的地面扩散波 + 火花，
+     * 不是一颗白色发光球。这里恢复的是那道低矮光墙 + 多圈平面环。
+     */
+    private static final float[][] RINGS = {
+            {0.00F, 0.88F, 0.26F, 1.00F, 0.97F, 0.88F, 0.55F},   // 白热冲击
+            {0.12F, 0.66F, 0.19F, 1.00F, 0.78F, 0.35F, 0.48F},   // 暖金
+            {0.26F, 0.46F, 0.14F, 1.00F, 0.62F, 0.20F, 0.36F},   // 橙
+            {0.30F, 1.02F, 0.08F, 0.95F, 0.22F, 0.14F, 0.44F},   // 地面红环（余烬）
+    };
+
+    /** 贴地抬升，避免 z-fighting。 */
+    private static final float LIFT = 0.04F;
+
     private static final int FULL_BRIGHT = LightTexture.FULL_BRIGHT;
 
     public OrbitalImpactRenderer(EntityRendererProvider.Context ctx) {
@@ -60,10 +79,58 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         float brightness = ShaderEffects.brightness();
 
         pose.pushPose();
+        pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
 
-        // 冲击波本体已经交给 ImpactShockwaveFx（屏幕空间无色折射）；
-        // 这里只保留弹体残留热痕和爆开的火星，作为"弹体 / 爆炸 / 火花"里的后两者。
+        // 主体：贴地扩散波 + 多圈平面环（参考图 3–8 的"五雷天罚"）。
+        // 冲击波本身的空气波交给 ImpactShockwaveFx（无色屏幕折射），这里只负责可见的爆炸扩散。
+        float bright;
+        if (p < 0.12F) {
+            bright = p / 0.12F;
+        } else if (p < 0.55F) {
+            bright = 1.0F;
+        } else {
+            bright = Math.max(0.0F, 1.0F - (p - 0.55F) / 0.35F);
+        }
+
+        float shellT = Math.min(1.0F, p / 0.55F);
+        float shellExpand = 1.0F - (1.0F - shellT) * (1.0F - shellT) * (1.0F - shellT);
+        float shellR = radius * (0.18F + 0.82F * shellExpand);
+
+        float wallH = Math.max(0.16F, radius * 0.20F * (1.0F - 0.25F * p));
+        float wallW = Math.max(0.06F, radius * 0.040F);
+        float wallAlpha = 0.82F * bright * brightness;
+        if (wallAlpha > 0.002F) {
+            shockWall(m, vc, shellR, wallH, wallW,
+                    ShaderEffects.tintR(1.00F),
+                    ShaderEffects.tintG(0.95F),
+                    ShaderEffects.tintB(0.82F), wallAlpha);
+            ringBand(m, vc, shellR, wallW * 1.7F,
+                    ShaderEffects.tintR(1.00F),
+                    ShaderEffects.tintG(0.95F),
+                    ShaderEffects.tintB(0.82F),
+                    wallAlpha * 0.90F);
+        }
+
+        // 多圈平面环：各自出生时间/速度/淡出
+        for (float[] ring : RINGS) {
+            float born = ring[0];
+            if (p < born) {
+                continue;
+            }
+            float t = (p - born) / (1.0F - born);
+            float ease = 1.0F - (1.0F - t) * (1.0F - t);
+            float r = radius * ring[1] * ease;
+            if (r <= 0.05F) {
+                continue;
+            }
+            float fade = t < 0.75F ? 1.0F : (1.0F - (t - 0.75F) / 0.25F);
+            float alpha = ring[6] * Math.max(0.0F, fade) * brightness;
+            ringBand(m, vc, r, ring[2],
+                    ShaderEffects.tintR(ring[3]),
+                    ShaderEffects.tintG(ring[4]),
+                    ShaderEffects.tintB(ring[5]), alpha);
+        }
 
         // 弹体残留线（从落点往上到发射高度）
         drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
@@ -79,7 +146,7 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     /**
      * 火星数量。**不多**：靠"不规则"取胜，不是靠数量堆。
      */
-    private static final int SPARKS = 48;
+    private static final int SPARKS = 64;
     /** 火星长度（拖尾长度，格）。 */
     private static final float SPARK_STREAK = 0.9F;
     /** 火星粗细（格）。 */
@@ -192,6 +259,53 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             vc.vertex(m, ax - nx, ay, az - nz).color(r, g, b, alpha)
                     .uv(0.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
                     .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+        }
+    }
+
+    /** 一圈贴地圆环（带宽度）：内圈半径、外圈半径各画一圈顶点连成环带。 */
+    private static void ringBand(Matrix4f m, VertexConsumer vc, float radius, float width,
+                                 float r, float g, float b, float alpha) {
+        float inner = Math.max(0.0F, radius - width * 0.5F);
+        float outer = radius + width * 0.5F;
+        for (int i = 0; i < RING_SEGS; i++) {
+            float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
+            float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
+            float c0 = (float) Math.cos(a0);
+            float s0 = (float) Math.sin(a0);
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+
+            vertex(vc, m, c0 * inner, s0 * inner, 0.0F, r, g, b, alpha);
+            vertex(vc, m, c0 * outer, s0 * outer, 1.0F, r, g, b, alpha);
+            vertex(vc, m, c1 * outer, s1 * outer, 1.0F, r, g, b, alpha);
+            vertex(vc, m, c1 * inner, s1 * inner, 0.0F, r, g, b, alpha);
+        }
+    }
+
+    /**
+     * 贴地扩散波：一圈有高度的低矮光墙，底边亮、顶边淡。
+     *
+     * <p>参考图 5–7 里"像罩子"的上半部分，是这圈低墙和同时炸开的火花重叠出来的；
+     * 它本身只有约 0.2R 高，不是半球。
+     */
+    private static void shockWall(Matrix4f m, VertexConsumer vc, float radius,
+                                  float height, float width,
+                                  float r, float g, float b, float alpha) {
+        float inner = Math.max(0.01F, radius - width * 0.5F);
+        float outer = radius + width * 0.5F;
+        float topAlpha = alpha * 0.12F;
+        for (int i = 0; i < RING_SEGS; i++) {
+            float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
+            float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
+            float c0 = (float) Math.cos(a0);
+            float s0 = (float) Math.sin(a0);
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+
+            vertex(vc, m, c0 * inner, 0.0F, s0 * inner, 0.0F, r, g, b, alpha);
+            vertex(vc, m, c0 * outer, 0.0F, s0 * outer, 1.0F, r, g, b, alpha);
+            vertex(vc, m, c1 * outer, height, s1 * outer, 1.0F, r, g, b, topAlpha);
+            vertex(vc, m, c1 * inner, height, s1 * inner, 0.0F, r, g, b, topAlpha);
         }
     }
 
