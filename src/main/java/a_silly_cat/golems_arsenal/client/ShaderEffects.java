@@ -108,14 +108,23 @@ public final class ShaderEffects {
         }
         if (irisIsShaderPackInUse != null && irisApi != null) {
             try {
-                shaderPackActive = Boolean.TRUE.equals(irisIsShaderPackInUse.invoke(irisApi));
+                setActive(Boolean.TRUE.equals(irisIsShaderPackInUse.invoke(irisApi)));
                 return;
             } catch (Throwable t) {
                 irisIsShaderPackInUse = null;
                 irisApi = null;
             }
         }
-        shaderPackActive = readEnableShaders();
+        setActive(readEnableShaders());
+    }
+
+    private static void setActive(boolean active) {
+        if (active == shaderPackActive) {
+            return;
+        }
+        shaderPackActive = active;
+        Golems_arsenal.LOGGER.info("[GA-Shader] shaderpack active={} (orbital effect brightness={})",
+                active, active ? brightness() : 1.0F);
     }
 
     private static void resolveIrisApi() {
