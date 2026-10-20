@@ -80,20 +80,31 @@ tintB = b * 0.35;
 - 现在一根柱子的每一像素只有一层，亮度直接减半；
 - 球体也是前半球，不再前后叠加。
 
-### 2.4 白热球峰值
+### 2.4 白热球 → 球形冲击波壳
 
-`BALL_ALPHA` 从 `1.0` 降到 `0.65`，再乘光影倍率（0.35）后是 0.2275；
-加上金色 tint，夜里不再是一整颗白球。
+`OrbitalImpactRenderer` 里原来的"白热球"已替换为 `ShockwaveShell`：
+
+- 一层外层 + 一层内层，向外膨胀到 `OrbitalImpactEntity.radius()`；
+- 菲涅耳边缘（正对视线近透明，轮廓亮），半透明混合，不是实心加法球；
+- 只画朝向相机的前半球；玩家在球内时自动改为画内表面；
+- 带深度测试：球心贴地时，地面以下的部分被地形挡住，看起来就是"扣在地上的罩子"；
+- 顶点格式走 `RenderType.entityTranslucentEmissive`，和主光束同一条渲染路径，
+  避免自定义 `POSITION_COLOR` RenderType 在 Oculus 下出现块状伪影；
+- 颜色/alpha 同样吃 `ShaderEffects` 的光影倍率。
+
+这样"白热球"不再需要 `BALL_ALPHA` 那种压亮度补丁，冲击波的边界也直接等于 `radius`。
+旧参数 `FLASH_END` / `BALL_RADIUS_RATIO` / `BALL_ALPHA` 已删除。
 
 ## 3. 涉及的文件
 
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
+client/ShockwaveShell.java              球形冲击波壳（替代白热球）
 client/GuidanceBeamRenderer.java        压 alpha / 暖色 / 背面剔除
 client/OrbitalBeamRenderer.java         同上
 client/OrbitalProjectileRenderer.java   同上
-client/OrbitalImpactRenderer.java       球/环/拖尾/火星全部压 alpha + 球背面剔除
+client/OrbitalImpactRenderer.java       球壳/环/拖尾/火星全部压 alpha + 背面剔除
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
 ```
 

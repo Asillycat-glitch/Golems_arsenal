@@ -42,17 +42,6 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             new ResourceLocation("golems_arsenal", "textures/entity/orbital_laser.png");
 
 
-    /**
-     * 白热球存在的进度区间。
-     *
-     * <p>之前是 0.38（26 tick 的第 10 tick 就整颗消失），用户评价"突然消失、没有冲击感"。
-     * 现在让它活到 0.62，并且用平滑曲线衰减——先稳住再慢慢散掉。
-     */
-    private static final float FLASH_END = 0.88F;
-    /** 白热球最大半径相对冲击半径的比例。 */
-    private static final float BALL_RADIUS_RATIO = 0.60F;
-    /** 白热球的峰值亮度（加法混合，别拉满，否则一片白）。 */
-    private static final float BALL_ALPHA = 0.65F;
     /** 贴地环的分段数。48 段在近处也够圆。 */
     private static final int RING_SEGS = 48;
 
@@ -87,6 +76,7 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         // 参考秘法涡流的 getLerpedSize / getLerpedIntensity 也是这个思路。
         float p = Math.min(1.0F, (entity.tickCount + partialTick) / OrbitalImpactEntity.LIFE);
         float radius = entity.radius();
+        float ticks = entity.tickCount + partialTick;
         VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
 
         // 光影包 bloom 刹车：压 alpha、把近白拉成暖金、球体只画正面。
@@ -97,6 +87,18 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         pose.pushPose();
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
+
+        // **球形冲击波壳**：替代原来的实心白热球。
+        // 外层 + 内层，膨胀到 radius；边缘亮、中心透明；地面以下由深度测试挡住。
+        float shellT = Math.min(1.0F, p / 0.95F);
+        float shellExpand = 1.0F - (1.0F - shellT) * (1.0F - shellT) * (1.0F - shellT);
+        float shellR = radius * (0.18F + 0.82F * shellExpand);
+        float shellAlpha = 0.95F * (float) Math.pow(Math.sin(Math.PI * p), 0.55D) * brightness;
+        if (shellAlpha > 0.002F) {
+            ShockwaveShell.draw(vc, m, camLocal, shellR, shellAlpha, brightness, ticks);
+            ShockwaveShell.draw(vc, m, camLocal, shellR * 0.86F,
+                    shellAlpha * 0.35F, brightness, ticks);
+        }
 
         // **贴地冲击环**（保留）：各自按出生时间推进，缓出扩散，后段淡出
         for (float[] ring : RINGS) {
@@ -121,23 +123,6 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
 
         // 弹体残留线（从落点往上到发射高度）
         drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
-
-        // 中心白热球（对应参考图的"爆闪球"，不是一根柱子）
-        if (p < FLASH_END) {
-            float t = p / FLASH_END;
-            // 用户 2026-10-19：爆炸应该"扩散到很大，然后扩散当中消失"。
-            // 所以不再回落收缩，而是**一路涨、边涨边淡**（缓出，尾段最明显）。
-            // 三次缓出：前 1/3 就冲到接近最大，炸开发生在开头而不是拖全程
-            float ie = 1.0F - t;
-            float expandEase = 1.0F - ie * ie * ie;
-            float ballR = radius * BALL_RADIUS_RATIO * (0.25F + 1.05F * expandEase);
-            // 亮度衰减略快于尺寸增长：越散越薄，最后自然消失
-            float alpha = BALL_ALPHA * (float) Math.pow(1.0F - t, 1.6F) * brightness;
-            ball(m, vc, ballR,
-                    ShaderEffects.tintR(1.0F),
-                    ShaderEffects.tintG(0.99F),
-                    ShaderEffects.tintB(0.94F), alpha, camLocal);
-        }
 
         // **溅射光粒**：砸出来的细小火星，全部用几何画（不是原版粒子）
         drawSparks(m, vc, radius, p, brightness);
@@ -328,67 +313,6 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         }
     }
 
-
-    /**
-     * 白热球：经纬网格近似的发光球体。
-     *
-     * <p>为什么不用贴图球：我们只有一张纯白 16×16，没有球面纹理；用经纬网格 + 顶点色
-     * 就能得到"中心白、边缘淡"的发光球（加法混合下天然向外扩散）。
-     * 网格数取 12 × 6 = 72 个四边形，只在爆闪的 0.5 秒内绘制，代价可接受。
-     */
-    private static void ball(Matrix4f m, VertexConsumer vc, float radius,
-                             float r, float g, float b, float alpha, Vec3 camLocal) {
-        final int lon = 12;
-        final int lat = 6;
-        // 玩家站在球里时，看到的是球的内表面；这时不能按"外表面正面"剔除，否则整个球会消失。
-        boolean inside = camLocal.lengthSqr() < (double) radius * radius;
-        for (int i = 0; i < lat; i++) {
-            // 纬度从 -90° 到 +90°
-            double phi0 = -Math.PI / 2.0 + Math.PI * i / lat;
-            double phi1 = -Math.PI / 2.0 + Math.PI * (i + 1) / lat;
-            float y0 = (float) Math.sin(phi0) * radius;
-            float y1 = (float) Math.sin(phi1) * radius;
-            float r0 = (float) Math.cos(phi0) * radius;
-            float r1 = (float) Math.cos(phi1) * radius;
-            // 两极附近 alpha 压低，读起来更"球"而不是"袋子"
-            float a0 = alpha * (0.35F + 0.65F * (float) Math.cos(phi0));
-            float a1 = alpha * (0.35F + 0.65F * (float) Math.cos(phi1));
-            for (int j = 0; j < lon; j++) {
-                double t0 = Math.PI * 2.0 * j / lon;
-                double t1 = Math.PI * 2.0 * (j + 1) / lon;
-                float c0 = (float) Math.cos(t0);
-                float s0 = (float) Math.sin(t0);
-                float c1 = (float) Math.cos(t1);
-                float s1 = (float) Math.sin(t1);
-
-                // 只画朝向相机的前半球；以前整球都画，正反两面叠加等于 alpha 翻倍。
-                float px = (c0 * r0 + c1 * r0 + c1 * r1 + c0 * r1) * 0.25F;
-                float py = (y0 + y1) * 0.5F;
-                float pz = (s0 * r0 + s1 * r0 + s1 * r1 + s0 * r1) * 0.25F;
-                Vec3 normal = new Vec3(px, py, pz);
-                if (normal.lengthSqr() < 1.0E-6D) {
-                    continue;
-                }
-                normal = normal.normalize();
-                if (!inside && normal.dot(camLocal.subtract(new Vec3(px, py, pz))) <= 0.0D) {
-                    continue;
-                }
-
-                vc.vertex(m, c0 * r0, y0, s0 * r0).color(r, g, b, a0)
-                        .uv(0.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(FULL_BRIGHT).normal(c0, y0, s0).endVertex();
-                vc.vertex(m, c1 * r0, y0, s1 * r0).color(r, g, b, a0)
-                        .uv(1.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(FULL_BRIGHT).normal(c1, y0, s1).endVertex();
-                vc.vertex(m, c1 * r1, y1, s1 * r1).color(r, g, b, a1)
-                        .uv(1.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(FULL_BRIGHT).normal(c1, y1, s1).endVertex();
-                vc.vertex(m, c0 * r1, y1, s0 * r1).color(r, g, b, a1)
-                        .uv(0.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
-                        .uv2(FULL_BRIGHT).normal(c0, y1, s0).endVertex();
-            }
-        }
-    }
 
     /** 平躺与竖直两种朝向共用：这里 vertex 的 y 就是高度，圆环传 0。 */
     private static void vertex(VertexConsumer vc, Matrix4f m, float x, float z, float u,
