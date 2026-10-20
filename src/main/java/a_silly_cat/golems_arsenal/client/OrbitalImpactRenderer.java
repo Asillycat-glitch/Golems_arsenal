@@ -98,6 +98,13 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             ShockwaveShell.draw(vc, m, camLocal, shellR, shellAlpha, brightness, ticks);
             ShockwaveShell.draw(vc, m, camLocal, shellR * 0.86F,
                     shellAlpha * 0.35F, brightness, ticks);
+            // 罩子底部的贴地亮环：参考图里最抓眼的是"一圈很亮的边界"，
+            // 不是罩子顶部；这一圈跟着 shellR 一起扩散。
+            ringBand(m, vc, shellR, Math.max(0.05F, shellR * 0.035F),
+                    ShaderEffects.tintR(1.00F),
+                    ShaderEffects.tintG(0.95F),
+                    ShaderEffects.tintB(0.82F),
+                    shellAlpha * 0.90F);
         }
 
         // **贴地冲击环**（保留）：各自按出生时间推进，缓出扩散，后段淡出
@@ -135,7 +142,7 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     /**
      * 火星数量。**不多**：靠"不规则"取胜，不是靠数量堆。
      */
-    private static final int SPARKS = 26;
+    private static final int SPARKS = 48;
     /** 火星长度（拖尾长度，格）。 */
     private static final float SPARK_STREAK = 0.9F;
     /** 火星粗细（格）。 */

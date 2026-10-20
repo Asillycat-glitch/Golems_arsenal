@@ -80,20 +80,24 @@ tintB = b * 0.35;
 - 现在一根柱子的每一像素只有一层，亮度直接减半；
 - 球体也是前半球，不再前后叠加。
 
-### 2.4 白热球 → 球形冲击波壳
+### 2.4 白热球 → 压扁的半球冲击波
 
 `OrbitalImpactRenderer` 里原来的"白热球"已替换为 `ShockwaveShell`：
 
-- 一层外层 + 一层内层，向外膨胀到 `OrbitalImpactEntity.radius()`；
-- 菲涅耳边缘（正对视线近透明，轮廓亮），半透明混合，不是实心加法球；
-- 只画朝向相机的前半球；玩家在球内时自动改为画内表面；
-- 带深度测试：球心贴地时，地面以下的部分被地形挡住，看起来就是"扣在地上的罩子"；
-- 顶点格式走 `RenderType.entityTranslucentEmissive`，和主光束同一条渲染路径，
-  避免自定义 `POSITION_COLOR` RenderType 在 Oculus 下出现块状伪影；
-- 颜色/alpha 同样吃 `ShaderEffects` 的光影倍率。
+- **压扁的上半球**：高度 = 半径 × 0.55，贴地展开，接近参考图的低矮气浪，而不是完整玻璃球；
+- 高度越低越亮（贴地亮环），向天顶渐淡；底部再加一圈跟着半径走的亮环；
+- 半透明混合，不是实心加法球；颜色/alpha 吃 `ShaderEffects` 的光影倍率；
+- 带深度测试：球心贴地时，地面以下不需要画，只保留地平线以上；
+- 顶点格式走 `RenderType.entityTranslucentEmissive`，和主光束同一条渲染路径。
+
+**一个关键 bug**：`entityTranslucentEmissive` 的顶点模式是 **QUADS**，每个四边形必须是 4 个顶点。
+上一版按 TRIANGLES 的习惯发了 6 个顶点（两个三角形），缓冲区会把相邻四边形的顶点拼错，
+于是看起来像一个**蓝色线框球/三角面板球**。现在改回每个 quad 4 个顶点，
+并且每个 quad 用同一个 alpha，避免内部对角线接缝。
 
 这样"白热球"不再需要 `BALL_ALPHA` 那种压亮度补丁，冲击波的边界也直接等于 `radius`。
-旧参数 `FLASH_END` / `BALL_RADIUS_RATIO` / `BALL_ALPHA` 已删除。
+旧参数 `FLASH_END` / `BALL_RADIUS_RATIO` / `BALL_ALPHA` 已删除；火星数量从 26 提到 48，
+更接近参考图那种放射状碎屑。
 
 ## 3. 涉及的文件
 
