@@ -43,12 +43,13 @@ public final class GolemsArsenalSetHandler {
     /** E 罐自动补材料的间隔（tick）：60 秒。 */
     private static final int REFILL_TICKS = 1200;
     /** 光柱：持续 2 秒、冷却 5 秒。 */
-    private static final int PILLAR_ACTIVE_TICKS = 40;
-    private static final int PILLAR_CD_TICKS = 100;
+    /** 光柱无敌窗口改为"铺开全程"：长度由 {@code LightPillarEntity.bloomDurationTicks()} 现算。 */
+    private static final int PILLAR_CD_TICKS = 600;
     private static final int PILLAR_COUNT = 4;
     private static final double PILLAR_RING_RADIUS = 1.3;
     private static final double PILLAR_HIT_RADIUS = 1.6;
-    private static final double PILLAR_DAMAGE_RATIO = 0.75;
+    /** 单次命中伤害 = 攻击力 × 此值。三轮铺开 ⇒ 同一敌人全程最多 3 次（每轮 1 次）。 */
+    private static final double PILLAR_DAMAGE_RATIO = 0.35;
     /** 幻梦零使用冷却（tick）：30 秒。 */
     private static final int GENMU_CD_TICKS = 600;
     /** 幻梦零分两波：第一波三角阵，隔这么多 tick 之后第二波平铺。 */
@@ -131,10 +132,10 @@ public final class GolemsArsenalSetHandler {
             return;
         }
         tag.putLong(PILLAR_CD_KEY, now + PILLAR_CD_TICKS);
-        tag.putLong(PILLAR_UNTIL_KEY, now + PILLAR_ACTIVE_TICKS);
+        tag.putLong(PILLAR_UNTIL_KEY, now + LightPillarEntity.bloomDurationTicks());
         double damage = golem.getAttributeValue(Attributes.ATTACK_DAMAGE) * PILLAR_DAMAGE_RATIO;
-        LightPillarEntity.spawnRing(golem, PILLAR_COUNT, PILLAR_RING_RADIUS, (float) damage,
-                PILLAR_HIT_RADIUS, PILLAR_ACTIVE_TICKS);
+        // 三轮螺旋铺开（顺 → 逆 → 顺，每轮 8 根，同轮共享命中名单 ⇒ 每敌人每轮 1 次）。
+        LightPillarEntity.spawnBloom(golem, (float) damage);
         if (golem.level() instanceof ServerLevel server) {
             server.playSound(null, golem.getX(), golem.getY(), golem.getZ(),
                     SoundEvents.BEACON_ACTIVATE, SoundSource.HOSTILE, 1.0F, 0.7F);

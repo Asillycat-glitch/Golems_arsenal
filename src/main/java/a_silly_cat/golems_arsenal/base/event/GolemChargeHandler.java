@@ -570,11 +570,19 @@ public final class GolemChargeHandler {
         golem.fallDistance = 0;
     }
 
-    /** True for damage this mod applies itself; those must never start a charge. */
+    /**
+     * True for damage this mod applies itself; those must never start a charge.
+     * <p>
+     * 凤凰线三个类型补在表尾：{@code mystic_blast}（秘奥义 5 连爆）是新增类型，
+     * {@code phoenix_fire} / {@code phoenix_impact} 一直漏着 —— 少了它们，
+     * 凤凰自己的伤害会给"冲撞"充能、甚至在演出期间另起一段特技。
+     */
     private static boolean isOwnDamage(DamageSource source) {
         String id = source.getMsgId();
         return "key_sword_magic".equals(id) || "lion_slash".equals(id)
                 || "sword_rain".equals(id) || "stance_magic".equals(id)
-                || "flame_magic".equals(id) || "genmu_zero".equals(id);
+                || "flame_magic".equals(id) || "genmu_zero".equals(id)
+                || "phoenix_fire".equals(id) || "phoenix_impact".equals(id)
+                || "mystic_blast".equals(id);
     }
 }

@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.init;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
+import a_silly_cat.golems_arsenal.network.ClientboundComboPacket;
 import a_silly_cat.golems_arsenal.network.ClientboundFlipPacket;
 import a_silly_cat.golems_arsenal.network.ClientboundETankPacket;
 import a_silly_cat.golems_arsenal.network.ClientboundShieldPacket;
@@ -35,5 +36,8 @@ public final class ModNetwork {
         CHANNEL.registerMessage(4, ClientboundETankPacket.class,
                 ClientboundETankPacket::encode, ClientboundETankPacket::decode,
                 ClientboundETankPacket::handle);
+        CHANNEL.registerMessage(5, ClientboundComboPacket.class,
+                ClientboundComboPacket::encode, ClientboundComboPacket::decode,
+                ClientboundComboPacket::handle);
     }
 }

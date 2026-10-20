@@ -55,6 +55,7 @@ public class KeySwordItem extends GolemSwordItem {
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> list,
                                 TooltipFlag flag) {
         list.add(Component.translatable("tooltip.golems_arsenal.key_sword"));
+        list.add(largeGolemBonusLine());
     }
 
     /**

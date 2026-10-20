@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
-    "golems_arsenal:key_sword"
+    "golems_arsenal:key_sword",
+    "golems_arsenal:example_weapon"
   ]
 }

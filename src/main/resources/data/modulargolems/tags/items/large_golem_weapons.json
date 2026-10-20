@@ -113,6 +113,7 @@
       "required": false
     },
     "golems_arsenal:shen_tong_staff",
-    "golems_arsenal:key_sword"
+    "golems_arsenal:key_sword",
+    "golems_arsenal:example_weapon"
   ]
 }

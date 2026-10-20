@@ -335,12 +335,20 @@ public final class KeySwordEventHandler {
         }
     }
 
-    /** True for damage types this mod applies itself; those must never retrigger our effects. */
+    /**
+     * True for damage types this mod applies itself; those must never retrigger our effects.
+     * <p>
+     * 凤凰线三个类型也在这里 —— {@code mystic_blast}（秘奥义 5 连爆，新类型）与
+     * {@code phoenix_fire} / {@code phoenix_impact} 都属于"傀儡打出的秘术伤害"，
+     * 不该反过来触发键刃那套（火球/闪电/霜爆、处决加成）。
+     */
     private static boolean isOwnDamage(DamageSource source) {
         String id = source.getMsgId();
         return MAGIC_MSG_ID.equals(id) || LION_MSG_ID.equals(id)
                 || SWORD_RAIN_MSG_ID.equals(id)
-                || "stance_magic".equals(id) || "flame_magic".equals(id);
+                || "stance_magic".equals(id) || "flame_magic".equals(id)
+                || "phoenix_fire".equals(id) || "phoenix_impact".equals(id)
+                || "mystic_blast".equals(id);
     }
 
     private static boolean specialReady(LivingEntity attacker) {
@@ -488,20 +496,32 @@ public final class KeySwordEventHandler {
 
     /** Linear ramp from 0 at full HP to {@code execute_max_bonus} at {@code execute_hp_ratio} HP. */
     private static double executeFactor(LivingEntity victim) {
+        return 1.0 + Config.KEY_SWORD_EXECUTE_MAX_BONUS.get() * executeProgress(victim);
+    }
+
+    /**
+     * 处决曲线的进度：0 = 目标满血，1 = 目标已掉到 {@code execute_hp_ratio} 阈值或更低。
+     * 与 {@link #executeFactor} 共用同一条曲线，也供伤害返还按同一节奏放大
+     * （见 {@code DamageRestitutionListener}）—— 这样"越残越疼"和"越残越能穿透减伤"
+     * 永远同步，改一处两个都跟着变。
+     */
+    public static double executeProgress(LivingEntity victim) {
         float max = victim.getMaxHealth();
         if (max <= 0) {
-            return 1.0;
+            return 0.0;
         }
         double missing = 1.0 - victim.getHealth() / max;
         double threshold = 1.0 - Config.KEY_SWORD_EXECUTE_HP_RATIO.get();
-        double maxBonus = Config.KEY_SWORD_EXECUTE_MAX_BONUS.get();
-        if (missing >= threshold) {
-            return 1.0 + maxBonus;
-        }
-        if (missing <= 0) {
+        if (threshold <= 0.0) {
             return 1.0;
         }
-        return 1.0 + maxBonus * missing / threshold;
+        if (missing >= threshold) {
+            return 1.0;
+        }
+        if (missing <= 0.0) {
+            return 0.0;
+        }
+        return missing / threshold;
     }
 
     private static void fireballAttack(LivingEntity attacker, LivingEntity victim) {

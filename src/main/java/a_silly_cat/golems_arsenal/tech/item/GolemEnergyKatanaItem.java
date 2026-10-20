@@ -23,7 +23,8 @@ import java.util.List;
 
 public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
     public static final int BASE_ENERGY_CAPACITY = 1_000_000;
-    public static final int ENERGY_PER_ATTACK = 2_500;
+    /** 镜像 Config 的 attack_cost 默认值；实际消耗请读 {@link #getEnergyPerAttack(ItemStack)}。 */
+    public static final int ENERGY_PER_ATTACK = 2_000;
     public static final int BASE_ATTACK_DAMAGE = 8;
     public static final float BASE_PERCENT_DAMAGE_BONUS = 0.25f;
 
@@ -136,6 +137,9 @@ public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
                 getEnergyPerAttack(stack)).withStyle(ChatFormatting.DARK_GRAY));
         list.add(Component.translatable("tooltip.golems_arsenal.energy_katana.charge",
                 Config.ENERGY_KATANA_CHARGE_DURATION.get() / 20).withStyle(ChatFormatting.GRAY));
+        list.add(Component.translatable("tooltip.golems_arsenal.energy_katana.armor_shred",
+                Config.ENERGY_KATANA_SHRED_MAX_STACKS.get(),
+                Config.ENERGY_KATANA_SHRED_DURATION.get() / 20).withStyle(ChatFormatting.GRAY));
         list.add(Component.translatable("tooltip.golems_arsenal.units",
                 getTotalUnitLevels(stack)).withStyle(ChatFormatting.DARK_AQUA));
         super.appendHoverText(stack, level, list, flag);

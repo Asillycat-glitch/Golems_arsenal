@@ -53,5 +53,14 @@ public class GolemsArsenalJeiPlugin implements IModPlugin {
                 Component.translatable("jei.golems_arsenal.synergy.weakened"),
                 Component.translatable("jei.golems_arsenal.gilded_onslaught.header"),
                 Component.translatable("jei.golems_arsenal.gilded_onslaught.desc"));
+
+        // 部件回收：按「材质 × 部件」逐条枚举，注册进 MEK 的粉碎类别。
+        // 两个模组都在才做——这一句是唯一会加载 MekanismJeiPartRecipes 的地方。
+        if (ModList.get().isLoaded("mekanism") && ModList.get().isLoaded("modulargolems")) {
+            a_silly_cat.golems_arsenal.compat.mekanism.MekanismJeiPartRecipes
+                    .registerCrushing(registration);
+            a_silly_cat.golems_arsenal.compat.mekanism.MekanismJeiPartRecipes
+                    .registerSawing(registration);
+        }
     }
 }

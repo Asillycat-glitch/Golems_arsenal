@@ -32,7 +32,7 @@ import java.util.List;
  * tech upgrade level installed on the golem.
  */
 public class GolemEnergyTechModifier extends AttributeGolemModifier {
-    public static final int MAX_LEVEL = 5;
+    public static final int MAX_LEVEL = 1;
 
     private static final ResourceKey<Registry<GolemStatType>> STAT_TYPES =
             ResourceKey.createRegistryKey(new ResourceLocation("modulargolems", "stat_type"));

@@ -26,9 +26,18 @@ public class PartSawingRecipe extends SawmillRecipe {
         return new PartChanceOutput(input, getSecondaryChance());
     }
 
+    /**
+     * **只给 JEI 显示用的主产物定义**。
+     *
+     * <p>以前返回「所有材质 × 所有部件」的完整矩阵（几十上百个 ItemStack），
+     * MEK 的 JEI 锯木类别会把它全部当产物渲染，界面塞满产物格——这就是
+     * 用户反馈的"JEI 显示不合格"。实际产出由 {@link #getOutput(ItemStack)} 决定，
+     * 这里只留一个代表产物让 JEI 画一条正常配方。
+     */
     @Override
     public List<ItemStack> getMainOutputDefinition() {
-        return PartRecyclingUtil.getMaterialOutputs(Config.PART_SAWMILL_MATERIAL_LOSS.get());
+        List<ItemStack> all = PartRecyclingUtil.getMaterialOutputs(Config.PART_SAWMILL_YIELD_PERCENT.get(), false);
+        return all.isEmpty() ? List.of() : List.of(all.get(0));
     }
 
     @Override
@@ -60,7 +69,7 @@ public class PartSawingRecipe extends SawmillRecipe {
 
         @Override
         public ItemStack getMainOutput() {
-            return PartRecyclingUtil.getMaterialOutput(input, Config.PART_SAWMILL_MATERIAL_LOSS.get());
+            return PartRecyclingUtil.getMaterialOutput(input, Config.PART_SAWMILL_YIELD_PERCENT.get(), false);
         }
 
         @Override

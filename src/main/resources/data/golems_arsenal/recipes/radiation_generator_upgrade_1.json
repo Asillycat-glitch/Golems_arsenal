@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "mekanism"
+    }
+  ],
+  "key": {
+    "P": {
+      "item": "mekanism:pellet_polonium"
+    },
+    "S": {
+      "tag": "forge:ingots/steel"
+    },
+    "E": {
+      "item": "modulargolems:empty_upgrade"
+    }
+  },
+  "pattern": [
+    "SSS",
+    "PEP",
+    "SSS"
+  ],
+  "result": {
+    "item": "golems_arsenal:radiation_generator_upgrade_1"
+  },
+  "show_notification": true
+}

@@ -6,7 +6,6 @@ import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import a_silly_cat.golems_arsenal.init.ModNetwork;
 import a_silly_cat.golems_arsenal.network.ClientboundFlipPacket;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
-import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -28,7 +27,6 @@ import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.living.LivingEvent;
@@ -95,6 +93,20 @@ public final class GolemPhoenixHandler {
     private static final double MYSTIC_DAMAGE_MULTIPLIER = 6.0;
 
     /**
+     * 【测试开关·已封存】绝炎冲效果调试用：打开后<b>每一次</b>凤凰天驱落地都会追加绝炎冲演出。
+     * <p>
+     * 相当于把四道门一次全短路——不查 mgdp 是否安装、不数 50 次解锁、不需要手杖授权、
+     * 不看授权冷却、也不扣那 200 血：{@code start()} 里 {@code pending} 直接置真，
+     * {@code authorize()} / {@code maybeSelfAuthorize()} / {@code canBeAuthorized()} 三条路压根不会被走到，
+     * 所以那几处代码保持原样即可，不需要（也不应该）跟着改。
+     * <p>
+     * <b>当前是 false：正式流程（四道门全在）</b>。绝炎冲特效一旦要再调，把它改成 true 就能
+     * 每次凤凰天驱都看完整演出，不必去刷 50 次解锁；调完记得改回来 —— 打开时任何人拿凤凰天驱
+     * 打一下就是完整的 2 秒演出 + 追冲 + 5 连爆。
+     */
+    private static final boolean MYSTIC_TEST_MODE = false;
+
+    /**
      * 傀儡自救授权：玩家在混战里未必有空按键，所以傀儡自己判断危险并拿许可。
      * 威胁值 = 附近敌对目标当前血量之和 ÷ 自身生命百分比。
      */
@@ -145,6 +157,25 @@ public final class GolemPhoenixHandler {
      */
     private static final double UP_DRAFT_SPREAD_Y = 0.12;
 
+    // ---- 俯冲火环：垂直于下坠方向的一圈火焰 ----
+    /** 一圈拆成几股。每股一个 {@code count = 0} 的定向包，俯冲只有 5 tick，包量可控。 */
+    private static final int DIVE_RING_SEGMENTS = 12;
+    /**
+     * 火环粒子的径向速度（格/tick）。<b>要的就是"喷出去"这口气</b>：尾迹那档只有 0.02~0.06，
+     * 这里直接给 0.5（量级参考秘奥义追冲两侧的 {@code nx * 0.45}）。
+     * 手感参考：0.3 偏含蓄，0.5 标准，0.8 以上会甩开两三个身位。
+     */
+    private static final double DIVE_RING_SPEED = 0.5;
+    /** 火环半径 = max(0.4, 傀儡半宽 × 该系数)。贴身体外沿起喷，别从身体里冒出来被自己挡住。 */
+    private static final double DIVE_RING_RADIUS = 0.8;
+    /** 火环沿下坠方向的附加速度：给一点"跟着人一起砸下去"的错觉，0 = 纯原地外扩。 */
+    private static final double DIVE_RING_FORWARD = 0.2;
+    /**
+     * 是否用火环顶替俯冲段那朵白云（{@code CLOUD}）。
+     * 现在留 false = 火环与白云并存，方便直接对比；确认火环更好看就改成 true，白云那一路就不再发。
+     */
+    private static final boolean DIVE_RING_REPLACES_CLOUD = false;
+
     /** 冷却从演出结束开始算。 */
     private static final int COOLDOWN_TICKS = 120;
 
@@ -186,6 +217,14 @@ public final class GolemPhoenixHandler {
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("phoenix_fire"));
     private static final ResourceKey<DamageType> PHOENIX_IMPACT =
             ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("phoenix_impact"));
+    /**
+     * 秘奥义 5 连爆专用的伤害类型。与落地爆分开是<b>为了保护底</b>：
+     * {@code MysticBlastFloorListener} 按类型认人，只有 {@code mystic_blast} 吃"至少 0.5 × base"的保底，
+     * 上升段与落地爆保持原样。也因此这个类型<b>不进</b> {@code is_fire}（凤凰线整条都不是火焰伤害了，
+     * 见 is_fire.json 的空表）——它只用于"是谁"的辨识，不改变结算语义。
+     */
+    private static final ResourceKey<DamageType> MYSTIC_BLAST =
+            ResourceKey.create(Registries.DAMAGE_TYPE, Golems_arsenal.id("mystic_blast"));
 
     private static Attribute fireDamageCache;
     private static Attribute explosionDamageCache;
@@ -266,12 +305,13 @@ public final class GolemPhoenixHandler {
         tag.put(HITS_KEY, new CompoundTag());
         // 秘奥义（隐藏彩蛋）：累计释放次数，超过 50 次后标记为"已解锁"（不提示、不进聊天栏）；
         // 已经拿到"一次许可"的话，这一次凤凰天驱会在落地后追加秘奥义（许可是消耗品，用掉即消失）。
+        // 测试开关（{@link #MYSTIC_TEST_MODE}）打开时这一段全部绕过，每次都当"已获许可"处理。
         int uses = tag.getInt(USES_KEY) + 1;
         tag.putInt(USES_KEY, uses);
         if (uses > MYSTIC_UNLOCK_USES && !tag.getBoolean(MYSTIC_READY_KEY)) {
             tag.putBoolean(MYSTIC_READY_KEY, true);
         }
-        boolean pending = tag.getBoolean(MYSTIC_ARMED_KEY);
+        boolean pending = MYSTIC_TEST_MODE || tag.getBoolean(MYSTIC_ARMED_KEY);
         tag.putBoolean(MYSTIC_PENDING_KEY, pending);
         tag.remove(MYSTIC_ARMED_KEY);
         int mysticTicks = pending ? MYSTIC_DASH_TICKS + MYSTIC_BLASTS * MYSTIC_BLAST_INTERVAL : 0;
@@ -360,7 +400,10 @@ public final class GolemPhoenixHandler {
                 pin(golem, pos.x, pos.y, pos.z);
                 faceTowards(golem, new Vec3(land.x - pos.x, 0, land.z - pos.z));
                 if (golem.level() instanceof ServerLevel server) {
-                    flameTrail(server, golem, 7);
+                    flameTrail(server, golem, 7, true);
+                    // 火环：每 tick 一圈，按 tick 的奇偶错开半格，前后两圈不会叠成一个规整的"切片"。
+                    flameRing(server, golem, land.subtract(from),
+                            now % 2 == 0 ? 0.0 : Math.PI / DIVE_RING_SEGMENTS);
                 }
                 if (progress >= 1.0) {
                     impact(golem, tag, new Vec3(originX - nx * RISE_BACKWARD, apexY,
@@ -391,15 +434,13 @@ public final class GolemPhoenixHandler {
                 }
             }
             case PHASE_MYSTIC_DASH -> {
-                // 秘奥义·追冲：贴地向前冲，两侧拖着一路火焰。
+                // 秘奥义·追冲：贴地向前冲。这一段现在没有任何专属粒子（原先两侧拖着的火墙已删），
+                // 只靠位移本身和随后的 5 连爆交代"冲过去了"。
                 Vec3 from = mysticFrom(tag);
                 Vec3 to = mysticTo(tag);
                 Vec3 pos = from.lerp(to, easeOut(progress));
                 pin(golem, pos.x, pos.y, pos.z);
                 faceTowards(golem, to.subtract(from));
-                if (golem.level() instanceof ServerLevel server) {
-                    mysticTrail(server, golem, pos, nx, nz);
-                }
                 if (progress >= 1.0) {
                     tag.putInt(MYSTIC_BLAST_DONE_KEY, 0);
                     enterPhase(golem, tag, PHASE_MYSTIC_BLAST,
@@ -427,7 +468,13 @@ public final class GolemPhoenixHandler {
         }
     }
 
-    /** 上升段的火焰小伤害：0.1 × 攻击力，清掉受击无敌帧后结算，所以"无视无敌"。 */
+    /**
+     * 上升段的火焰小伤害：0.1 × 攻击力。
+     * <p>
+     * <b>这里不清无敌帧</b>：{@code phoenix_fire} 已经在 {@code bypasses_cooldown} 白名单里，
+     * 帧判定对它本来就是跳过的；再清一次属于冗余，而且会把"上一击记录"（{@code lastHurt}）
+     * 改写成这段小伤害、顺带把帧刷回 20 —— 白给同 tick 的其它来源开门。靠 tag 就够了。
+     */
     private static void riseDamage(AbstractGolemEntity<?, ?> golem, CompoundTag tag) {
         double base = golem.getAttributeValue(Attributes.ATTACK_DAMAGE);
         double damage = base * RISE_DAMAGE_RATIO;
@@ -435,7 +482,6 @@ public final class GolemPhoenixHandler {
             return;
         }
         for (LivingEntity target : hitBox(golem, golem.position(), tag)) {
-            target.invulnerableTime = 0;
             target.hurt(phoenixFireSource(golem), (float) damage);
             target.setSecondsOnFire(RISE_FIRE_SECONDS);
         }
@@ -504,6 +550,10 @@ public final class GolemPhoenixHandler {
         return targets;
     }
 
+    private static void flameTrail(ServerLevel server, AbstractGolemEntity<?, ?> golem, int count) {
+        flameTrail(server, golem, count, false);
+    }
+
     /**
      * 凤凰全流程的火焰尾迹：火焰与烟尘<b>向上飘、不受重力</b>（参考岩浆湖那种从底下翻上来的感觉）。
      * <p>
@@ -512,32 +562,85 @@ public final class GolemPhoenixHandler {
      *   <li>{@code count = 0} 时，后三个偏移量是<b>速度矢量</b>，末尾的 {@code speed} 再整体缩放 ——
      *       这是唯一能给粒子一个定向初速度的写法（本家 SonicCannon 与秘术连爆都用它）。这里 vy 取
      *       正值，所以火苗是往上窜的、不会被重力拽下去。</li>
-     *   <li>{@code count > 0} 时，三个偏移量变成<b>位置散布半径</b>（速度反而是随机的）。旧实现把
+     *   <li>{@code count > 0} 时，三个偏移量变成<b>位置散布的标准差</b>（高斯分布，不是均匀撒点，
+     *       实测约 ±1σ 就占满了；速度则是每轴各一个 {@code speed × 高斯} 的随机量）。旧实现把
      *       垂直散布写成 {@code bbHeight * 0.4}，龙傀儡就是 ±0.88 格，再叠加多个 tick，于是成了
      *       一根竖着的黑烟柱 —— 现在压到 {@link UP_DRAFT_SPREAD_Y} 这一档。</li>
      *   <li>烟（CLOUD / SMOKE）只给很小的散布，对应"别让黑色的烟飘太高"。</li>
      * </ul>
+     *
+     * @param dive 俯冲段。为 true 且 {@link #DIVE_RING_REPLACES_CLOUD} 时不再发那朵白云 ——
+     *             白云原本是"上升/悬停被人托着"的观感，俯冲改成朝四周喷的火环之后就不再需要它。
      */
-    private static void flameTrail(ServerLevel server, AbstractGolemEntity<?, ?> golem, int count) {
+    private static void flameTrail(ServerLevel server, AbstractGolemEntity<?, ?> golem, int count,
+                                   boolean dive) {
         Vec3 pos = golem.position();
         double half = golem.getBbWidth() * 0.5;
+        // 贴身这层走 SMALL_FLAME：它是全流程里最密的一层（3 层高度 × 每 tick），大尺寸只会糊成
+        // "全身带火"、把飞出去的那圈压住；半尺寸后同面积堆得更多，读起来是火雾而不是一个个火苗。
         for (int i = 0; i < PHOENIX_TRAIL_RINGS; i++) {
             double h = golem.getBbHeight() * (0.2 + 0.3 * i);
             double spread = half * (0.6 + 0.35 * i);
-            server.sendParticles(ParticleTypes.FLAME,
+            server.sendParticles(ParticleTypes.SMALL_FLAME,
                     pos.x, pos.y + h, pos.z,
                     0,
                     0.0, UP_DRAFT_FLAME, 0.0,
                     1.0);
-            server.sendParticles(ParticleTypes.FLAME,
+            server.sendParticles(ParticleTypes.SMALL_FLAME,
                     pos.x, pos.y + h, pos.z,
                     Math.max(1, count / PHOENIX_TRAIL_RINGS),
                     spread, UP_DRAFT_SPREAD_Y, spread,
                     0.02);
         }
         // 烟往上走但高度压住：位置散布很小，只靠向上的初速度。
-        server.sendParticles(ParticleTypes.CLOUD, pos.x, pos.y + golem.getBbHeight() * 0.25, pos.z,
-                2, half * 0.25, UP_DRAFT_SPREAD_Y, half * 0.25, 0.01);
+        if (!(dive && DIVE_RING_REPLACES_CLOUD)) {
+            server.sendParticles(ParticleTypes.CLOUD, pos.x, pos.y + golem.getBbHeight() * 0.25, pos.z,
+                    2, half * 0.25, UP_DRAFT_SPREAD_Y, half * 0.25, 0.01);
+        }
+    }
+
+    /**
+     * 俯冲火环：在<b>垂直于下坠方向</b>的那个平面里朝四周喷一圈火焰（像火箭尾焰的激波盘），
+     * 每 tick 一圈，5 tick 连起来就是一串追着人往下压的火环。
+     * <p>
+     * 为什么必须一股一股地发：{@code count > 0} 时三个偏移量只是<b>位置散布</b>、速度是随机的，
+     * 永远做不出"朝某个方向喷"；只有 {@code count = 0} 时它们才是速度矢量。秘奥义的土石喷发
+     * （见 {@code mysticBlast}）用的是同一招。
+     * <p>
+     * 速度<b>整段写进矢量分量</b>、末尾 {@code speed} 固定传 1.0：客户端在 count = 0 这条路上算的
+     * 是 {@code speed × 矢量}（1.20.1 {@code ClientPacketListener#handleParticleEvent}），传 1.0
+     * 就等于"矢量即速度"，调参时只动 {@link #DIVE_RING_SPEED} 一个数，不用回头算乘积。
+     *
+     * @param dir         下坠方向（不必事先归一化）
+     * @param angleOffset 起手角偏移（弧度）：相邻两 tick 错开半格，火环看起来才是流动的，
+     *                    否则每 tick 的 12 股会叠成同一个规整的切片
+     */
+    private static void flameRing(ServerLevel server, AbstractGolemEntity<?, ?> golem, Vec3 dir,
+                                  double angleOffset) {
+        Vec3 axis = dir.normalize();
+        // 先拿世界上方向叉出第一个基向量，再叉出第二个：两者张成的就是与 axis 垂直的那个平面。
+        // 下坠几乎竖直时 axis 与 (0,1,0) 平行，换 (1,0,0) 兜底，避免叉积退化成零向量。
+        Vec3 u = axis.cross(new Vec3(0.0, 1.0, 0.0));
+        if (u.lengthSqr() < 1.0E-6) {
+            u = axis.cross(new Vec3(1.0, 0.0, 0.0));
+        }
+        u = u.normalize();
+        Vec3 v = axis.cross(u).normalize();
+        Vec3 center = golem.position().add(0.0, golem.getBbHeight() * 0.5, 0.0);
+        double radius = Math.max(0.4, golem.getBbWidth() * 0.5 * DIVE_RING_RADIUS);
+        for (int i = 0; i < DIVE_RING_SEGMENTS; i++) {
+            double angle = angleOffset + Math.PI * 2.0 * i / DIVE_RING_SEGMENTS;
+            Vec3 radial = u.scale(Math.cos(angle)).add(v.scale(Math.sin(angle)));
+            Vec3 at = center.add(radial.scale(radius));
+            Vec3 vel = radial.scale(DIVE_RING_SPEED).add(axis.scale(DIVE_RING_FORWARD));
+            // 火环与贴身尾迹对调：这一圈是往外飞的、颗粒之间会拉开距离，整尺寸的 FLAME 在远处
+            // 才读得出来（半尺寸在这时候会碎成看不清的小点）。代价是"一颗颗图标"的颗粒感更明显 ——
+            // 想收掉那个感觉得靠寿命/滑行距离，跟尺寸无关。
+            // 之前掺的四分之一 LAVA 仍然不加：它 friction 0.999、寿命最长 80 tick，是这批里飞得
+            // 最远的一档。想要回那点岩浆层次，加回来即可。
+            server.sendParticles(ParticleTypes.FLAME, at.x, at.y, at.z, 0,
+                    vel.x, vel.y, vel.z, 1.0);
+        }
     }
 
     private static void pin(AbstractGolemEntity<?, ?> golem, double x, double y, double z) {
@@ -670,6 +773,12 @@ public final class GolemPhoenixHandler {
     private static DamageSource phoenixImpactSource(AbstractGolemEntity<?, ?> golem) {
         var registry = golem.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE);
         return new DamageSource(registry.getHolderOrThrow(PHOENIX_IMPACT), golem);
+    }
+
+    /** 秘奥义 5 连爆的伤害源（伤害类型 mystic_blast）。保底只看这个类型。 */
+    private static DamageSource mysticBlastSource(AbstractGolemEntity<?, ?> golem) {
+        var registry = golem.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE);
+        return new DamageSource(registry.getHolderOrThrow(MYSTIC_BLAST), golem);
     }
 
     /**
@@ -813,40 +922,14 @@ public final class GolemPhoenixHandler {
                 tag.getDouble(MYSTIC_TO_Z_KEY));
     }
 
-    /** 追冲时两侧的火墙：拖着火尾，还一路犁起泥石和烟。 */
-    private static void mysticTrail(ServerLevel server, AbstractGolemEntity<?, ?> golem,
-                                    Vec3 pos, double nx, double nz) {
-        double px = -nz;
-        double pz = nx;
-        double half = Math.max(0.7, golem.getBbWidth() * 0.5 + HIT_PADDING);
-        for (double side : new double[]{-1.0, 1.0}) {
-            double x = pos.x + px * half * side;
-            double z = pos.z + pz * half * side;
-            server.sendParticles(ParticleTypes.FLAME, x, pos.y + 0.4, z,
-                    4, 0.18, 0.28, 0.18, 0.03);
-            // count = 0 时，后面的三个偏移量就是速度，于是火焰看上去被带着往前飘。
-            server.sendParticles(ParticleTypes.FLAME, x, pos.y + 0.5, z, 0,
-                    nx * 0.45, 0.06, nz * 0.45, 1.0);
-            // 上升的火星
-            server.sendParticles(ParticleTypes.LAVA, x, pos.y + 0.25, z, 0,
-                    px * side * 0.06, 0.28, pz * side * 0.06, 1.0);
-            // 被犁起来、往外上方飞的泥石
-            server.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
-                            side < 0 ? Blocks.DIRT.defaultBlockState()
-                                    : Blocks.COBBLESTONE.defaultBlockState()),
-                    x, pos.y + 0.15, z, 0,
-                    px * side * 0.28, 0.4, pz * side * 0.28, 1.0);
-            // 尾后拖着的烟
-            server.sendParticles(ParticleTypes.SMOKE, x - nx * 0.5, pos.y + 0.3, z - nz * 0.5,
-                    0, -nx * 0.12, 0.05, -nz * 0.12, 1.0);
-        }
-    }
-
     /**
      * 秘奥义的一爆：伤害 = 落地爆 × {@link #MYSTIC_DAMAGE_MULTIPLIER} ÷ {@link #MYSTIC_BLASTS}
      * （旧行为是"总和等于一次落地爆"，每爆只有 1/5，被护甲/伤害上限逐次砍掉后总量会明显偏低），
      * 判定半径限制在走廊半宽以内（"范围不超过左右两方宽度"），特效换成向上喷的泥土/碎石/火焰。
      * 引爆前清一次受击无敌帧，保证 5 连爆各打各的。
+     * <p>
+     * 伤害类型是<b>单独的 {@code mystic_blast}</b>（不是落地爆的 {@code phoenix_impact}）：
+     * 只有它吃"END 层保底 0.5"，见 {@code MysticBlastFloorListener}。
      */
     private static void mysticBlast(AbstractGolemEntity<?, ?> golem, CompoundTag tag,
                                     Vec3 pos, int index) {
@@ -856,78 +939,34 @@ public final class GolemPhoenixHandler {
         double half = Math.max(0.7, golem.getBbWidth() * 0.5 + HIT_PADDING);
         if (damage > 0) {
             for (LivingEntity target : hitBox(golem, pos, tag, half)) {
-                target.invulnerableTime = 0;
-                target.hurt(phoenixImpactSource(golem), (float) damage);
+                // 不清无敌帧：mystic_blast 已在 bypasses_cooldown 白名单里，帧判定对它本来就是跳过的；
+                // 五连爆的节流由本方法自己的排程（index / 发射时间点）承担，这就是"自己的无敌帧"。
+                // 这是 L2 作者给的标准写法：类型持 bypass_cooldown + 自己维护节流，别去写目标的共享字段。
+                target.hurt(mysticBlastSource(golem), (float) damage);
                 target.setSecondsOnFire(IMPACT_FIRE_SECONDS);
             }
         }
         if (!(golem.level() instanceof ServerLevel server)) {
             return;
         }
-        // 表现改为"土石向上喷发 + 地面烟尘四散 + 火柱"，不再冒原版爆炸白圈。
-        // 关键：sendParticles 只有在 count = 0 时后三个偏移量才是"速度"，count > 0 只是在
-        // 一个体积里随机散布（速度也是随机的），所以想看到喷发就必须一股一股地定向发。
-        int clods = 12;
-        for (int i = 0; i < clods; i++) {
-            double angle = Math.PI * 2.0 * i / clods;
-            double radius = half * 0.35;
-            double vx = Math.cos(angle) * radius * 0.55;
-            double vz = Math.sin(angle) * radius * 0.55;
-            double vy = 2.0 + (i % 3) * 0.14;
-            server.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
-                            i % 3 == 0 ? Blocks.COBBLESTONE.defaultBlockState()
-                                    : Blocks.DIRT.defaultBlockState()),
-                    pos.x + Math.cos(angle) * radius, pos.y + 0.2, pos.z + Math.sin(angle) * radius,
-                    0, vx, vy, vz, 1.0);
-        }
-        // 第二层喷发：外圈、更快，泥土/圆石/砾石混着往上掀。
-        int outerClods = 10;
-        for (int i = 0; i < outerClods; i++) {
-            double angle = Math.PI * 2.0 * i / outerClods;
-            double radius = half * 0.7;
-            double vx = Math.cos(angle) * radius * 0.8;
-            double vz = Math.sin(angle) * radius * 0.8;
-            double vy = 2.5 + (i % 2) * 0.5;
-            var debris = i % 3 == 0 ? Blocks.COBBLESTONE.defaultBlockState()
-                    : i % 3 == 1 ? Blocks.GRAVEL.defaultBlockState()
-                    : Blocks.DIRT.defaultBlockState();
-            server.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, debris),
-                    pos.x + Math.cos(angle) * radius, pos.y + 0.2, pos.z + Math.sin(angle) * radius,
-                    0, vx, vy, vz, 1.0);
-        }
-        // 地面烟尘四散：一圈 12 个方向，烟 + 尘土 + 大烟 + 云，一路往外推。
-        int dustDirs = 12;
-        double push = Math.max(0.35, half * 0.6);
-        for (int i = 0; i < dustDirs; i++) {
-            double angle = Math.PI * 2.0 * i / dustDirs;
-            double dx = Math.cos(angle) * push;
-            double dz = Math.sin(angle) * push;
-            server.sendParticles(ParticleTypes.SMOKE, pos.x, pos.y + 0.15, pos.z, 0, dx, 0.05, dz, 1.0);
-            if (i % 2 == 0) {
-                server.sendParticles(new BlockParticleOption(ParticleTypes.FALLING_DUST,
-                                Blocks.DIRT.defaultBlockState()),
-                        pos.x, pos.y + 0.2, pos.z, 0, dx * 1.15, 0.08, dz * 1.15, 1.0);
-            }
-            if (i % 3 == 0) {
-                server.sendParticles(ParticleTypes.LARGE_SMOKE, pos.x, pos.y + 0.25, pos.z,
-                        0, dx * 0.9, 0.1, dz * 0.9, 0.95);
-            }
-            if (i % 4 == 0) {
-                server.sendParticles(ParticleTypes.CLOUD, pos.x, pos.y + 0.3, pos.z,
-                        0, dx * 0.8, 0.14, dz * 0.8, 0.9);
-            }
-        }
-        // 火花爆散：火焰 + 岩浆点子 + 落石碎屑。
+        // 绝炎冲现在只剩"光效"这一段（碎屑烟尘、追冲火墙都已删）：火花爆散 + 火柱 + 闪白。
+        // 音效与特效开关无关，保持常开 —— 它同时是"这一爆确实打出去了"的提示。
+        burstLight(server, pos, half);
+        server.playSound(null, pos.x, pos.y, pos.z, SoundEvents.GENERIC_EXPLODE,
+                SoundSource.HOSTILE, 0.8F, 0.9F + index * 0.06F);
+    }
+
+    /**
+     * 绝炎冲 5 连爆的<b>发光</b>粒子：火花爆散（FLAME + LAVA）、六股火柱、闪白。
+     * 现在这是绝炎冲唯一保留的特效段 —— 原先的碎屑烟尘（{@code burstDebris}）与追冲两侧火墙
+     * （{@code mysticTrail}）已按需求删除。
+     */
+    private static void burstLight(ServerLevel server, Vec3 pos, double half) {
+        // 火花爆散。
         server.sendParticles(ParticleTypes.FLAME, pos.x, pos.y + 0.3, pos.z,
                 28, half * 0.5, 0.45, half * 0.5, 0.08);
         server.sendParticles(ParticleTypes.LAVA, pos.x, pos.y + 0.25, pos.z,
                 12, half * 0.4, 0.3, half * 0.4, 0.05);
-        server.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
-                        Blocks.DIRT.defaultBlockState()),
-                pos.x, pos.y + 0.2, pos.z, 6, half * 0.5, 0.25, half * 0.5, 1.0);
-        server.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK,
-                        Blocks.COBBLESTONE.defaultBlockState()),
-                pos.x, pos.y + 0.2, pos.z, 4, half * 0.4, 0.25, half * 0.4, 0.9);
         // 火柱：六股错开向上，撑住"炸开的那一下"。
         double[][] columns = {
                 {0.0, 1.15}, {0.75, 1.5}, {1.5, 1.05},
@@ -943,22 +982,21 @@ public final class GolemPhoenixHandler {
             server.sendParticles(ParticleTypes.FLAME, pos.x + ox, pos.y + 0.45, pos.z + oz,
                     0, ox * 0.3, speed * 0.8, oz * 0.3, 1.15);
         }
-        // 闪光 + 余烬：给一个亮起来的瞬间，再留一圈飘散的余烟。
+        // 闪白：给一个亮起来的瞬间。
         server.sendParticles(ParticleTypes.FLASH, pos.x, pos.y + 0.6, pos.z, 1, 0, 0, 0, 0);
-        server.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, pos.x, pos.y + 0.3, pos.z,
-                4, half * 0.3, 0.15, half * 0.3, 0.02);
-        server.sendParticles(ParticleTypes.WHITE_ASH, pos.x, pos.y + 0.5, pos.z,
-                10, half * 0.5, 0.4, half * 0.5, 0.02);
-        server.playSound(null, pos.x, pos.y, pos.z, SoundEvents.GENERIC_EXPLODE,
-                SoundSource.HOSTILE, 0.8F, 0.9F + index * 0.06F);
     }
 
+    /**
+     * 本模组自己的伤害类型名单（"这不是傀儡的普通攻击"的判据）。新增伤害类型时必须同步这里，
+     * 否则 {@link #onGolemAttackWhilePerforming} 会把演出期间自己的伤害当成普通攻击取消掉。
+     */
     private static boolean isOwnDamage(DamageSource source) {
         String id = source.getMsgId();
         return "key_sword_magic".equals(id) || "lion_slash".equals(id)
                 || "sword_rain".equals(id) || "stance_magic".equals(id)
                 || "flame_magic".equals(id) || "phoenix_fire".equals(id)
-                || "phoenix_impact".equals(id) || "genmu_zero".equals(id);
+                || "phoenix_impact".equals(id) || "mystic_blast".equals(id)
+                || "genmu_zero".equals(id);
     }
 
 }

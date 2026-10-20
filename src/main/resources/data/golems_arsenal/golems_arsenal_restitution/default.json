@@ -1,0 +1,6 @@
+{
+  "values": [
+    { "item": "golems_arsenal:key_sword", "value": 0.15, "max": 0.30 },
+    { "item": "golems_arsenal:golem_energy_katana", "value": 0.10 }
+  ]
+}

@@ -17,6 +17,8 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue ENERGY_KATANA_CHAIN_RADIUS;
     public static final ForgeConfigSpec.DoubleValue ENERGY_KATANA_CHAIN_DAMAGE;
     public static final ForgeConfigSpec.IntValue ENERGY_KATANA_CHAIN_WEAKNESS_DURATION;
+    public static final ForgeConfigSpec.IntValue ENERGY_KATANA_SHRED_DURATION;
+    public static final ForgeConfigSpec.IntValue ENERGY_KATANA_SHRED_MAX_STACKS;
     public static final ForgeConfigSpec.IntValue TRACKING_BOW_ATTACK_COST;
     public static final ForgeConfigSpec.DoubleValue TRACKING_BOW_PROJECTILE_DAMAGE;
     public static final ForgeConfigSpec.IntValue TRACKING_BOW_CAPACITY;
@@ -36,9 +38,18 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue TECH_DAMAGE_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue TECH_PROJECTILE_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue TECH_CHARGE_PIERCE_PER_LEVEL;
+    // ===== 合金能源链（步长制）=====
+    public static final ForgeConfigSpec.IntValue ENERGY_ALLOY_STEP;
+    // ===== 辐射发电 / 屏蔽（步长制）=====
+    public static final ForgeConfigSpec.IntValue RADIATION_FE_PER_SEVERITY;
+    public static final ForgeConfigSpec.IntValue RADIATION_STEP;
+    public static final ForgeConfigSpec.DoubleValue RADIATION_MIN_DOSE;
+    public static final ForgeConfigSpec.DoubleValue RADIATION_MAX_SEVERITY;
     public static final ForgeConfigSpec.DoubleValue BACKUP_ENERGY_SHIELD_PER_LEVEL;
+    public static final ForgeConfigSpec.DoubleValue BACKUP_ENERGY_SHIELD_RATIO;
     public static final ForgeConfigSpec.IntValue BACKUP_ENERGY_RECHARGE_INTERVAL;
     public static final ForgeConfigSpec.DoubleValue BACKUP_ENERGY_RECHARGE_PER_LEVEL;
+    public static final ForgeConfigSpec.DoubleValue BACKUP_ENERGY_RECHARGE_RATIO;
     public static final ForgeConfigSpec.IntValue BACKUP_ENERGY_FE_PER_POINT;
     public static final ForgeConfigSpec.IntValue BACKUP_ENERGY_HURT_COOLDOWN;
     public static final ForgeConfigSpec.DoubleValue ENERGY_HAMMER_BIG_HIT_THRESHOLD;
@@ -75,8 +86,50 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue STANCE_MELEE_RATIO;
     public static final ForgeConfigSpec.DoubleValue STANCE_BOW_RATIO;
     public static final ForgeConfigSpec.DoubleValue STANCE_SUB_IFRAME_GAIN;
+    public static final ForgeConfigSpec.IntValue FLAME_FIST_HITS_LV1;
+    public static final ForgeConfigSpec.IntValue FLAME_FIST_HITS_LV2;
+    public static final ForgeConfigSpec.DoubleValue FLAME_FIST_RATIO;
+    public static final ForgeConfigSpec.IntValue FLAME_FIST_COOLDOWN;
+    public static final ForgeConfigSpec.IntValue FLAME_FIST_BRAND_REFRESH;
+    public static final ForgeConfigSpec.DoubleValue MEROR_AFTERGLOW_PER_STACK_LV1;
+    public static final ForgeConfigSpec.DoubleValue MEROR_AFTERGLOW_PER_STACK_LV2;
+    public static final ForgeConfigSpec.DoubleValue MEROR_AFTERGLOW_RESTITUTION_LV1;
+    public static final ForgeConfigSpec.DoubleValue MEROR_AFTERGLOW_RESTITUTION_LV2;
+    public static final ForgeConfigSpec.DoubleValue ATTRITION_STEP_LV1;
+    public static final ForgeConfigSpec.DoubleValue ATTRITION_STEP_LV2;
+    public static final ForgeConfigSpec.IntValue ATTRITION_EXPIRY_TICKS;
     public static final ForgeConfigSpec.DoubleValue GRAZE_RADIUS;
     public static final ForgeConfigSpec.IntValue GRAZE_SCAN_INTERVAL;
+    // ===== 天基激光（第 1 刀：光束本体）=====
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_ALTITUDE;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_RESIDUAL_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_HIT_RADIUS;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_LIFE;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_WIDTH;
+    // ===== 天基激光（第 2 刀：引导升级）=====
+    /** 破坏地形（负面代价）。我们自己挖，不用 Mekanism 的激光。 */
+    public static final ForgeConfigSpec.BooleanValue ORBITAL_BEAM_BREAK_BLOCKS;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_MAX_BLOCK_HARDNESS;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_BLOCK_HARDNESS_COST;
+    public static final ForgeConfigSpec.BooleanValue ORBITAL_BEAM_DROP_BLOCKS;
+    // ===== 火箭（天基平台的载具）=====
+    public static final ForgeConfigSpec.IntValue ROCKET_COUNTDOWN;
+    public static final ForgeConfigSpec.IntValue ROCKET_FUEL_CAPACITY;
+    public static final ForgeConfigSpec.IntValue ROCKET_FUEL_COST;
+    public static final ForgeConfigSpec.DoubleValue ROCKET_EXPLOSION_POWER;
+    public static final ForgeConfigSpec.BooleanValue ROCKET_EXPLOSION_FIRE;
+    /** 只在战斗时引导 + 只引导真实威胁。 */
+    public static final ForgeConfigSpec.BooleanValue ORBITAL_BEAM_COMBAT_ONLY;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COMBAT_MEMORY;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_GUIDANCE_STEP;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_GUIDANCE_RANGE;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_MIN_RANGE;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_SCAN_INTERVAL;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COOLDOWN;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_DAMAGE_PER_LEVEL;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COST_BASE;
+    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COST_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue GRAZE_MOVE_SPEED;
     public static final ForgeConfigSpec.DoubleValue GRAZE_MOVE_SPEED_THRESHOLD;
     public static final ForgeConfigSpec.DoubleValue GRAZE_MIN_PROJECTILE_SPEED;
@@ -111,8 +164,8 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue KEY_BLADE_ORBIT_RADIUS;
     public static final ForgeConfigSpec.IntValue KEY_BLADE_ORBIT_TICKS;
     public static final ForgeConfigSpec.DoubleValue KEY_BLADE_ORBIT_TRIGGER_RANGE;
-    public static final ForgeConfigSpec.IntValue PART_CRUSHER_MATERIAL_LOSS;
-    public static final ForgeConfigSpec.IntValue PART_SAWMILL_MATERIAL_LOSS;
+    public static final ForgeConfigSpec.IntValue PART_CRUSHER_YIELD_PERCENT;
+    public static final ForgeConfigSpec.IntValue PART_SAWMILL_YIELD_PERCENT;
     public static final ForgeConfigSpec.IntValue PART_SAWMILL_CLAY;
     // 古遗物联动
     public static final ForgeConfigSpec.DoubleValue PERFECTION_HEALTH_THRESHOLD;
@@ -128,12 +181,23 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue MAGE_REFLECT_PERCENT_MAX;
     public static final ForgeConfigSpec.DoubleValue EXECUTOR_DAMAGE_FACTOR;
     public static final ForgeConfigSpec.DoubleValue EXECUTOR_MAX_HEALTH_REDUCTION;
+    // 指令升级（Command）：只有这两个旋钮需要调
+    public static final ForgeConfigSpec.IntValue COMMAND_MAX_LEVEL;
+    public static final ForgeConfigSpec.IntValue COMMAND_COOLDOWN;
+
+    // 伤害诊断探针（只读，不修改任何伤害）
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_PROBE_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_PROBE_ONLY_GOLEM_ATTACKS;
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_PROBE_LOG_EVERY_HIT;
+    public static final ForgeConfigSpec.IntValue DAMAGE_PROBE_SUMMARY_EVERY;
+    public static final ForgeConfigSpec.IntValue DAMAGE_PROBE_INTERVAL;
+    public static final ForgeConfigSpec.IntValue DAMAGE_PROBE_MAX_HEARTBEATS;
     public static final ForgeConfigSpec SPEC;
 
     static {
         BUILDER.push("energy_katana");
         ENERGY_KATANA_ATTACK_COST = BUILDER.comment("FE consumed by each powered hit")
-                .defineInRange("attack_cost", 2_500, 0, Integer.MAX_VALUE);
+                .defineInRange("attack_cost", 2_000, 0, Integer.MAX_VALUE);
         ENERGY_KATANA_SPECIAL_DAMAGE = BUILDER.comment("Additional damage while the katana has enough FE")
                 .defineInRange("special_damage", 0.25, 0.0, 100.0);
         ENERGY_KATANA_CAPACITY = BUILDER.comment("Base FE capacity of the katana")
@@ -152,6 +216,10 @@ public final class Config {
                 .defineInRange("chain_damage", 5.0, 0.0, 1024.0);
         ENERGY_KATANA_CHAIN_WEAKNESS_DURATION = BUILDER.comment("Weakness duration (ticks) applied to chain targets")
                 .defineInRange("chain_weakness_duration", 100, 1, 72_000);
+        ENERGY_KATANA_SHRED_DURATION = BUILDER.comment("Armor-shred duration (ticks) applied to the target by a powered katana hit")
+                .defineInRange("shred_duration", 200, 1, 72_000);
+        ENERGY_KATANA_SHRED_MAX_STACKS = BUILDER.comment("Maximum armor-shred stacks; each stack strips the effect's per-level amount of vanilla armor points")
+                .defineInRange("shred_max_stacks", 5, 1, 20);
         BUILDER.pop();
 
         BUILDER.push("tracking_mechanical_bow");
@@ -176,13 +244,13 @@ public final class Config {
         BUILDER.pop();
 
         BUILDER.push("golem_energy_upgrade");
-        GOLEM_ENERGY_BASE_CAPACITY = BUILDER.comment("Base FE capacity granted by the energy upgrade")
-                .defineInRange("base_capacity", 100_000, 0, Integer.MAX_VALUE);
-        GOLEM_ENERGY_PER_LEVEL = BUILDER.comment("Additional FE capacity per upgrade level")
-                .defineInRange("capacity_per_level", 100_000, 0, Integer.MAX_VALUE);
+        GOLEM_ENERGY_BASE_CAPACITY = BUILDER.comment("Base FE capacity of the golem energy pool (the base tier of the alloy chain). The alloy tier multiplier is applied on top of this by energy_alloy_upgrade.step")
+                .defineInRange("base_capacity", 300_000, 0, Integer.MAX_VALUE);
+        GOLEM_ENERGY_PER_LEVEL = BUILDER.comment("LEGACY: extra FE capacity per level of the old 5-level energy upgrade. The base upgrade is level 1 now and the alloy chain carries the scaling, so this is 0 by default and only exists so old config files keep loading. Base capacity is base_capacity + this")
+                .defineInRange("capacity_per_level", 0, 0, Integer.MAX_VALUE);
         GOLEM_ENERGY_LIGHTNING = BUILDER.comment("FE restored when a golem is struck by lightning")
                 .defineInRange("lightning_charge", 50_000, 0, Integer.MAX_VALUE);
-        GOLEM_ENERGY_TRANSFER_RATE = BUILDER.comment("FE transferred per tick from a golem to each powered item")
+        GOLEM_ENERGY_TRANSFER_RATE = BUILDER.comment("FE transferred per charge pass from a golem to each powered item (one pass every 5 ticks). The alloy energy chain multiplies this together with the capacity, so raising the alloy step raises both")
                 .defineInRange("equipment_transfer_rate", 2_500, 0, Integer.MAX_VALUE);
         BUILDER.pop();
 
@@ -201,15 +269,69 @@ public final class Config {
                 .defineInRange("charge_pierce_per_level", 0.2, 0.0, 1.0);
         BUILDER.pop();
 
+        // ============================================================================
+        // 合金能源链（步长制）。
+        //
+        // 设计：基础电量升级（max 1 级）是链的根，占一个槽；三件合金能源升级是它的附属，
+        // **不占额外槽位**（consumesSlot()=false），各自往同一个 golem_energy 修饰符上
+        // 加 2/4/8 点等级。等级累加由 Modular Golems 的 GolemMaterial.collectModifiers 完成，
+        // 所以"装了几档"完全由一个整数表达：
+        //
+        //     总等级 L = 1 + 2(灌注) + 4(精英) + 8(终极)     满配 L = 15
+        //     合金加成 = max(0, L − 1) × step                 满配 = 14 × step
+        //     乘数     = 1 + 合金加成                          step=2 时 = 29
+        //
+        // 步长制的意义：这里**只有 step 一个旋钮**，容量与带宽共用它。
+        // 各档的"档位系数"是 2 的幂次常量（写在代码里），所以任意两档之差
+        // = step × 2^k > 0 与 step 无关 —— 无论玩家把 step 调成几，
+        // "终极 > 精英 > 灌注 > 基础"都不会倒挂。详见 docs/MEK-ENERGY-RADIATION-DESIGN.md §2。
+        // ============================================================================
+        BUILDER.push("energy_alloy_upgrade");
+        ENERGY_ALLOY_STEP = BUILDER.comment("Step size of the alloy energy chain: each installed alloy tier adds (tier coefficient x step), where the tier coefficients are the constants 1 / 2 / 4. The same step multiplies BOTH the golem's FE capacity and its charge throughput (equipment_transfer_rate). Default 2 gives x29 at full installation (step=1 -> x15, step=4 -> x57). Raising it keeps the tier ordering intact by construction")
+                .defineInRange("step", 2, 1, 64);
+        BUILDER.pop();
+
+        // ============================================================================
+        // 辐射发电 / 辐射屏蔽（步长制）。
+        //
+        // 两条升级共用一条曲线，这是刻意的：屏蔽值越高，发电机出力越低。
+        //
+        //     加权      = 1 + (本档系数 − 1) × step
+        //     发电倍率  = 加权
+        //     屏蔽值    = clamp(加权 / shield_denominator, 0, 1)
+        //
+        // 档位系数是常量（发电 1/2/4，屏蔽 1/3/7）—— 见 RadiationUpgradeItems。
+        //
+        // 发电量为 0 需要两个条件同时成立，缺一不可：
+        //   ① 环境剂量低于 min_dose（干净环境的基线是 1.0e-7，实测自 DefaultRadiationEntity）
+        //   ② severity 公式在低剂量下自然趋近 0
+        // 默认 min_dose = 1.0e-4（约 0.1 mSv/h，盖革刻度的 LOW 档），
+        // 所以"野外打架"永远是 0，"站在自家核电站/废料库旁"才有收益。
+        // ============================================================================
+        BUILDER.push("radiation");
+        RADIATION_FE_PER_SEVERITY = BUILDER.comment("FE per tick generated at severity = 1.0 by the BASIC radiation generator tier. Higher tiers multiply this by (1 + (tier coefficient - 1) x step). 1 FE = 2.5 J, so the Mekanism equivalent is 2.5x this number")
+                .defineInRange("fe_per_severity", 20, 0, 100_000);
+        RADIATION_STEP = BUILDER.comment("Step size of the radiation generator chain: each tier adds (tier coefficient x step) to the multiplier, where the coefficients are the constants 1 / 2 / 4. Default 3 gives multipliers 4 / 7 / 13. Raising this makes the curve steeper")
+                .defineInRange("step", 3, 1, 64);
+        RADIATION_MIN_DOSE = BUILDER.comment("Environmental dose (Sv/h) below which the generator produces nothing at all. Clean air sits at the Mekanism baseline 1.0e-7, so any value well above that keeps ordinary battlefields at zero output. Lower it to make weak radiation fields usable")
+                .defineInRange("min_dose", 1.0E-4, 0.0, 1.0E6);
+        RADIATION_MAX_SEVERITY = BUILDER.comment("Clamp on the severity used for generation. severity = clamp((log10(dose) + 6) / 7, 0, 1) by default; lowering this caps the income in extreme fields (a meltdown site sits around 1.0)")
+                .defineInRange("max_severity", 1.0, 0.0, 1.0);
+        BUILDER.pop();
+
         BUILDER.push("backup_energy_upgrade");
-        BACKUP_ENERGY_SHIELD_PER_LEVEL = BUILDER.comment("Max shield points per upgrade level (2 points = 1 heart)")
+        BACKUP_ENERGY_SHIELD_PER_LEVEL = BUILDER.comment("LEGACY: max shield points per upgrade level. Superseded by shield_ratio below (kept so old configs still load)")
                 .defineInRange("shield_per_level", 20.0, 1.0, 10000.0);
+        BACKUP_ENERGY_SHIELD_RATIO = BUILDER.comment("Max shield as a fraction of the golem's max health (0.20 = 20%)")
+                .defineInRange("shield_ratio", 0.20, 0.01, 10.0);
         BACKUP_ENERGY_RECHARGE_INTERVAL = BUILDER.comment("Ticks between shield recharges (fixed 2s = 40 ticks)")
                 .defineInRange("recharge_interval", 40, 1, 72000);
-        BACKUP_ENERGY_RECHARGE_PER_LEVEL = BUILDER.comment("Shield points restored per recharge interval per level")
+        BACKUP_ENERGY_RECHARGE_PER_LEVEL = BUILDER.comment("LEGACY: shield points restored per interval per level. Superseded by recharge_ratio below")
                 .defineInRange("recharge_per_level", 5.0, 0.1, 10000.0);
+        BACKUP_ENERGY_RECHARGE_RATIO = BUILDER.comment("Shield restored per recharge interval, as a fraction of the golem's max health (0.05 = 5% every 2s)")
+                .defineInRange("recharge_ratio", 0.05, 0.001, 10.0);
         BACKUP_ENERGY_FE_PER_POINT = BUILDER.comment("FE consumed from the golem per shield point restored")
-                .defineInRange("fe_per_point", 50, 1, Integer.MAX_VALUE);
+                .defineInRange("fe_per_point", 25, 1, Integer.MAX_VALUE);
         BACKUP_ENERGY_HURT_COOLDOWN = BUILDER.comment("Ticks after taking damage during which the shield stops recharging (damage interrupts recharge)")
                 .defineInRange("hurt_cooldown", 100, 0, 72000);
         BUILDER.pop();
@@ -286,6 +408,30 @@ public final class Config {
                 .defineInRange("stance_bow_ratio", 6.0, 0.0, 1000.0);
         STANCE_SUB_IFRAME_GAIN = BUILDER.comment("Stance gauge gained each time an attack is absorbed by the golem's invulnerability frames (stance sub-upgrade); 100 = one full stack")
                 .defineInRange("stance_sub_iframe_gain", 100.0, 0.0, 10000.0);
+        FLAME_FIST_HITS_LV1 = BUILDER.comment("Flame fist (炎拳): extra hits dealt on a melee hit against a target afflicted with Cataclysm's Blazing Brand, at level 1")
+                .defineInRange("flame_fist_hits_lv1", 2, 0, 16);
+        FLAME_FIST_HITS_LV2 = BUILDER.comment("Flame fist: extra hits at level 2")
+                .defineInRange("flame_fist_hits_lv2", 3, 0, 16);
+        FLAME_FIST_RATIO = BUILDER.comment("Flame fist: damage of each extra hit, as a fraction of the triggering melee hit damage")
+                .defineInRange("flame_fist_ratio", 0.35, 0.0, 10.0);
+        FLAME_FIST_COOLDOWN = BUILDER.comment("Flame fist: ticks between two flame fist volleys against the SAME target (per-target). Default 5 matches the combo stage interval so every stage of a three-hit combo can trigger; raise it to turn this into a rate limit")
+                .defineInRange("flame_fist_cooldown", 5, 0, 12000);
+        FLAME_FIST_BRAND_REFRESH = BUILDER.comment("Flame fist level 2: ticks the Blazing Brand is refreshed to on the final hit of a volley; 0 disables refreshing")
+                .defineInRange("flame_fist_brand_refresh", 60, 0, 12000);
+        MEROR_AFTERGLOW_PER_STACK_LV1 = BUILDER.comment("Meror afterglow level 1: melee damage bonus per stack of Meror Energy, as a fraction (max 5 stacks)")
+                .defineInRange("meror_afterglow_per_stack_lv1", 0.05, 0.0, 5.0);
+        MEROR_AFTERGLOW_PER_STACK_LV2 = BUILDER.comment("Meror afterglow level 2: damage bonus per Meror Energy stack")
+                .defineInRange("meror_afterglow_per_stack_lv2", 0.08, 0.0, 5.0);
+        MEROR_AFTERGLOW_RESTITUTION_LV1 = BUILDER.comment("Meror afterglow level 1: END restitution granted (added into golems_arsenal:end_restitution, still capped at 0.8)")
+                .defineInRange("meror_afterglow_restitution_lv1", 0.08, 0.0, 0.8);
+        MEROR_AFTERGLOW_RESTITUTION_LV2 = BUILDER.comment("Meror afterglow level 2: END restitution granted")
+                .defineInRange("meror_afterglow_restitution_lv2", 0.12, 0.0, 0.8);
+        ATTRITION_STEP_LV1 = BUILDER.comment("Attrition level 1: fraction of the remaining shortfall added to the next hit (0.4 = the bonus approaches the target's full attack power gradually). There is no maximum bonus constant: accumulation stops on its own once the damage taken reaches the golem's attack power")
+                .defineInRange("attrition_step_lv1", 0.4, 0.0, 1.0);
+        ATTRITION_STEP_LV2 = BUILDER.comment("Attrition level 2: shortfall fraction per hit")
+                .defineInRange("attrition_step_lv2", 0.4, 0.0, 1.0);
+        ATTRITION_EXPIRY_TICKS = BUILDER.comment("Attrition: ticks without hitting that specific enemy before its record is treated as expired (400 = 20 seconds, independent of switching targets)")
+                .defineInRange("attrition_expiry_ticks", 400, 1, 24000);
         GRAZE_RADIUS = BUILDER.comment("Radius in blocks around the golem inside which a passing projectile counts as a graze (graze upgrade)")
                 .defineInRange("graze_radius", 1.5, 0.25, 16.0);
         GRAZE_SCAN_INTERVAL = BUILDER.comment("Ticks between projectile scans per golem (graze upgrade)")
@@ -340,9 +486,9 @@ public final class Config {
         KEY_SWORD_ELEMENTAL_SPELL_POWER_RATIO = BUILDER.comment("Elemental spell power (fire/ice/lightning_spell_power, default 1.0) contribution to special attack damage; larger than spell_power_ratio by default")
                 .defineInRange("elemental_spell_power_ratio", 1.0, 0.0, 100.0);
         KEY_SWORD_EXECUTE_MAX_BONUS = BUILDER.comment("Maximum extra damage fraction of the execute effect, reached when the target is at execute_hp_ratio HP")
-                .defineInRange("execute_max_bonus", 0.5, 0.0, 100.0);
+                .defineInRange("execute_max_bonus", 2.0, 0.0, 100.0);
         KEY_SWORD_EXECUTE_HP_RATIO = BUILDER.comment("Target HP fraction at which the execute bonus reaches its maximum")
-                .defineInRange("execute_hp_ratio", 0.10, 0.01, 1.0);
+                .defineInRange("execute_hp_ratio", 0.20, 0.01, 1.0);
         BUILDER.pop();
 
         BUILDER.push("key_blade_spin");
@@ -367,10 +513,14 @@ public final class Config {
         BUILDER.pop();
 
         BUILDER.push("part_recycling");
-        PART_CRUSHER_MATERIAL_LOSS = BUILDER.comment("Materials lost when crushing a golem part (less loss than sawmilling)")
-                .defineInRange("crusher_material_loss", 1, 0, 64);
-        PART_SAWMILL_MATERIAL_LOSS = BUILDER.comment("Materials lost when sawmilling a golem part (more loss than crushing)")
-                .defineInRange("sawmill_material_loss", 2, 0, 64);
+        PART_CRUSHER_YIELD_PERCENT = BUILDER
+                .comment("Percent of a golem part's crafting material recovered by the Mekanism crusher (rounded UP)",
+                        "50 = half. Rounding: crusher rounds up, sawmill rounds down.")
+                .defineInRange("crusher_yield_percent", 50, 0, 100);
+        PART_SAWMILL_YIELD_PERCENT = BUILDER
+                .comment("Percent of a golem part's crafting material recovered by the Mekanism sawmill (rounded DOWN)",
+                        "50 = half. Sawmilling gives up to 1 less than crushing, but also yields clay.")
+                .defineInRange("sawmill_yield_percent", 50, 0, 100);
         PART_SAWMILL_CLAY = BUILDER.comment("Clay balls produced as a byproduct when sawmilling a golem part (the golem template recipe uses 4 clay)")
                 .defineInRange("sawmill_clay", 4, 0, 64);
         BUILDER.pop();
@@ -406,6 +556,144 @@ public final class Config {
                 .defineInRange("executor_damage_factor", 0.30, 0.0, 100.0);
         EXECUTOR_MAX_HEALTH_REDUCTION = BUILDER.comment("Executor synergy: permanent max health reduction taken as the cost of the bonus")
                 .defineInRange("executor_max_health_reduction", 0.10, 0.0, 1.0);
+        BUILDER.pop();
+
+        // ============================================================================
+        // 指令升级（Command）。
+        //
+        // 触发：命中时若不在冷却中，从九个效果里抽 N 个（N = 等级，被 max_level 夹住）并全部获得。
+        // 效果带时长，到期消失，需要重新命中才能再抽。
+        //
+        // 这里<b>只留两个旋钮</b>：等级上限、重抽冷却。
+        // 九个效果的强度是设计值，写在 CommandEffects 的 STR_* 常量里；
+        // 时长跟随等级，写在 CommandEffects.durationTicks 里。
+        // 把它们做成配置项只会让配置文件长出十七行只影响内部平衡的东西，
+        // 反而把真正需要调的这两个淹没掉。
+        //
+        // 效果本身提炼自已删除的「军械手套」九个武器格。
+        // ============================================================================
+        BUILDER.push("command");
+        COMMAND_MAX_LEVEL = BUILDER.comment("Maximum level (1..9). Each level draws one more effect per trigger, so 9 = the whole pool. NOTE: Modular Golems ADDS UP the levels of stacked upgrades, so three level-1 items reach level 3 - this cap is what stops that from going past your intent")
+                .defineInRange("max_level", 3, 1, 9);
+        COMMAND_COOLDOWN = BUILDER.comment("Cooldown in ticks between two draws. 200 = 10 seconds. Effects already granted keep running through the cooldown - this only limits how often you can re-draw. Duration itself follows the level: 100 ticks at level 1, +60 per extra level")
+                .defineInRange("cooldown", 200, 0, 72_000);
+        BUILDER.pop();
+
+        BUILDER.push("damage_probe");
+        DAMAGE_PROBE_ENABLED = BUILDER.comment("Read-only damage diagnostic. It never changes any damage; it only measures how much of a hit survived the target's reductions and prints a summary. Safe to leave on, but it does keep a small per-target-type tally")
+                .define("enabled", true);
+        DAMAGE_PROBE_ONLY_GOLEM_ATTACKS = BUILDER.comment("Only record hits whose attacker is a modulargolems golem. Turn off to measure everything, which is much noisier")
+                .define("only_golem_attacks", true);
+        DAMAGE_PROBE_LOG_EVERY_HIT = BUILDER.comment("Log every recorded hit individually. Very spammy; the summary below is usually what you want")
+                .define("log_every_hit", false);
+        DAMAGE_PROBE_SUMMARY_EVERY = BUILDER.comment("Print the running summary after this many recorded hits, then reset the tally. Kept low on purpose: a high value makes the probe look dead when nothing is being recorded")
+                .defineInRange("summary_every", 25, 1, 1_000_000);
+        DAMAGE_PROBE_INTERVAL = BUILDER.comment("Also print the summary at least this often (ticks) even when the hit count above is not reached. 600 = every 30 seconds")
+                .defineInRange("interval", 600, 20, 72_000);
+        DAMAGE_PROBE_MAX_HEARTBEATS = BUILDER.comment("How many consecutive empty intervals to announce before going quiet. This is what tells you the probe is alive but seeing no hits; 0 disables the heartbeat")
+                .defineInRange("max_heartbeats", 20, 0, 1_000_000);
+        BUILDER.pop();
+
+        // ============================================================================
+        // 天基激光（第 1 刀：光束本体 + 伤害）。
+        //
+        // 这一刀刻意不依赖任何"在轨状态"：调试命令直接指定目标就能开火，用来先验证
+        // 渲染、伤害、击杀归属这三件最容易做错的事。引导升级与发射台在后续刀里加。
+        //
+        // 关于高度：1.20.1 的世界建筑上限是 y=320（主世界），所以默认就取 320 而不是
+        // Ad Astra 的 600 —— 后者在 1.20.1 是超出世界高度的。光束的来源在观感上是"天基"，
+        // 在实现上只是"从建筑上限往下打"。
+        // ============================================================================
+        BUILDER.push("orbital_beam");
+        ORBITAL_BEAM_ALTITUDE = BUILDER.comment("Y coordinate the beam visually descends FROM. 1.20.1's overworld build limit is 320, so that is the default; raising it past the world height changes nothing visually")
+                .defineInRange("altitude", 320, 64, 4096);
+        ORBITAL_BEAM_DAMAGE = BUILDER.comment("Damage per tick dealt to each enemy standing in the beam column. 2.0 = one heart per tick, which kills most mobs almost instantly: this is meant to be a costly, deliberate strike, not a sustained aura. Set 0 for a purely visual test")
+                .defineInRange("damage", 2.0, 0.0, 1000.0);
+
+        // 炮的主伤害是落地那一下的冲击波；存活期间的只是固定余热（用户 2026-10-19 定）。
+        ORBITAL_BEAM_RESIDUAL_DAMAGE = BUILDER
+                .comment("Damage per tick while the beam is still burning (RESIDUAL heat, does not decay)",
+                        "This is intentionally small: the real hit is orbital_beam.damage (one-shot impact).")
+                .defineInRange("residual_damage", 0.5D, 0.0D, 100.0D);
+        ORBITAL_BEAM_HIT_RADIUS = BUILDER.comment("Radius of the damaging column around the impact point (blocks). The rendered beam is much thinner than this - the visual width is cosmetic")
+                .defineInRange("hit_radius", 1.5, 0.0, 16.0);
+        ORBITAL_BEAM_LIFE = BUILDER.comment("How long the beam stays (ticks). Deliberately SHORT so it reads as a strike rather than a lingering zone. 40 ticks = 2 seconds, which at the default feed_rate is enough to actually mine a couple of blocks - a 20-tick beam cannot, because the Mekanism laser only accumulates energy while it lives")
+                .defineInRange("life", 40, 1, 72000);
+        ORBITAL_BEAM_WIDTH = BUILDER.comment("Rendered beam width (blocks) = the OUTER prism's width. The renderer draws two nested four-sided prisms: a wide translucent outer one at this width, plus a bright inner one at 40% of it. This is purely cosmetic - the damaging column radius is hit_radius")
+                .defineInRange("width", 0.6, 0.05, 8.0);
+        BUILDER.pop();
+
+        // ============================================================================
+        // 天基激光（第 2 刀：引导升级）。
+        //
+        // 傀儡不自己开火，而是"标定"看得见的敌人，由在轨平台打下来。三条设计约束都落在这里：
+        //   ① min_range 之内标定不了  → 贴身混战里不许它输出，且给了"贴脸"这一反制手段
+        //   ② 目标被方块挡住就不打     → 掩体有意义（判定见 GolemOrbitalGuidanceModifier#canSee）
+        //   ③ 每段扣傀儡的 FE          → 合金能源链直接决定你能打几轮，两条升级线互为前提
+        //
+        // 等级换算与合金能源链同一套步长制，只有 step 一个旋钮（档位系数 1/2/4 是代码常量）：
+        //   可同时引导数 = 1 + 档位之和 × step        满配 15
+        //   单次打击段数 = 同上（目标少 → 段数全砸在首目标上，单挑最猛）
+        //   单段伤害     = damage + 等级 × damage_per_level
+        //   单段 FE      = cost_base + 等级 × cost_per_level
+        // ============================================================================
+        BUILDER.push("orbital_guidance");
+        ORBITAL_BEAM_GUIDANCE_STEP = BUILDER.comment("Step size of the guidance alloy chain - the ONLY knob for target count and volley count. Installed alloy tiers contribute coefficients 1/2/4, so the fixed points are 1 (core only), 3, 7, 15. At step=1 full installation means 15 simultaneous targets. Higher tiers keep a larger value than lower ones at any step, by construction")
+                .defineInRange("step", 1, 1, 64);
+        ORBITAL_BEAM_GUIDANCE_RANGE = BUILDER.comment("How far the golem can designate targets (blocks). Also the maximum distance at which the platform will engage - a spotter that cannot see it cannot call it in")
+                .defineInRange("range", 32.0, 4.0, 256.0);
+        ORBITAL_BEAM_MIN_RANGE = BUILDER.comment("Targets closer than this CANNOT be designated (blocks). This is what keeps the upgrade from being extra melee damage: enemies that hug the golem are simply not engageable. Set to 0 to remove that limitation")
+                .defineInRange("min_range", 5.0, 0.0, 64.0);
+        ORBITAL_BEAM_SCAN_INTERVAL = BUILDER.comment("Ticks between two designation scans. 20 = once a second. Raising it makes the golem slower to switch targets")
+                .defineInRange("scan_interval", 20, 1, 1200);
+        ORBITAL_BEAM_COOLDOWN = BUILDER.comment("Ticks between two strike rounds. Every round fires every designated target at once. Deliberately LONG (120 = 6 seconds) so the platform reads as a called-in strike rather than a repeating turret - and so it cannot keep grinding the same patch of terrain")
+                .defineInRange("cooldown", 120, 1, 7200);
+        ORBITAL_BEAM_DAMAGE_PER_LEVEL = BUILDER.comment("Extra damage per guidance level, added to orbital_beam.damage. At max level (15) this is multiplied by 15, so keep it small: 1.0 already means +15 damage per strike")
+                .defineInRange("damage_per_level", 1.0, 0.0, 100.0);
+        ORBITAL_BEAM_COST_BASE = BUILDER.comment("Base FE cost of ONE strike (one volley against one target), charged to the golem's own FE pool. The whole point is that the alloy energy chain decides how many rounds you can afford - if this is 0 the two upgrade lines stop being connected")
+                .defineInRange("cost_base", 20000, 0, Integer.MAX_VALUE);
+        ORBITAL_BEAM_COST_PER_LEVEL = BUILDER.comment("Extra FE per strike per guidance level. At max level (14) this is multiplied by 14. Note a round costs this PER TARGET, so wide designation drains proportionally faster")
+                .defineInRange("cost_per_level", 5000, 0, Integer.MAX_VALUE);
+        // ---- 破坏地形：负面代价（我们自己挖） ----
+        //
+        // 试过委托给 Mekanism 的 mekanism:laser 方块，撤回了：它的破坏受三重限制——
+        //   射程     [general.laser] range（默认 64，得让玩家改配置才够得到地面）
+        //   耗能     energyNeededPerHardness × 硬度（默认 100000/格，和我们的 FE 量级对不上）
+        //   还得在世界上额外挂一个激光方块实体
+        // 自建更简单也更可控，代价只是"这块行为是我们写的，不是抄的"。
+        ORBITAL_BEAM_BREAK_BLOCKS = BUILDER.comment("Let the beam DESTROY terrain. This is deliberately a downside, not a mining bonus: firing near your own base chews holes in it and ruins farmland. Turn off if you want the beam to be purely a weapon")
+                .define("break_blocks", true);
+        ORBITAL_BEAM_MAX_BLOCK_HARDNESS = BUILDER.comment("Highest block hardness the beam can dig through. Reference points: grass/plants/torch 0, dirt/sand/gravel 0.5-0.6, stone 1.5, wood 2.0, obsidian 50. So 2.0 eats soil, plants and wood but stops dead at stone; lower it to 1.0 to also protect stone. Negative-hardness blocks (bedrock and friends) are always immune")
+                .defineInRange("max_block_hardness", 2.0, 0.0, 100.0);
+        ORBITAL_BEAM_BLOCK_HARDNESS_COST = BUILDER.comment("Digging effort per point of block hardness. Progress per tick = damage / (cost x hardness), and a block breaks at progress 1.0. So the ticks needed for one block = cost x hardness / damage. With the defaults (cost 40, damage 2.0): a dirt block (0.5) takes 10 ticks, wood (2.0) takes 40 ticks, and grass (hardness 0) is cleared instantly. The whole beam lives 40 ticks, so one strike digs about 2 blocks of soil or 1 of wood - raise this value for slower digging, lower it to chew faster")
+                .defineInRange("block_hardness_cost", 40.0, 1.0, 10000.0);
+        ORBITAL_BEAM_DROP_BLOCKS = BUILDER.comment("Whether blocks destroyed by the beam drop their items. Default false: the platform is a weapon, not a quarry, so chewing terrain should not pay for itself")
+                .define("drop_blocks", false);
+        // ---- 只在战斗时引导 ----
+        ORBITAL_BEAM_COMBAT_ONLY = BUILDER.comment("Only designate targets while the golem is actually in combat (it has a target, or something has hit it recently). This is what stops it from firing at random wildlife while idle - and it is also the main lever that keeps the beam from constantly grinding the terrain")
+                .define("combat_only", true);
+        ORBITAL_BEAM_COMBAT_MEMORY = BUILDER.comment("How long (ticks) the golem still counts as 'in combat' after the last hit it took or dealt. 200 = 10 seconds. Only used when combat_only is on")
+                .defineInRange("combat_memory", 200, 0, 72000);
+        BUILDER.pop();
+
+        // ============================================================================
+        // 火箭（天基平台的载具）。流程见 docs/ORBITAL-LASER-DESIGN.md §2：
+        //   放置（火箭物品）→ 加燃料（UI）→ 按发射 → 倒计时 → 升空 → 入轨
+        // 燃料是 Mekanism 的氢气（Gas-Burning Generator 只烧氢气与乙烯，氢气最易得）。
+        // ============================================================================
+        BUILDER.push("rocket");
+        ROCKET_COUNTDOWN = BUILDER.comment("Countdown before lift-off (ticks). The countdown belongs to the rocket ENTITY, so if the entity disappears the countdown disappears with it. 200 = 10 seconds")
+                .defineInRange("countdown", 200, 0, 72000);
+        ROCKET_FUEL_CAPACITY = BUILDER.comment("Rocket fuel tank capacity (mB). Mekanism's Gas-Burning Generator tank holds 18000 mB, so this is a bit over half of one of those")
+                .defineInRange("fuel_capacity", 10000, 1, 1_000_000);
+        ROCKET_FUEL_COST = BUILDER.comment("Hydrogen consumed per launch (mB). One-shot item, so keep it modest - at 1000 mB a single Gas-Burning Generator tank fuels 18 launches")
+                .defineInRange("fuel_cost", 1000, 1, 1_000_000);
+        ROCKET_EXPLOSION_POWER = BUILDER.comment("Explosion power when the rocket hits something during ascent. Vanilla TNT is 4.0; a rocket is deliberately nastier. Set to 0 to disable the explosion (the rocket still stops)")
+                .defineInRange("explosion_power", 8.0, 0.0, 100.0);
+        ROCKET_EXPLOSION_FIRE = BUILDER.comment("Whether the ascent collision explosion starts fires, like a TNT explosion does")
+                .define("explosion_fire", true);
+        // 火箭模型的垂直落位校准值（实测 +5 格）写在了 RocketRenderer.MODEL_ANCHOR_CALIBRATION，
+        // 不作为配置项暴露——配置项之后会做一次统合简化。
         BUILDER.pop();
 
         SPEC = BUILDER.build();

@@ -48,6 +48,7 @@ public class ShenTongStaffItem extends GolemSwordItem {
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> list,
                                 TooltipFlag flag) {
         list.add(Component.translatable("tooltip.golems_arsenal.shen_tong_staff"));
+        list.add(largeGolemBonusLine());
     }
 
     /** Flat +10 attack damage (no tier bonus), so the staff's own modifier shows +10 in tooltip. */

@@ -268,6 +268,7 @@ public final class WeaponEventHandler {
             int tech = GolemEnergyTechModifier.levelOf(golem);
             golem.addEffect(new MobEffectInstance(GolemEffects.CHARGE.get(),
                     Config.ENERGY_KATANA_CHARGE_DURATION.get(), chargeAmplifier(tech)));
+            applyArmorShred(event.getEntity());
             if (katana.canTriggerChain(golem, stack)) {
                 lightningChain(golem, event.getEntity(), stack);
             }
@@ -551,6 +552,23 @@ public final class WeaponEventHandler {
 
     private static int chargeAmplifier(int techLevel) {
         return Math.min(4, Math.max(0, techLevel - 1));
+    }
+
+    /**
+     * 破甲（armor shred）：每次有电命中给目标叠一层 {@code GolemEffects.ARMOR_SHRED}，
+     * 上限 {@link Config#ENERGY_KATANA_SHRED_MAX_STACKS}，并把持续时间刷满。
+     * <p>
+     * 层数存在效果的 amplifier 里，属性削减由效果自带的 attribute modifier 负责
+     * （原版按 {@code amplifier + 1} 缩放），所以这里只需要算出"下一层是多少"。
+     * 层数封顶后就只刷时间 —— 传入相同 amplifier + 满时长，{@code MobEffectInstance.update}
+     * 会刷新时长而不会把层数顶掉。
+     */
+    private static void applyArmorShred(LivingEntity victim) {
+        MobEffectInstance current = victim.getEffect(GolemEffects.ARMOR_SHRED.get());
+        int stacks = current == null ? 0 : current.getAmplifier() + 1;
+        int next = Math.min(Config.ENERGY_KATANA_SHRED_MAX_STACKS.get(), stacks + 1);
+        victim.addEffect(new MobEffectInstance(GolemEffects.ARMOR_SHRED.get(),
+                Config.ENERGY_KATANA_SHRED_DURATION.get(), next - 1, false, true));
     }
 
     /** FE-powered lightning chain: repeated strikes that can hit the same target, applying Weakness. */
@@ -935,11 +953,9 @@ public final class WeaponEventHandler {
     }
 
     private static void syncGolemCapacity(AbstractGolemEntity<?, ?> golem) {
-        int level = golem.getModifiers().entrySet().stream()
-                .filter(entry -> entry.getKey() instanceof GolemEnergyModifier)
-                .mapToInt(java.util.Map.Entry::getValue)
-                .sum();
-        int capacity = GolemEnergyModifier.capacityForLevel(level);
+        // 电量等级 = 基础档 + 合金档之和（合金三件各贡献 2/4/8），由 GolemEnergyModifier 统一读，
+        // 这样部署态与收纳态（GolemEnergyItemProvider）永远走同一条公式。
+        int capacity = GolemEnergyModifier.capacityOf(golem);
         golem.getCapability(GolemEnergyProvider.CAPABILITY).ifPresent(cap -> {
             GolemEnergyStorage storage = (GolemEnergyStorage) cap;
             storage.setCapacity(capacity);
@@ -1204,18 +1220,24 @@ public final class WeaponEventHandler {
         golem.getCapability(GolemEnergyProvider.CAPABILITY).ifPresent(source -> {
             GolemEnergyStorage energy = (GolemEnergyStorage) source;
             if (energy.getEnergyStored() <= 0) return;
-            chargeStack(stack, energy);
+            // 合金能源链同时抬高**带宽**：容量涨 29 倍而不动这条管子的话，8.7M 的电池
+            // 也没法在合理时间内喂满一把 1M 缓冲的武器（只涨容量等于没涨）。
+            // GolemEnergyModifier.alloyBonus 与容量共用同一个步长，见该类注释。
+            int budgetPerItem = (int) Math.min(Integer.MAX_VALUE,
+                    (long) Config.GOLEM_ENERGY_TRANSFER_RATE.get()
+                            * (1L + GolemEnergyModifier.alloyBonus(GolemEnergyModifier.totalLevel(golem))));
+            chargeStack(stack, energy, budgetPerItem);
             for (ItemStack armor : golem.getArmorSlots()) {
-                chargeStack(armor, energy);
+                chargeStack(armor, energy, budgetPerItem);
             }
         });
     }
 
-    private static void chargeStack(ItemStack stack, GolemEnergyStorage source) {
+    private static void chargeStack(ItemStack stack, GolemEnergyStorage source, int budgetPerItem) {
         if (stack.isEmpty() || source.getEnergyStored() <= 0) return;
         stack.getCapability(ForgeCapabilities.ENERGY).ifPresent(target -> {
             if (!target.canReceive()) return;
-            int budget = Math.min(Config.GOLEM_ENERGY_TRANSFER_RATE.get(), source.getEnergyStored());
+            int budget = Math.min(budgetPerItem, source.getEnergyStored());
             int accepted = target.receiveEnergy(budget, false);
             if (accepted > 0) source.extractEnergy(accepted, false);
         });

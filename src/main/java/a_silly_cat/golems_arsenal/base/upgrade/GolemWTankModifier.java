@@ -21,8 +21,10 @@ import java.util.List;
  */
 public class GolemWTankModifier extends GolemModifier {
     public static final int MAX_LEVEL = 1;
-    /** 1 份材料能换多少 FE。 */
+    /** 1 份材料能换多少 FE（仅在拿不到能量上限时兜底）。 */
     private static final int FE_PER_MATERIAL = 50_000;
+    /** 一次换电恢复的电量 = 傀儡**能量上限**的这个比例（25%）。 */
+    private static final double RECHARGE_RATIO = 0.25D;
     /** FE 低于上限的这个比例时才换电。 */
     private static final double FE_THRESHOLD = 0.5;
 
@@ -45,7 +47,7 @@ public class GolemWTankModifier extends GolemModifier {
         return List.of(Component.translatable("upgrade.golems_arsenal.w_tank.desc")
                 .withStyle(ChatFormatting.GREEN),
                 Component.translatable("upgrade.golems_arsenal.w_tank.convert",
-                        FE_PER_MATERIAL).withStyle(ChatFormatting.GRAY),
+                        Math.round(RECHARGE_RATIO * 100)).withStyle(ChatFormatting.GRAY),
                 Component.translatable("upgrade.golems_arsenal.w_tank.set")
                         .withStyle(ChatFormatting.DARK_AQUA));
     }
@@ -78,7 +80,9 @@ public class GolemWTankModifier extends GolemModifier {
         }
         if (GolemETankModifier.consumeOne(golem)) {
             tag.putLong(LAST_CONVERT_KEY, now);
-            storage.receiveEnergy(FE_PER_MATERIAL, false);
+            // 恢复量改成"能量上限的 25%"：不再固定在 5 万 FE，方便随 E 罐/科技等级成长。
+            int recharge = Math.max(1, (int) Math.round(storage.getMaxEnergyStored() * RECHARGE_RATIO));
+            storage.receiveEnergy(recharge, false);
         }
     }
 }

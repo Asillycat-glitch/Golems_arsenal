@@ -32,7 +32,7 @@ public final class ModItems {
 
     public static final RegistryObject<ExampleWeapon> EXAMPLE_WEAPON = ITEMS.register(
             "example_weapon",
-            () -> new ExampleWeapon(new Item.Properties().stacksTo(1), 7, 0.2, 1.5f, 2.0f));
+            () -> new ExampleWeapon(new Item.Properties().stacksTo(1)));
 
     public static final RegistryObject<ShenTongStaffItem> SHEN_TONG_STAFF = ITEMS.register(
             "shen_tong_staff",
@@ -73,6 +73,25 @@ public final class ModItems {
     public static final RegistryObject<GolemWeaponUpgradeItem> GOLEM_ENERGY_TECH_UPGRADE = ITEMS.register(
             "golem_energy_tech_upgrade",
             () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::techModifier));
+
+    /**
+     * 指令升级。
+     * <p>
+     * 等级上限由 {@code Config.ARMORY_MAX_LEVEL} 决定，所以这里注册三个等级的物品：
+     * 玩家可以分别装上它们来选等级（本家升级物品的等级是烘在物品上的，不是读 NBT）。
+     * 效果数量 = 等级，所以 1 级只解锁 1 个、3 级解锁 3 个。
+     */
+    public static final RegistryObject<GolemWeaponUpgradeItem> COMMAND_UPGRADE_1 = ITEMS.register(
+            "command_upgrade_1",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1, GolemUpgrades::commandModifier));
+
+    public static final RegistryObject<GolemWeaponUpgradeItem> COMMAND_UPGRADE_2 = ITEMS.register(
+            "command_upgrade_2",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 2, GolemUpgrades::commandModifier));
+
+    public static final RegistryObject<GolemWeaponUpgradeItem> COMMAND_UPGRADE_3 = ITEMS.register(
+            "command_upgrade_3",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 3, GolemUpgrades::commandModifier));
 
     public static final RegistryObject<GolemWeaponUpgradeItem> BACKUP_ENERGY_UPGRADE = ITEMS.register(
             "backup_energy_upgrade",
@@ -170,6 +189,40 @@ public final class ModItems {
             () -> new SpecialMoveUpgradeItem(new Item.Properties().stacksTo(64),
                     GolemUpgrades::phoenixModifier));
 
+    /**
+     * Special-move upgrade: three-hit combo. Lowers the golem's attack speed (longer interval),
+     * and every melee attack advances one stage of the combo, each with its own arc hit.
+     */
+    public static final RegistryObject<SpecialMoveUpgradeItem> COMBO_UPGRADE = ITEMS.register(
+            "combo_upgrade",
+            () -> new SpecialMoveUpgradeItem(new Item.Properties().stacksTo(64),
+                    GolemUpgrades::comboModifier));
+
+    /**
+     * 炎拳（跨 mod 联动，最高 2 级）：命中带有灾变「炽热烙印」的目标时追加多段伤害。
+     * 单件给 1 级，装第二件升到 2 级（与 E 罐等两级升级一致）；没装灾变时它只是一件装饰品。
+     */
+    public static final RegistryObject<GolemWeaponUpgradeItem> FLAME_FIST_UPGRADE = ITEMS.register(
+            "flame_fist_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1,
+                    GolemUpgrades::flameFistModifier));
+
+    /**
+     * 莫厄余烬：联动 JVG「莫厄充能」——每层增伤、必定穿甲、较低的 END 返还（单件 1 级，两件 2 级）。
+     */
+    public static final RegistryObject<GolemWeaponUpgradeItem> MEROR_AFTERGLOW_UPGRADE = ITEMS.register(
+            "meror_afterglow_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1,
+                    GolemUpgrades::merorAfterglowModifier));
+
+    /**
+     * 磨砺（反适应）：对同一个敌人久攻不下时，下一次攻击的伤害逐步提高（记录挂在敌人身上）。
+     */
+    public static final RegistryObject<GolemWeaponUpgradeItem> ATTRITION_UPGRADE = ITEMS.register(
+            "attrition_upgrade",
+            () -> new GolemWeaponUpgradeItem(new Item.Properties().stacksTo(64), 1,
+                    GolemUpgrades::attritionModifier));
+
     /** Tech expansion template: forge it onto a golem holder repeatedly in a smithing table. */
     public static final RegistryObject<RepeatableExpansionItem> TECH_EXPANSION_TEMPLATE = ITEMS.register(
             "tech_expansion_template",
@@ -190,6 +243,9 @@ public final class ModItems {
                         output.accept(KEY_SWORD.get());
                         output.accept(GOLEM_ENERGY_UPGRADE.get());
                         output.accept(GOLEM_ENERGY_TECH_UPGRADE.get());
+                        output.accept(COMMAND_UPGRADE_1.get());
+                        output.accept(COMMAND_UPGRADE_2.get());
+                        output.accept(COMMAND_UPGRADE_3.get());
                         output.accept(BACKUP_ENERGY_UPGRADE.get());
                         output.accept(MAIN_WEAPON_UPGRADE.get());
                         output.accept(ALT_WEAPON_UPGRADE.get());
@@ -209,12 +265,56 @@ public final class ModItems {
                         output.accept(SWORD_RAIN_UPGRADE.get());
                         output.accept(CHARGE_UPGRADE.get());
                         output.accept(PHOENIX_UPGRADE.get());
+                        output.accept(COMBO_UPGRADE.get());
+                        output.accept(FLAME_FIST_UPGRADE.get());
+                        output.accept(MEROR_AFTERGLOW_UPGRADE.get());
+                        output.accept(ATTRITION_UPGRADE.get());
                         output.accept(TECH_EXPANSION_TEMPLATE.get());
                         if (ModList.get().isLoaded("golemmagicka")) {
                             output.accept(GolemMagickaCompat.SCROLL_UPGRADE.get());
                         }
+                        if (ModList.get().isLoaded("mekanism")) {
+                            acceptMekanismEntries(output);
+                        }
                     })
                     .build());
+
+    /**
+     * 把 Mekanism 联动的五个条目（3 件合金能源 + 3 件辐射发电 + 3 件辐射屏蔽）加进创造栏。
+     *
+     * <p><b>为什么用反射而不是直接 {@code MekanismCompat.XXX.get()}。</b>直接引用会把
+     * {@code MekanismCompat} 写进 {@code ModItems} 的常量池，于是"没装 MEK 时能否安全加载
+     * {@code ModItems}"就取决于 JVM 的解析时机（解析是惰性的，但一旦哪天被提前触发就是
+     * NoClassDefFoundError）。既然门控已经判过一次模组存在性，这里多花一次反射换来确定性。
+     *
+     * <p>注意 MekanismCompat 那边的物品注册本身是按模组门控的（{@code CompatDispatch}），
+     * 所以这里只负责"往栏里放"，不负责"注册"。
+     */
+    private static void acceptMekanismEntries(CreativeModeTab.Output output) {
+        try {
+            Class<?> compat = Class.forName("a_silly_cat.golems_arsenal.compat.mekanism.MekanismCompat");
+            for (String field : new String[]{
+                    "INFUSED_ALLOY_ENERGY_UPGRADE",
+                    "ELITE_ALLOY_ENERGY_UPGRADE",
+                    "ULTIMATE_ALLOY_ENERGY_UPGRADE",
+                    "INFUSED_ALLOY_GUIDANCE_UPGRADE",
+                    "ELITE_ALLOY_GUIDANCE_UPGRADE",
+                    "ULTIMATE_ALLOY_GUIDANCE_UPGRADE",
+                    "RADIATION_GENERATOR_UPGRADE_1",
+                    "RADIATION_GENERATOR_UPGRADE_2",
+                    "RADIATION_GENERATOR_UPGRADE_3",
+                    "ROCKET"}) {
+                Object entry = compat.getField(field).get(null);
+                if (entry instanceof RegistryObject<?> reg && reg.get() instanceof Item item) {
+                    output.accept(item);
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            // 装了 MEK 却解析不到条目，说明联动代码与创造栏列表不同步——宁可少显示，
+            // 也不要因为一个额外条目让整个创造栏构建失败。
+            Golems_arsenal.LOGGER.warn("Mekanism compat items could not be added to the creative tab", e);
+        }
+    }
 
     private ModItems() {
     }

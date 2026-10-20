@@ -46,22 +46,27 @@ public class GolemBackupEnergyModifier extends GolemModifier {
         int intervalSec = Math.max(1, Config.BACKUP_ENERGY_RECHARGE_INTERVAL.get() / 20);
         int hurtCooldownSec = Math.max(1, Config.BACKUP_ENERGY_HURT_COOLDOWN.get() / 20);
         return List.of(Component.translatable("upgrade.golems_arsenal.backup_energy.desc",
-                Math.round(maxShield(level)),
+                Math.round(Config.BACKUP_ENERGY_SHIELD_RATIO.get() * 100),
                 intervalSec,
-                Math.round(rechargePerInterval(level)),
+                Math.round(Config.BACKUP_ENERGY_RECHARGE_RATIO.get() * 100),
                 Config.BACKUP_ENERGY_FE_PER_POINT.get(),
                 hurtCooldownSec)
                 .withStyle(ChatFormatting.GREEN));
     }
 
-    /** Shield capacity for the given total upgrade level. */
-    public static float maxShield(int level) {
-        return (float) (level * Config.BACKUP_ENERGY_SHIELD_PER_LEVEL.get());
+    /**
+     * 护盾上限 = 傀儡**最大生命**的 {@code shield_ratio}（默认 20%）。
+     * <p>
+     * 过去是"每级固定点数"，现在改成百分比：护盾随傀儡血量成长（E 罐/科技/材质堆血量时自动跟上），
+     * 也避免高血量傀儡的护盾显得毫无意义。
+     */
+    public static float maxShield(AbstractGolemEntity<?, ?> golem) {
+        return (float) (golem.getMaxHealth() * Config.BACKUP_ENERGY_SHIELD_RATIO.get());
     }
 
-    /** Shield points restored every recharge interval for the given total upgrade level. */
-    public static float rechargePerInterval(int level) {
-        return (float) (level * Config.BACKUP_ENERGY_RECHARGE_PER_LEVEL.get());
+    /** 每 {@code recharge_interval}（默认 2 秒）回复 **最大生命的 {@code recharge_ratio}**（默认 5%）。 */
+    public static float rechargePerInterval(AbstractGolemEntity<?, ?> golem) {
+        return (float) (golem.getMaxHealth() * Config.BACKUP_ENERGY_RECHARGE_RATIO.get());
     }
 
     @Override
@@ -71,7 +76,7 @@ public class GolemBackupEnergyModifier extends GolemModifier {
         }
         CompoundTag data = golem.getPersistentData();
         if (!data.contains(SHIELD_KEY)) {
-            data.putFloat(SHIELD_KEY, maxShield(level));
+            data.putFloat(SHIELD_KEY, maxShield(golem));
         }
         sync(golem, level);
     }
@@ -116,7 +121,7 @@ public class GolemBackupEnergyModifier extends GolemModifier {
         long now = golem.level().getGameTime();
         CompoundTag data = golem.getPersistentData();
         if (!data.contains(SHIELD_KEY)) {
-            data.putFloat(SHIELD_KEY, maxShield(level));
+            data.putFloat(SHIELD_KEY, maxShield(golem));
             data.putLong(NEXT_RECHARGE_KEY, now);
         }
         if (now < data.getLong(NEXT_RECHARGE_KEY)) {
@@ -127,10 +132,10 @@ public class GolemBackupEnergyModifier extends GolemModifier {
             sync(golem, level);
             return;
         }
-        float max = maxShield(level);
+        float max = maxShield(golem);
         float shield = Math.min(data.getFloat(SHIELD_KEY), max);
         if (shield < max) {
-            float target = Math.min(max, shield + rechargePerInterval(level));
+            float target = Math.min(max, shield + rechargePerInterval(golem));
             float need = target - shield;
             if (need > 0) {
                 // "节约能源"升级在这里也生效（每级 -25%）。
@@ -155,11 +160,17 @@ public class GolemBackupEnergyModifier extends GolemModifier {
         sync(golem, level);
     }
 
-    /** Sends the current shield value to every client tracking the golem, for the info panel. */
+    /**
+     * Sends the current shield value to every client tracking the golem, for the info panel.
+     *
+     * <p>{@code maxShield(level)} 写成传 level 是编译不过的——{@code maxShield} 与
+     * {@code rechargePerInterval} 的签名都要 {@link AbstractGolemEntity}（它们要读傀儡的
+     * 配置/容量），所以这里必须传 golem。{@code level} 参数保留是为了调用点一致。
+     */
     private static void sync(AbstractGolemEntity<?, ?> golem, int level) {
         float shield = golem.getPersistentData().getFloat(SHIELD_KEY);
         ModNetwork.CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> golem),
-                new ClientboundShieldPacket(golem.getId(), shield, maxShield(level)));
+                new ClientboundShieldPacket(golem.getId(), shield, maxShield(golem)));
     }
 
     public static float shieldOf(AbstractGolemEntity<?, ?> golem) {

@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "mekanism"
+    }
+  ],
+  "ingredients": [
+    {
+      "item": "golems_arsenal:radiation_generator_upgrade_1"
+    },
+    {
+      "item": "mekanism:alloy_reinforced"
+    },
+    {
+      "item": "mekanism:pellet_polonium"
+    }
+  ],
+  "result": {
+    "item": "golems_arsenal:radiation_generator_upgrade_2"
+  }
+}

@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.mixin;
 
 import a_silly_cat.golems_arsenal.init.ModTags;
+import a_silly_cat.golems_arsenal.tech.upgrade.AlloyChains;
 import dev.xkmc.modulargolems.content.item.upgrade.IUpgradeItem;
 import dev.xkmc.modulargolems.content.item.upgrade.UpgradeItem;
 import dev.xkmc.modulargolems.content.menu.table.GolemUpgradeItemHandler;
@@ -39,6 +40,14 @@ public abstract class GolemUpgradeHandlerMixin {
     @Inject(method = "appendUpgrade", at = @At("HEAD"), cancellable = true)
     private void golemsArsenal$rejectSecondSpecialMove(UpgradeItem incoming,
                                                        CallbackInfoReturnable<ItemStack> cir) {
+        // 合金链（能源 / 引导）：必须先有核心件，且同一档不能装两件。
+        // 本家自己的检查（getRemaining / maxLevel）表达不了这两条：不占槽的物品在
+        // GolemHolder.getRemaining 里完全不参与计算，而等级相加又会让两件灌注冒充精英档。
+        // 走 AlloyChains 的统一入口 —— 将来新增一条合金链不需要再改这个 mixin。
+        if (AlloyChains.rejectionForAny(upgrades, incoming) != null) {
+            cir.setReturnValue(ItemStack.EMPTY);
+            return;
+        }
         if (!isSpecialMove(incoming)) {
             return;
         }

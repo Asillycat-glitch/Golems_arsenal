@@ -2,8 +2,6 @@ package a_silly_cat.golems_arsenal.tech.energy;
 
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
 import dev.xkmc.modulargolems.content.item.golem.GolemHolder;
-import dev.xkmc.modulargolems.content.item.upgrade.IUpgradeItem;
-import dev.xkmc.modulargolems.content.modifier.base.ModifierInstance;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
@@ -26,26 +24,19 @@ public final class GolemEnergyItemProvider implements ICapabilityProvider {
         return cap == ForgeCapabilities.ENERGY ? energy.cast() : LazyOptional.empty();
     }
 
-    /** FE capacity of a stowed golem, derived from the energy upgrades installed on the holder. */
+    /**
+     * FE capacity of a stowed golem, derived from the energy upgrades installed on the holder.
+     * Goes through the same {@link GolemEnergyModifier#capacityForLevel} as the deployed golem, so
+     * the base energy upgrade AND the three alloy tiers are counted identically in both states.
+     */
     public static int capacityOf(ItemStack stack) {
-        return GolemEnergyModifier.capacityForLevel(energyUpgradeLevel(stack));
+        return GolemEnergyModifier.capacityForLevel(
+                GolemEnergyModifier.levelOfUpgrades(GolemHolder.getUpgrades(stack)));
     }
 
     /** Current stored FE of a stowed golem, clamped to the computed capacity. */
     public static int energyOf(ItemStack stack) {
         return Math.max(0, Math.min(storedEnergy(stack), capacityOf(stack)));
-    }
-
-    private static int energyUpgradeLevel(ItemStack stack) {
-        int level = 0;
-        for (IUpgradeItem upgrade : GolemHolder.getUpgrades(stack)) {
-            for (ModifierInstance instance : upgrade.get()) {
-                if (instance.mod() instanceof GolemEnergyModifier) {
-                    level += instance.level();
-                }
-            }
-        }
-        return Math.min(level, GolemEnergyModifier.MAX_LEVEL);
     }
 
     private static int storedEnergy(ItemStack stack) {

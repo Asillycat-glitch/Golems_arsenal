@@ -8,6 +8,7 @@ import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.modifier.base.AttributeGolemModifier;
 import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
 import dev.xkmc.modulargolems.init.registrate.GolemTypes;
+import a_silly_cat.golems_arsenal.tech.radiation.GolemRadiationGeneratorModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemBackupEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
@@ -29,6 +30,24 @@ public final class GolemUpgrades {
             reg("golem_energy_tech", GolemEnergyTechModifier::new);
     public static final RegistryEntry<GolemBackupEnergyModifier> BACKUP_ENERGY =
             reg("backup_energy", GolemBackupEnergyModifier::new);
+    /*
+     * 辐射两件（MEK 联动）。**物品**注册在 MekanismCompat 里按模组存在性门控，但修饰符的 maxLevel
+     * 是编译期常量、不依赖 Mekanism 的类，所以注册本身可以无条件——mod 缺失时只是没人引用它们。
+     * 两个 id 同时也是 GolemUpgradeLevels.levelOf 用的键（见各自的 ID 常量）。
+     */
+    public static final RegistryEntry<GolemRadiationGeneratorModifier> RADIATION_GENERATOR =
+            reg("radiation_generator", GolemRadiationGeneratorModifier::new);
+    /*
+     * 辐射屏蔽（radiation_shielding）已删除：设计上"把辐射当燃料消耗掉"替代了屏蔽的意图，
+     * 傀儡不再需要挡住辐射。若将来要做回来，注意 Mekanism 的 getRadiationResistance 只采信
+     * **四个盔甲槽物品**上的 IRadiationShielding，实体自身的能力它不认——所以要自己乘系数。
+     */
+    /**
+     * 天基激光引导升级（合金链）。傀儡当"前沿观察员"标定敌人，由在轨平台打下来。
+     * 物品注册在 MekanismCompat 里（合金是配方材料），修饰符注册本身无条件。
+     */
+    public static final RegistryEntry<GolemOrbitalGuidanceModifier> ORBITAL_GUIDANCE =
+            reg("orbital_guidance", GolemOrbitalGuidanceModifier::new);
     /*
      * Every upgrade keeps the id rule "modifier id = item id minus _upgrade" (item main_weapon_upgrade
      * grants modifier main_weapon). Only the upgrades whose name actually says 傀儡 keep the golem_
@@ -100,9 +119,36 @@ public final class GolemUpgrades {
             reg("phoenix", () -> new GolemFlagModifier(StatFilterType.ATTACK,
                     "upgrade.golems_arsenal.phoenix",
                     "upgrade.golems_arsenal.special_move.note"));
+    /** Special-move upgrade: three-hit combo (slower attacks; each melee attack advances one stage). */
+    public static final RegistryEntry<GolemComboModifier> COMBO =
+            reg("combo", GolemComboModifier::new);
     /** Start-the-Train: granted to the create:railway material via a material-config datapack. */
     public static final RegistryEntry<GolemTrainModifier> TRAIN =
             reg("train", GolemTrainModifier::new);
+    /**
+     * 炎拳（跨 mod 联动）：命中带有灾变「炽热烙印」的目标时追加多段伤害。
+     * 需要 {@code data/minecraft/tags/damage_type/bypasses_cooldown.json} 里登记 {@code flame_fist}。
+     */
+    public static final RegistryEntry<GolemFlameFistModifier> FLAME_FIST =
+            reg("flame_fist", GolemFlameFistModifier::new);
+    /**
+     * 莫厄余烬：联动 JVG「莫厄充能」——层数增伤 + 必定穿甲 + 较低的 END 返还（只读充能，不写）。
+     */
+    public static final RegistryEntry<GolemMerorAfterglowModifier> MEROR_AFTERGLOW =
+            reg("meror_afterglow", GolemMerorAfterglowModifier::new);
+    /**
+     * 磨砺（反适应）：记录挂在敌人身上（次数 + 我方意图值 + 敌方实际受伤），
+     * 比值越低下一击加成越高，加成走受击阶段 = 加进攻击力，照常吃减伤。
+     */
+    public static final RegistryEntry<GolemAttritionModifier> ATTRITION =
+            reg("attrition", GolemAttritionModifier::new);
+
+    /**
+     * 指令升级：攻击时按概率触发九个「指令效果」之一，带内置冷却，
+     * 已解锁的效果数量 = 升级等级（从九个里随机抽）。效果本身提炼自被拆掉的军械手套。
+     */
+    public static final RegistryEntry<GolemCommandModifier> COMMAND =
+            reg("command", GolemCommandModifier::new);
 
     /**
      * Tech expansion template modifier: up to 5 applications, each level +1 upgrade slot,
@@ -130,6 +176,14 @@ public final class GolemUpgrades {
     }
     public static GolemBackupEnergyModifier backupEnergyModifier() {
         return BACKUP_ENERGY.get();
+    }
+
+    public static GolemRadiationGeneratorModifier radiationGeneratorModifier() {
+        return RADIATION_GENERATOR.get();
+    }
+
+    public static GolemOrbitalGuidanceModifier orbitalGuidanceModifier() {
+        return ORBITAL_GUIDANCE.get();
     }
 
     public static GolemETankModifier eTankModifier() {
@@ -206,6 +260,26 @@ public final class GolemUpgrades {
 
     public static GolemFlagModifier phoenixModifier() {
         return PHOENIX.get();
+    }
+
+    public static GolemComboModifier comboModifier() {
+        return COMBO.get();
+    }
+
+    public static GolemFlameFistModifier flameFistModifier() {
+        return FLAME_FIST.get();
+    }
+
+    public static GolemMerorAfterglowModifier merorAfterglowModifier() {
+        return MEROR_AFTERGLOW.get();
+    }
+
+    public static GolemAttritionModifier attritionModifier() {
+        return ATTRITION.get();
+    }
+
+    public static GolemCommandModifier commandModifier() {
+        return COMMAND.get();
     }
 
     public static GolemTrainModifier trainModifier() {

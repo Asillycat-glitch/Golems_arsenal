@@ -23,6 +23,46 @@ libs/
 #   dev/*.ps1   = bbmodel 转换脚本
 dev/
 
+# 反编译产物（第三方，不能发布）：傀儡地牢 / 傀儡装配的临时解包目录
+gd-jar/
+gd-jar-src/
+gd-jar-mg/
+gd-jar-mg-src/
+gd-jar-mg-src2/
+
+# 秘法涡流（ArcaneVortex）反编译产物，同样是第三方、不入库
+av-in/
+av-src/
+
+# 其它 mod 的学习用反编译产物（l2complements / l2hostility / GoetyRevelation）
+l2c-in/
+l2c-src/
+l2h-in/
+l2h-src/
+l2h-full-src/
+gr-in/
+gr-src/
+
+# mgdp（傀儡数据包）的反编译产物：自查"同族升级"用，第三方不入库
+mgdp-in/
+mgdp-src/
+# 潘多拉之咒 / 诡厄巫法 的反编译产物：同族升级与 END 层写回点自查用
+cop-src/
+goety-in/
+goety-src/
+
+# 铁魔法（Iron's Spells 'n Spellbooks）反编译产物：卷轴/法术容器体系参考，第三方不入库
+irons-in/
+irons-src/
+
+# ============================ 私有测试台（testbench） ============================
+# 私活测试代码：逐项量化"绕过减伤"的手段（tag 档位 / 反取消 / 各阶段 floor /
+# END 层返还 / 多段 / 写血 / 摘附魔）。**不进版本库、不上传 GitHub、不进发布 jar。**
+# 构建方式见 build.gradle 顶部的说明：gradlew build -Ptestbench
+testbench/
+tools/testbench/
+*-testbench.jar
+
 # OS
 Thumbs.db
 .DS_Store

@@ -1,6 +1,7 @@
 package a_silly_cat.golems_arsenal.base.recipe;
 
 import a_silly_cat.golems_arsenal.init.ModRecipeSerializers;
+import a_silly_cat.golems_arsenal.tech.upgrade.AlloyChains;
 import dev.xkmc.l2library.serial.recipe.AbstractSmithingRecipe;
 import dev.xkmc.modulargolems.content.config.GolemMaterial;
 import dev.xkmc.modulargolems.content.config.GolemMaterialConfig;
@@ -64,6 +65,9 @@ public class GolemRepeatableSmithAddSlotRecipe extends AbstractSmithingRecipe<Go
         // Simulate the application to make sure remaining slots never go negative.
         ArrayList<IUpgradeItem> after = new ArrayList<>(installed);
         after.add(up);
+        if (AlloyChains.rejectionForAny(installed, up) != null) {
+            return false;
+        }
         return baseStack.getItem() instanceof GolemHolder<?, ?> holder
                 && holder.getRemaining(materials, after) >= 0;
     }

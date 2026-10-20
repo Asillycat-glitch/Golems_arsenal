@@ -1,0 +1,383 @@
+package a_silly_cat.golems_arsenal.client;
+
+import a_silly_cat.golems_arsenal.base.entity.OrbitalImpactEntity;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import org.joml.Matrix4f;
+
+/**
+ * 发射段落点特效渲染：**贴地冲击环（3 圈）+ 中心短闪柱**。
+ *
+ * <p>参考秘法涡流 {@code Shockwave} 的参数结构（size / expandSpeed / intensity / fade），
+ * 但这里不引入它的类，只借"每一圈有自己的出生时间、速度、淡出"这个结构：
+ * <pre>
+ *   圈 0  出生 0%    速度 1.00x   宽度 0.30   颜色 近白
+ *   圈 1  出生 12%   速度 0.78x   宽度 0.22   颜色 暖金
+ *   圈 2  出生 26%   速度 0.55x   宽度 0.16   颜色 暖橙（最淡）
+ * </pre>
+ *
+ * <p><b>闪柱</b>：前 40% 的时间里，中心有一根很短的亮柱（高 {@link #FLASH_HEIGHT}），
+ * 之后快速淡出。它是"炮口火光"的对应物——用户的瞄准段已经把能量聚到中心，
+ * 发射的瞬间需要一根短促的爆闪，而不是继续留着细光柱。
+ *
+ * <p><b>过曝控制</b>：三层都是加法混合，所以每层 alpha 都压得很低（0.2~0.5），
+ * 靠叠加出亮度而不是单独一层就拉满。
+ */
+@OnlyIn(Dist.CLIENT)
+public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
+
+    /** 复用光束那张纯白贴图：白色才能被顶点色染成任意颜色。 */
+    private static final ResourceLocation TEXTURE =
+            new ResourceLocation("golems_arsenal", "textures/entity/orbital_laser.png");
+
+
+    /**
+     * 白热球存在的进度区间。
+     *
+     * <p>之前是 0.38（26 tick 的第 10 tick 就整颗消失），用户评价"突然消失、没有冲击感"。
+     * 现在让它活到 0.62，并且用平滑曲线衰减——先稳住再慢慢散掉。
+     */
+    private static final float FLASH_END = 0.88F;
+    /** 白热球最大半径相对冲击半径的比例。 */
+    private static final float BALL_RADIUS_RATIO = 0.60F;
+    /** 白热球的峰值亮度（加法混合，别拉满，否则一片白）。 */
+    private static final float BALL_ALPHA = 1.00F;
+    /** 贴地环的分段数。48 段在近处也够圆。 */
+    private static final int RING_SEGS = 48;
+
+    /**
+     * 贴地冲击环参数表：{出生进度, 速度系数, 带宽, R, G, B, 基础 alpha}。
+     *
+     * <p>这是**平面**环（贴着地面扩散），和立体 torus 不同——用户 2026-10-19 的评价是
+     * "立体环喧宾夺主"，所以 3D 那套删掉了，平面这套保留：它才是"冲击波"的边界感。
+     */
+    private static final float[][] RINGS = {
+            {0.00F, 0.88F, 0.26F, 1.00F, 0.97F, 0.88F, 0.50F},   // 白热冲击
+            {0.12F, 0.66F, 0.19F, 1.00F, 0.78F, 0.35F, 0.42F},   // 暖金
+            {0.26F, 0.46F, 0.14F, 1.00F, 0.62F, 0.20F, 0.32F},   // 橙
+            {0.30F, 1.02F, 0.08F, 0.95F, 0.22F, 0.14F, 0.40F},   // 地面红环（余烬）
+    };
+
+    /** 贴地抬升，避免 z-fighting。 */
+    private static final float LIFT = 0.04F;
+
+    private static final int FULL_BRIGHT = LightTexture.FULL_BRIGHT;
+
+    public OrbitalImpactRenderer(EntityRendererProvider.Context ctx) {
+        super(ctx);
+        this.shadowRadius = 0.0F;
+    }
+
+    @Override
+    public void render(OrbitalImpactEntity entity, float entityYaw, float partialTick, PoseStack pose,
+                       MultiBufferSource buffer, int light) {
+        // **用 tickCount + partialTick 算进度**，而不是读同步值：
+        // 同步值每 tick 才更新一次，快速扩散阶段会"一顿一顿"。
+        // 参考秘法涡流的 getLerpedSize / getLerpedIntensity 也是这个思路。
+        float p = Math.min(1.0F, (entity.tickCount + partialTick) / OrbitalImpactEntity.LIFE);
+        float radius = entity.radius();
+        VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
+
+        pose.pushPose();
+        pose.translate(0.0, LIFT, 0.0);
+        Matrix4f m = pose.last().pose();
+
+        // **贴地冲击环**（保留）：各自按出生时间推进，缓出扩散，后段淡出
+        for (float[] ring : RINGS) {
+            float born = ring[0];
+            if (p < born) {
+                continue;
+            }
+            float t = (p - born) / (1.0F - born);
+            // 缓出：刚炸开最快，之后减速
+            float ease = 1.0F - (1.0F - t) * (1.0F - t);
+            float r = radius * ring[1] * ease;
+            if (r <= 0.05F) {
+                continue;
+            }
+            float fade = t < 0.75F ? 1.0F : (1.0F - (t - 0.75F) / 0.25F);
+            float alpha = ring[6] * Math.max(0.0F, fade);
+            ringBand(m, vc, r, ring[2], ring[3], ring[4], ring[5], alpha);
+        }
+
+        // 弹体残留线（从落点往上到发射高度）
+        drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p);
+
+        // 中心白热球（对应参考图的"爆闪球"，不是一根柱子）
+        if (p < FLASH_END) {
+            float t = p / FLASH_END;
+            // 用户 2026-10-19：爆炸应该"扩散到很大，然后扩散当中消失"。
+            // 所以不再回落收缩，而是**一路涨、边涨边淡**（缓出，尾段最明显）。
+            // 三次缓出：前 1/3 就冲到接近最大，炸开发生在开头而不是拖全程
+            float ie = 1.0F - t;
+            float expandEase = 1.0F - ie * ie * ie;
+            float ballR = radius * BALL_RADIUS_RATIO * (0.25F + 1.05F * expandEase);
+            // 亮度衰减略快于尺寸增长：越散越薄，最后自然消失
+            float alpha = BALL_ALPHA * (float) Math.pow(1.0F - t, 1.6F);
+            ball(m, vc, ballR, 1.0F, 0.99F, 0.94F, alpha);
+        }
+
+        // **溅射光粒**：砸出来的细小火星，全部用几何画（不是原版粒子）
+        drawSparks(m, vc, radius, p);
+
+        pose.popPose();
+        super.render(entity, entityYaw, partialTick, pose, buffer, light);
+    }
+
+    // ---- 溅射光粒（几何火星） ----
+    /**
+     * 火星数量。**不多**：靠"不规则"取胜，不是靠数量堆。
+     */
+    private static final int SPARKS = 26;
+    /** 火星长度（拖尾长度，格）。 */
+    private static final float SPARK_STREAK = 0.9F;
+    /** 火星粗细（格）。 */
+    private static final float SPARK_HALF = 0.045F;
+
+    /**
+     * 溅射光粒：从落点向外甩出、受重力回落的细小火星。
+     *
+     * <p><b>为什么用几何而不是原版粒子</b>：原版粒子有自己的贴图/生命周期/光照，
+     * 混进我们的加法渲染里会显脏——这也是上一版"不够协调"的原因之一。
+     * 用顶点画的话，配色、衰减、亮度都能和球/环共用同一套规则。
+     *
+     * <p><b>不规则怎么来</b>：每个火星的参数（方向、速度、起跳时间、寿命）
+     * 全部由**索引哈希**决定——纯函数，所以客户端各自算都一致，
+     * 不需要同步任何东西，也永远不会出现"两个玩家看到不同火星"。
+     *
+     * <p>配色沿用整段的温度曲线：白热 → 金黄 → 暗红。
+     */
+    private static void drawSparks(Matrix4f m, VertexConsumer vc, float radius, float p) {
+        for (int i = 0; i < SPARKS; i++) {
+            // 用一个混合哈希把索引打散成 5 个 [0,1) 常数
+            long h = (i * 0x9E3779B97F4A7C15L) ^ 0x5DEECE66DL;
+            float r1 = hashUnit(h);
+            float r2 = hashUnit(h * 6364136223846793005L + 1442695040888963407L);
+            float r3 = hashUnit(h * 22695477L + 1L);
+            float r4 = hashUnit(h * 1103515245L + 12345L);
+            float r5 = hashUnit(h * 1664525L + 1013904223L);
+
+            float launch = 0.02F + 0.22F * r1;
+            if (p < launch) {
+                continue;
+            }
+            float life = 0.40F + 0.50F * r2;
+            float t = (p - launch) / life;
+            if (t >= 1.0F) {
+                continue;
+            }
+
+            // 方向：水平随机、向上初速随机 → 各自不同的抛物线
+            double ang = r3 * Math.PI * 2.0;
+            float speed = radius * (0.45F + 0.85F * r4);
+            float dist = speed * t;
+            float up = radius * (0.25F + 0.45F * r5);
+            float y = up * t - radius * 0.85F * t * t;
+
+            float x = (float) (Math.cos(ang) * dist);
+            float z = (float) (Math.sin(ang) * dist);
+
+            // 拖尾：沿"当前点 → 稍早一点的位置"画一条短亮线
+            float back = 0.12F;
+            float tBack = Math.max(0.0F, t - back);
+            float distBack = speed * tBack;
+            float yBack = up * tBack - radius * 0.85F * tBack * tBack;
+            float bx = (float) (Math.cos(ang) * distBack);
+            float bz = (float) (Math.sin(ang) * distBack);
+
+            // 温度：白热 → 金黄 → 暗红
+            float cr;
+            float cg;
+            float cb;
+            if (t < 0.4F) {
+                float k = t / 0.4F;
+                cr = 1.0F;
+                cg = 0.99F - 0.30F * k;
+                cb = 0.92F - 0.75F * k;
+            } else {
+                float k = (t - 0.4F) / 0.6F;
+                cr = 1.0F;
+                cg = 0.69F - 0.52F * k;
+                cb = 0.17F - 0.11F * k;
+            }
+            float alpha = 0.85F * (1.0F - t) * (1.0F - t);
+
+            // 用两片交叉细面近似一根短亮线（不做 billboard，省事且够看）
+            sparkQuad(vc, m, bx, yBack, bz, x, y, z, SPARK_HALF, cr, cg, cb, alpha);
+        }
+    }
+
+    /** 0..1 的伪随机。 */
+    private static float hashUnit(long v) {
+        v ^= v >>> 33;
+        v *= 0xFF51AFD7ED558CCDL;
+        v ^= v >>> 33;
+        v *= 0xC4CEB9FE1A85EC53L;
+        v ^= v >>> 33;
+        return (v >>> 11) / (float) (1L << 53);
+    }
+
+    /** 一段短亮线：沿 (b→a) 方向的两片交叉面。 */
+    private static void sparkQuad(VertexConsumer vc, Matrix4f m,
+                                  float bx, float by, float bz,
+                                  float ax, float ay, float az,
+                                  float half, float r, float g, float b, float alpha) {
+        for (int k = 0; k < 2; k++) {
+            float nx = k == 0 ? half : 0.0F;
+            float nz = k == 0 ? 0.0F : half;
+            vc.vertex(m, bx - nx, by, bz - nz).color(r, g, b, alpha * 0.25F)
+                    .uv(0.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+            vc.vertex(m, bx + nx, by, bz + nz).color(r, g, b, alpha * 0.25F)
+                    .uv(1.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+            vc.vertex(m, ax + nx, ay, az + nz).color(r, g, b, alpha)
+                    .uv(1.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+            vc.vertex(m, ax - nx, ay, az - nz).color(r, g, b, alpha)
+                    .uv(0.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+        }
+    }
+
+    /** 一圈贴地圆环（带宽度）：内圈半径、外圈半径各画一圈顶点连成环带。 */
+    private static void ringBand(Matrix4f m, VertexConsumer vc, float radius, float width,
+                                 float r, float g, float b, float alpha) {
+        float inner = Math.max(0.0F, radius - width * 0.5F);
+        float outer = radius + width * 0.5F;
+        for (int i = 0; i < RING_SEGS; i++) {
+            float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
+            float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
+            float c0 = (float) Math.cos(a0);
+            float s0 = (float) Math.sin(a0);
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+
+            vertex(vc, m, c0 * inner, s0 * inner, 0.0F, r, g, b, alpha);
+            vertex(vc, m, c0 * outer, s0 * outer, 1.0F, r, g, b, alpha);
+            vertex(vc, m, c1 * outer, s1 * outer, 1.0F, r, g, b, alpha);
+            vertex(vc, m, c1 * inner, s1 * inner, 0.0F, r, g, b, alpha);
+        }
+    }
+
+    /**
+     * 弹体残留线：从落点竖直往上到发射高度的一条热痕。
+     *
+     * <p>用户要求"弹体经过的空气要留下一条像激光的线"。这里用两片交叉的竖面近似，
+     * 亮度沿高度和时间同时衰减——所以是"热气散掉"，不是"贴图消失"。
+     */
+    private static void drawTrail(Matrix4f m, VertexConsumer vc, float topLocal, float p) {
+        if (topLocal <= 1.0F) {
+            return;
+        }
+        if (p > 0.95F) {
+            return;
+        }
+        float fade = 1.0F - p / 0.95F;
+        float alpha = 0.55F * fade;
+        float half = 0.85F * (0.45F + 0.55F * fade);
+
+        for (int k = 0; k < 2; k++) {
+            float nx = k == 0 ? half : 0.0F;
+            float nz = k == 0 ? 0.0F : half;
+            vc.vertex(m, -nx, 0.0F, -nz).color(1.0F, 0.45F, 0.16F, alpha)
+                    .uv(0.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+            vc.vertex(m, nx, 0.0F, nz).color(1.0F, 0.45F, 0.16F, alpha)
+                    .uv(1.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+            vc.vertex(m, nx, topLocal, nz).color(0.85F, 0.16F, 0.06F, alpha * 0.35F)
+                    .uv(1.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+            vc.vertex(m, -nx, topLocal, -nz).color(0.85F, 0.16F, 0.06F, alpha * 0.35F)
+                    .uv(0.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                    .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
+        }
+    }
+
+
+    /**
+     * 白热球：经纬网格近似的发光球体。
+     *
+     * <p>为什么不用贴图球：我们只有一张纯白 16×16，没有球面纹理；用经纬网格 + 顶点色
+     * 就能得到"中心白、边缘淡"的发光球（加法混合下天然向外扩散）。
+     * 网格数取 12 × 6 = 72 个四边形，只在爆闪的 0.5 秒内绘制，代价可接受。
+     */
+    private static void ball(Matrix4f m, VertexConsumer vc, float radius,
+                             float r, float g, float b, float alpha) {
+        final int lon = 12;
+        final int lat = 6;
+        for (int i = 0; i < lat; i++) {
+            // 纬度从 -90° 到 +90°
+            double phi0 = -Math.PI / 2.0 + Math.PI * i / lat;
+            double phi1 = -Math.PI / 2.0 + Math.PI * (i + 1) / lat;
+            float y0 = (float) Math.sin(phi0) * radius;
+            float y1 = (float) Math.sin(phi1) * radius;
+            float r0 = (float) Math.cos(phi0) * radius;
+            float r1 = (float) Math.cos(phi1) * radius;
+            // 两极附近 alpha 压低，读起来更"球"而不是"袋子"
+            float a0 = alpha * (0.35F + 0.65F * (float) Math.cos(phi0));
+            float a1 = alpha * (0.35F + 0.65F * (float) Math.cos(phi1));
+            for (int j = 0; j < lon; j++) {
+                double t0 = Math.PI * 2.0 * j / lon;
+                double t1 = Math.PI * 2.0 * (j + 1) / lon;
+                float c0 = (float) Math.cos(t0);
+                float s0 = (float) Math.sin(t0);
+                float c1 = (float) Math.cos(t1);
+                float s1 = (float) Math.sin(t1);
+
+                vc.vertex(m, c0 * r0, y0, s0 * r0).color(r, g, b, a0)
+                        .uv(0.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                        .uv2(FULL_BRIGHT).normal(c0, y0, s0).endVertex();
+                vc.vertex(m, c1 * r0, y0, s1 * r0).color(r, g, b, a0)
+                        .uv(1.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                        .uv2(FULL_BRIGHT).normal(c1, y0, s1).endVertex();
+                vc.vertex(m, c1 * r1, y1, s1 * r1).color(r, g, b, a1)
+                        .uv(1.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                        .uv2(FULL_BRIGHT).normal(c1, y1, s1).endVertex();
+                vc.vertex(m, c0 * r1, y1, s0 * r1).color(r, g, b, a1)
+                        .uv(0.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
+                        .uv2(FULL_BRIGHT).normal(c0, y1, s0).endVertex();
+            }
+        }
+    }
+
+    /** 平躺与竖直两种朝向共用：这里 vertex 的 y 就是高度，圆环传 0。 */
+    private static void vertex(VertexConsumer vc, Matrix4f m, float x, float z, float u,
+                               float r, float g, float b, float alpha) {
+        vc.vertex(m, x, 0.0F, z)
+                .color(r, g, b, alpha)
+                .uv(u, 0.5F)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(FULL_BRIGHT)
+                .normal(0.0F, 1.0F, 0.0F)
+                .endVertex();
+    }
+
+    /** 竖直面用这个（带 y 的顶点）。 */
+    private static void vertex(VertexConsumer vc, Matrix4f m, float x, float y, float z,
+                               float u, float r, float g, float b, float alpha) {
+        vc.vertex(m, x, y, z)
+                .color(r, g, b, alpha)
+                .uv(u, 0.5F)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(FULL_BRIGHT)
+                .normal(0.0F, 1.0F, 0.0F)
+                .endVertex();
+    }
+
+    @Override
+    public ResourceLocation getTextureLocation(OrbitalImpactEntity entity) {
+        return TEXTURE;
+    }
+}

@@ -9,14 +9,17 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 授权键（默认 O）：手里拿着命令手杖、准星对着傀儡时按下，请求服务端为这只傀儡"授权"。
+ * 本模组的客户端按键。
+ * <ul>
+ *   <li>{@link #AUTHORIZE}（默认 O）：手里拿着命令手杖、准星对着傀儡时按下，请求服务端为这只傀儡"授权"。</li>
+ * </ul>
  * <p>
  * 客户端只做"按键 → 发一个包"，是否真的成立完全由服务端判断（隐藏彩蛋不该在客户端提前暴露状态）。
  */
