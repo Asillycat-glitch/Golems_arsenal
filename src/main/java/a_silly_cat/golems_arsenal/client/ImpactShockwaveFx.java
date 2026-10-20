@@ -40,6 +40,12 @@ public final class ImpactShockwaveFx {
     private static final int DURATION = 24;
     private static final float EXPAND_END = 0.55F;
 
+    /**
+     * 暂时关闭屏幕空间空气波，保证地面只有一条亮环带。
+     * 爆炸重做完后再决定是恢复、还是让它和亮环带同半径合并。
+     */
+    private static final boolean SCREEN_WARP_ENABLED = false;
+
     private static final Map<Integer, Wave> WAVES = new HashMap<>();
 
     private static PostPass warpPass;
@@ -99,6 +105,9 @@ public final class ImpactShockwaveFx {
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
+        if (!SCREEN_WARP_ENABLED) {
+            return;
+        }
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL || WAVES.isEmpty()) {
             return;
         }

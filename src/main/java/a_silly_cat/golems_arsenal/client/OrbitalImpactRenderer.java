@@ -48,6 +48,11 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     @Override
     public void render(OrbitalImpactEntity entity, float entityYaw, float partialTick, PoseStack pose,
                        MultiBufferSource buffer, int light) {
+        // 同一次打击如果生成了两个重叠的冲击实体，只让 ID 最小的那个画主体，
+        // 否则会看到两条完全一样的环带/闪光。
+        if (!isPrimaryImpact(entity)) {
+            return;
+        }
         // **用 tickCount + partialTick 算进度**，而不是读同步值：
         // 同步值每 tick 才更新一次，快速扩散阶段会"一顿一顿"。
         // 参考秘法涡流的 getLerpedSize / getLerpedIntensity 也是这个思路。
@@ -83,6 +88,10 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             float trail = Math.max(1.0F, radius * 0.32F);
             ringBandTrail(m, vc, shellR, lead, trail, alpha);
         }
+
+        // 爆炸核心的第一版：一根很短的金白闪光柱，不是白球。
+        // 先给落点一个"炸开"的中心，后面再补烟尘/碎块/二次爆。
+        drawFlashCore(m, vc, radius, p, brightness);
 
         // 弹体残留线（从落点往上到发射高度）
         drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
@@ -247,6 +256,50 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     }
 
     /**
+     * 爆炸核心：一根持续时间很短的金白闪光柱，四片交叉，不是球。
+     *
+     * <p>前 20% 时长内从 1.7R 缩到 0.9R，随后消失；它只负责给落点一个
+     * “中心炸开”的瞬间，不承担烟尘/碎块。烟尘和二次爆留到下一版。
+     */
+    private static void drawFlashCore(Matrix4f m, VertexConsumer vc, float radius,
+                                      float p, float brightness) {
+        if (p <= 0.0F || p >= 0.20F) {
+            return;
+        }
+        float f = 1.0F - p / 0.20F;
+        float height = radius * (0.90F + 0.80F * f);
+        float width = Math.max(0.06F, radius * 0.07F * f);
+        float alpha = 0.85F * f * f * brightness;
+        if (alpha <= 0.002F) {
+            return;
+        }
+        float r = ShaderEffects.tintR(1.00F);
+        float g = ShaderEffects.tintG(0.95F);
+        float b = ShaderEffects.tintB(0.82F);
+        float topR = ShaderEffects.tintR(1.00F);
+        float topG = ShaderEffects.tintG(0.55F);
+        float topB = ShaderEffects.tintB(0.18F);
+
+        for (int plane = 0; plane < 4; plane++) {
+            float angle = (float) (plane * Math.PI / 4.0D);
+            float dx = (float) Math.cos(angle) * width;
+            float dz = (float) Math.sin(angle) * width;
+
+            // 正面
+            vertex(vc, m, -dx, 0.0F, -dz, 0.0F, r, g, b, alpha);
+            vertex(vc, m, dx, 0.0F, dz, 1.0F, r, g, b, alpha);
+            vertex(vc, m, dx, height, dz, 1.0F, topR, topG, topB, 0.0F);
+            vertex(vc, m, -dx, height, -dz, 0.0F, topR, topG, topB, 0.0F);
+
+            // 反面（entityTranslucentEmissive 可能背面剔除）
+            vertex(vc, m, -dx, height, -dz, 0.0F, topR, topG, topB, 0.0F);
+            vertex(vc, m, dx, height, dz, 1.0F, topR, topG, topB, 0.0F);
+            vertex(vc, m, dx, 0.0F, dz, 1.0F, r, g, b, alpha);
+            vertex(vc, m, -dx, 0.0F, -dz, 0.0F, r, g, b, alpha);
+        }
+    }
+
+    /**
      * 弹体残留线：从落点竖直往上到发射高度的一条热痕。
      *
      * <p>用户要求"弹体经过的空气要留下一条像激光的线"。这里用两片交叉的竖面近似，
@@ -311,6 +364,18 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 .uv2(FULL_BRIGHT)
                 .normal(0.0F, 1.0F, 0.0F)
                 .endVertex();
+    }
+
+    private static boolean isPrimaryImpact(OrbitalImpactEntity entity) {
+        for (OrbitalImpactEntity other : entity.level().getEntitiesOfClass(
+                OrbitalImpactEntity.class, entity.getBoundingBox().inflate(16.0D))) {
+            if (other != entity && other.isAlive()
+                    && other.getId() < entity.getId()
+                    && other.position().distanceToSqr(entity.position()) < 256.0D) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

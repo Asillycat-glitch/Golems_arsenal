@@ -100,11 +100,15 @@ tintB = b * 0.35;
 全屏圆环用投影半径驱动，站在落点上也仍然能看到一圈从脚下扩散出去。
 `ShockwaveShell` / `shockWall` / 平面亮环都已删除。
 
-`OrbitalImpactRenderer` 现在只负责：
-- 弹体残留热痕（`drawTrail`）；
-- 48 条向外/向上的火星（`drawSparks`）。
+> **这一版暂时关闭了屏幕空间空气波**（`ImpactShockwaveFx.SCREEN_WARP_ENABLED = false`），
+> 因为实机里它和亮环带叠在一起会被看成"两段冲击波"。先保证地面只有一条亮环带；
+> 爆炸重做完后再决定恢复，还是让它和亮环带同半径合并。
 
-爆炸由实体自带的 `ParticleTypes.EXPLOSION` + 火星 + 热痕承担；冲击波不再抢颜色。
+`OrbitalImpactRenderer` 现在负责：
+- 一条带拖尾的贴地环带；
+- 弹体残留热痕（`drawTrail`）；
+- 64 条向外/向上的火星（`drawSparks`）；
+- 很短的金白闪光柱（`drawFlashCore`，爆炸第一版）。
 
 ```text
 0% ───── 55% ───── 100%   冲击波
@@ -115,8 +119,11 @@ tintB = b * 0.35;
 **旧版本的 QUADS bug** 已不存在：`ShockwaveShell` 已删除，不再有可见球壳/三角面板。
 
 **“两拨冲击波”**：之前 `ImpactShockwaveFx` 对每个 `OrbitalImpactEntity` 都起一圈；
-同一次打击如果同时/连续出现两个冲击实体，就会看到两圈同心波。现在加了一个合并条件：
-**16 格内、16 tick 内只保留最早的一圈**，后续实体不会再加环。
+同一次打击如果同时/连续出现两个冲击实体，就会看到两圈同心波。现在加了两层收束：
+
+- `ImpactShockwaveFx`：16 格内、16 tick 内只保留最早的一圈；
+- `OrbitalImpactRenderer#isPrimaryImpact`：同一个区域内只让 ID 最小的冲击实体画主体，
+  另一个实体不会重复画环带/闪光。
 
 ### 2.5 主体：一条带拖尾的贴地冲击环（按图 3–8）
 
@@ -137,13 +144,17 @@ tintB = b * 0.35;
 没有低矮光墙，也没有 4 圈各自不同速度的环；这样地面上只有**一条**亮环带。
 白色发光球没有回来——参考图里那个"罩子"是地面波 + 火花重叠。
 
+**爆炸第一版**：前 20% 时长加了一根很短的金白闪光柱（`drawFlashCore`，四片交叉、
+不是球），只给落点一个"中心炸开"的瞬间。烟尘、碎块、二次爆还没做，
+这版先作为可测试的爆炸核心。
+
 ## 3. 涉及的文件
 
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
-client/ImpactShockwaveFx.java           屏幕拷贝 + 无色折射 + 屏幕震动 + 同心波合并
-client/OrbitalImpactRenderer.java       单条环带+拖尾/热痕/64 条火星
+client/ImpactShockwaveFx.java           无色折射（本版暂时关闭）+ 屏幕震动 + 波合并
+client/OrbitalImpactRenderer.java       单条环带+拖尾/闪光柱/热痕/64 条火星
 client/GuidanceBeamRenderer.java        压 alpha / 暖色 / 背面剔除
 client/OrbitalBeamRenderer.java         同上
 client/OrbitalProjectileRenderer.java   同上
@@ -166,14 +177,16 @@ assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
 看**落点**：
 
 - 命中瞬间：**一条**亮的贴地环带向外扫，后面拖着一段渐隐尾迹；
+- 环带中央有一根很短的金白闪光柱（爆炸第一版）；
 - 环带和 64 条火星重叠，不再是多圈独立环；
 - 爆炸粒子 + 爆炸声 + 弹体热痕；
-- 一圈**无色**折射环向外扩（没有白色/蓝色光罩）；
 - 屏幕短促震一下；
-- 只应该有**一条**亮环带 + 一圈无色空气波，不应该出现多圈同心亮环；
+- 这一版**不应该再看到**那圈无色空气波；如果还有第二圈，说明是另一个冲击实体，
+  现在 `isPrimaryImpact` 也会只留一个；
 - 引导光柱保持暖金。
 
 如果环带太窄/尾迹太短：调 `OrbitalImpactRenderer` 里的 `lead`、`trail`、`alpha`。
+如果闪光柱太细/太长：调 `drawFlashCore` 里的 `height`、`width`。
 如果还是多圈亮环，把 `/ga shot` 前后的日志和截图发我，我按实际绘制来源再收。
 
 ## 5. 已知限制
