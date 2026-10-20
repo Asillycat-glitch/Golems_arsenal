@@ -32,6 +32,8 @@ import java.util.Locale;
  * /gafx flow   [半径] [秒]   向内收束的粒子流
  * /gafx heat   [半径] [秒]   余热空气翻腾（屏幕空间噪声）
  * /gafx all    [半径] [秒]   折射 + 球壳 + 粒子流
+ * /gafx copy   [秒]          管线诊断：画面应原样不变
+ * /gafx shift  [秒]          管线诊断：画面应整体偏移 2% 屏宽
  * /gafx off                  关掉
  * /gafx status               看当前状态 / 后处理是否可用
  * /gafx bypass               开/关 Oculus 护栏（强行尝试后处理）
@@ -57,6 +59,8 @@ public final class RefractionCommand {
                 .then(modeNode("flow", RefractionFx.Mode.FLOW))
                 .then(modeNode("heat", RefractionFx.Mode.HEAT))
                 .then(modeNode("all", RefractionFx.Mode.ALL))
+                .then(modeNode("copy", RefractionFx.Mode.COPY))
+                .then(modeNode("shift", RefractionFx.Mode.SHIFT))
                 .then(Commands.literal("off").executes(ctx -> off(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("bypass").executes(ctx -> bypass(ctx.getSource()))));

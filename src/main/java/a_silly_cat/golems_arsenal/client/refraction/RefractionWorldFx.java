@@ -35,7 +35,8 @@ public final class RefractionWorldFx {
 
     public static void render(RenderLevelStageEvent event) {
         RefractionFx.Mode mode = RefractionFx.mode();
-        if (mode == null || mode == RefractionFx.Mode.WARP || mode == RefractionFx.Mode.HEAT) {
+        if (mode == null || mode == RefractionFx.Mode.WARP || mode == RefractionFx.Mode.HEAT
+                || mode == RefractionFx.Mode.COPY || mode == RefractionFx.Mode.SHIFT) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();

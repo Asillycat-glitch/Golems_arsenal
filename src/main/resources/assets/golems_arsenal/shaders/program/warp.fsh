@@ -125,7 +125,7 @@ void main() {
         refracted *= mix(1.0, 0.92, inner * 0.25);
 
         color = mix(color, refracted, clamp(mask * Progress, 0.0, 1.0));
-    } else {
+    } else if (Mode < 1.5) {
         // ------------------------------------------------ 余热 / 热浪
         // y=0 是屏幕底部；越低越强，到 0.62 以上完全消失（不能把天空也扭了）。
         float band = 1.0 - smoothstep(0.0, 0.62, uv.y);
@@ -140,6 +140,14 @@ void main() {
         refracted.b = texture(DiffuseSampler, src - off * 0.6).b;
 
         color = mix(color, refracted, band * Progress * 0.9);
+    } else if (Mode < 2.5) {
+        // ------------------------------------------------ 诊断：原样拷贝
+        // 这一步画面必须完全不变。变了/黑了 → 问题在 FBO/后处理管线，不在折射数学。
+        color = texture(DiffuseSampler, uv).rgb;
+    } else {
+        // ------------------------------------------------ 诊断：整体固定偏移
+        // 画面整体错开 2% 屏宽，证明"采样 UV 偏移"这条路是通的。
+        color = texture(DiffuseSampler, uv + vec2(0.02, 0.0)).rgb;
     }
 
     fragColor = vec4(color, 1.0);

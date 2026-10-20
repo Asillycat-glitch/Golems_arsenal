@@ -40,7 +40,14 @@ public final class RefractionFx {
         SHELL("shell", false),
         FLOW("flow", false),
         HEAT("heat", true),
-        ALL("all", true);
+        ALL("all", true),
+        /**
+         * 管线诊断：只把主画面原样拷贝一遍。画面应该<b>完全不变</b>；
+         * 如果这一步就黑了/花了，问题在 FBO/后处理管线，不在 shader 数学。
+         */
+        COPY("copy", true),
+        /** 管线诊断：整体 UV 固定偏移。画面应该整体错位 2% 屏宽，证明采样偏移生效。 */
+        SHIFT("shift", true);
 
         private final String id;
         private final boolean usesPost;
@@ -197,7 +204,8 @@ public final class RefractionFx {
 
     /** 后处理在运行期失败时，退回到纯几何版本，至少还能看到边界。 */
     public static void fallbackToShell(String reason) {
-        if (mode == Mode.WARP || mode == Mode.HEAT || mode == Mode.ALL) {
+        if (mode == Mode.WARP || mode == Mode.HEAT || mode == Mode.ALL
+                || mode == Mode.COPY || mode == Mode.SHIFT) {
             mode = Mode.SHELL;
             notifyPlayer("后处理不可用，已退回纯几何球壳：" + reason);
         }

@@ -112,12 +112,14 @@ public final class RefractionPostFx {
         }
 
         float partial = event.getPartialTick();
-        float env = RefractionFx.envelope(partial);
+        RefractionFx.Mode mode = RefractionFx.mode();
+        boolean heat = mode == RefractionFx.Mode.HEAT;
+        boolean diagnostic = mode == RefractionFx.Mode.COPY || mode == RefractionFx.Mode.SHIFT;
+        // 诊断模式不做包络：一启动就应该看到"原样拷贝 / 整体偏移"。
+        float env = diagnostic ? 1.0F : RefractionFx.envelope(partial);
         if (env <= 0.001F) {
             return;
         }
-        RefractionFx.Mode mode = RefractionFx.mode();
-        boolean heat = mode == RefractionFx.Mode.HEAT;
         Vec3 center = RefractionFx.center();
         float radius = RefractionFx.radiusNow(partial);
 
@@ -144,7 +146,7 @@ public final class RefractionPostFx {
         float tanHalfFov = 1.0F / m11;
         float aspect = m11 / m00;
 
-        if (!heat) {
+        if (!heat && !diagnostic) {
             Vec3 rel = center.subtract(camPos);
             float z = dot(rel, forward);
             if (z <= 0.10F) {
@@ -164,7 +166,13 @@ public final class RefractionPostFx {
         }
 
         EffectInstance fx = warpPass.getEffect();
-        fx.safeGetUniform("Mode").set(heat ? 1.0F : 0.0F);
+        float shaderMode = switch (mode) {
+            case HEAT -> 1.0F;
+            case COPY -> 2.0F;
+            case SHIFT -> 3.0F;
+            default -> 0.0F;
+        };
+        fx.safeGetUniform("Mode").set(shaderMode);
         fx.safeGetUniform("UseDepth").set(depthOk ? 1.0F : 0.0F);
         fx.safeGetUniform("Center").set((float) center.x, (float) center.y, (float) center.z);
         fx.safeGetUniform("Radius").set(radius);
