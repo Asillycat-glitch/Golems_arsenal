@@ -90,6 +90,7 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
         float camAngle = (float) Math.atan2(camPos.z - entity.getZ(), camPos.x - entity.getX());
 
         VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
+        float brightness = ShaderEffects.brightness();
         pose.pushPose();
         // 以弹体位置为原点，向上画拖尾（y 从 0 向上）
         Matrix4f m = pose.last().pose();
@@ -114,6 +115,8 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
             // 颜色/透明度：白 → 橙 → 暗红 → 透明
             float[] c0 = temp(f0);
             float[] c1 = temp(f1);
+            c0[3] *= brightness;
+            c1[3] *= brightness;
 
             // 沿长度的亮度闪动：像烧红的空气在翻腾，而不是一根均匀的柱子
             float flick = 0.78F + 0.22F * (float) Math.sin(
@@ -123,7 +126,11 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
                 float a0 = (float) (j * Math.PI * 2.0 / SEGMENTS);
                 float a1 = (float) ((j + 1) * Math.PI * 2.0 / SEGMENTS);
                 float am = (a0 + a1) * 0.5F;
-                float facing = Math.abs((float) Math.cos(am - camAngle));
+                float signedFacing = (float) Math.cos(am - camAngle);
+                if (signedFacing <= 0.0F) {
+                    continue;
+                }
+                float facing = signedFacing;
                 float shade = (0.25F + 0.75F * facing) * flick;
 
                 float x00 = ox0 + (float) Math.cos(a0) * r0;
@@ -136,8 +143,6 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
                 float z11 = oz1 + (float) Math.sin(a1) * r1;
 
                 quad(vc, m, x00, z00, x10, z10, y0, y1, x01, z01, x11, z11,
-                        c0, c1, shade * fadeIn);
-                quad(vc, m, x10, z10, x00, z00, y0, y1, x11, z11, x01, z01,
                         c0, c1, shade * fadeIn);
             }
         }
@@ -164,7 +169,12 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
         }
         // 末端淡出
         float a = ALPHA * (1.0F - f) * (1.0F - 0.35F * f);
-        return new float[]{r, g, b, a};
+        return new float[]{
+                ShaderEffects.tintR(r),
+                ShaderEffects.tintG(g),
+                ShaderEffects.tintB(b),
+                a
+        };
     }
 
     private static void quad(VertexConsumer vc, Matrix4f m,

@@ -91,6 +91,15 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
         var camPos = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
         VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
 
+        // 光影包（尤其 MakeUp）的 bloom 对近白自发光非常敏感：压 alpha + 拉暖色。
+        float brightness = ShaderEffects.brightness();
+        float coreR = ShaderEffects.tintR(CORE_R);
+        float coreG = ShaderEffects.tintG(CORE_G);
+        float coreB = ShaderEffects.tintB(CORE_B);
+        float glowR = ShaderEffects.tintR(GLOW_R);
+        float glowG = ShaderEffects.tintG(GLOW_G);
+        float glowB = ShaderEffects.tintB(GLOW_B);
+
         OrbitalGuidancePath.AimSample aim = OrbitalGuidancePath.sampleAim(progress);
 
         // ① 余晖：六条各自往回追几个采样，做出"扫过"的痕迹（只在聚合阶段之前有意义）
@@ -102,26 +111,26 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
                 }
                 OrbitalGuidancePath.AimSample oldAim = OrbitalGuidancePath.sampleAim(oldP);
                 float alpha = TRAIL_ALPHA * (1.0F - (float) k / (TRAIL_COUNT + 1))
-                        * oldAim.alphaMul();
+                        * oldAim.alphaMul() * brightness;
                 drawSix(vc, pose, entity, oldAim, radius, from, to, width, camPos,
-                        CORE_R, CORE_G, CORE_B, alpha, CORE_FACING_POW);
+                        coreR, coreG, coreB, alpha, CORE_FACING_POW);
             }
         }
 
         // ② 六条引导激光：辉光层 + 亮芯
         float baseAlpha = aim.alphaMul();
         drawSix(vc, pose, entity, aim, radius, from, to, width * GLOW_SCALE, camPos,
-                GLOW_R, GLOW_G, GLOW_B, GLOW_ALPHA * baseAlpha, GLOW_FACING_POW);
+                glowR, glowG, glowB, GLOW_ALPHA * baseAlpha * brightness, GLOW_FACING_POW);
         drawSix(vc, pose, entity, aim, radius, from, to, width, camPos,
-                CORE_R, CORE_G, CORE_B, CORE_ALPHA * baseAlpha, CORE_FACING_POW);
+                coreR, coreG, coreB, CORE_ALPHA * baseAlpha * brightness, CORE_FACING_POW);
 
         // ③ 聚合完成：中心那一条稍微放大（亮度已随放大回落，避免过曝）
         if (aim.centerScale() > 1.001F) {
             float grow = width * aim.centerScale();
             drawBeam(vc, pose, entity, 0.0F, 0.0F, from, to, grow * GLOW_SCALE, camPos,
-                    GLOW_R, GLOW_G, GLOW_B, GLOW_ALPHA * 0.8F, GLOW_FACING_POW);
+                    glowR, glowG, glowB, GLOW_ALPHA * 0.8F * brightness, GLOW_FACING_POW);
             drawBeam(vc, pose, entity, 0.0F, 0.0F, from, to, grow, camPos,
-                    CORE_R, CORE_G, CORE_B, CORE_ALPHA * 0.85F, CORE_FACING_POW);
+                    coreR, coreG, coreB, CORE_ALPHA * 0.85F * brightness, CORE_FACING_POW);
         }
 
         super.render(entity, entityYaw, partialTick, pose, buffer, light);
@@ -167,6 +176,12 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
         for (int i = 0; i < SEGMENTS; i++) {
             float a0 = (float) (i * Math.PI * 2.0 / SEGMENTS);
             float a1 = (float) ((i + 1) * Math.PI * 2.0 / SEGMENTS);
+            float am = (a0 + a1) * 0.5F;
+            // 只画朝向相机的那半圈。以前正反各画一遍，等于每根光柱的 alpha 翻倍，
+            // 在 bloom 里就是"两层 0.85 → 接近纯白"的直接原因。
+            if (Math.cos(am - camAngle) <= 0.0F) {
+                continue;
+            }
             float aEnd0 = facingAlpha(a0, camAngle, facingPow, alpha);
             float aEnd1 = facingAlpha(a1, camAngle, facingPow, alpha);
 
@@ -175,9 +190,7 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
             float x1 = (float) Math.cos(a1);
             float z1 = (float) Math.sin(a1);
 
-            // 正反各一遍，任何角度都可见
             quad(vc, m, x0, z0, x1, z1, half, height, r, g, b, aEnd0, aEnd1);
-            quad(vc, m, x1, z1, x0, z0, half, height, r, g, b, aEnd1, aEnd0);
         }
         pose.popPose();
     }

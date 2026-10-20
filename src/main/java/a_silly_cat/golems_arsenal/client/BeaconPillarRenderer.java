@@ -145,13 +145,15 @@ public class BeaconPillarRenderer extends EntityRenderer<LightPillarEntity> {
         float v1 = height * UV_TILES_PER_WORLD + scroll;
 
         // 外层热晕（宽、淡、偏冷）→ 再画内芯（窄、白热）
+        // 光影包 bloom 刹车：只压 alpha，保留绿色色相。
+        float brightness = ShaderEffects.brightness();
         swept(m, vc, radius, height, v0, v1, camAngle, ticks,
-                OUTER_ALPHA, OUTER_FACING_POW, true);
+                OUTER_ALPHA * brightness, OUTER_FACING_POW, true);
         swept(m, vc, radius * INNER_SCALE, height, v0, v1, camAngle, ticks,
-                INNER_ALPHA, INNER_FACING_POW, false);
+                INNER_ALPHA * brightness, INNER_FACING_POW, false);
 
         if (GROUND_RING) {
-            groundRing(m, vc, radius, ticks);
+            groundRing(m, vc, radius, ticks, brightness);
         }
 
         pose.popPose();
@@ -246,7 +248,8 @@ public class BeaconPillarRenderer extends EntityRenderer<LightPillarEntity> {
      * 它的作用不是"装饰"，而是<b>把光柱锚在地上</b> —— 光柱下端如果直接悬空，
      * 会读成"一根悬着的管子"；有一圈光晕落在地面，才像"从地面打上来的光"。
      */
-    private static void groundRing(Matrix4f m, VertexConsumer vc, float radius, float ticks) {
+    private static void groundRing(Matrix4f m, VertexConsumer vc, float radius, float ticks,
+                                   float brightness) {
         float rIn = radius * RING_INNER_SCALE;
         float rOut = radius * RING_OUTER_SCALE;
         // 轻微呼吸，避免完全静止
@@ -262,7 +265,7 @@ public class BeaconPillarRenderer extends EntityRenderer<LightPillarEntity> {
             float ci1 = (float) Math.cos(a1);
             float si1 = (float) Math.sin(a1);
 
-            int innerAlpha = (int) (RING_ALPHA * 255.0F);
+            int innerAlpha = (int) (RING_ALPHA * brightness * 255.0F);
             int outerAlpha = 0;
 
             vertex(vc, m, ci0 * rIn, si0 * rIn, HOT_R, HOT_G, HOT_B, innerAlpha);
