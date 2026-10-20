@@ -1,0 +1,35 @@
+{
+    "blend": {
+        "func": "add",
+        "srcrgb": "one",
+        "dstrgb": "zero"
+    },
+    "vertex": "golems_arsenal:warp",
+    "fragment": "golems_arsenal:warp",
+    "attributes": [ "Position" ],
+    "samplers": [
+        { "name": "DiffuseSampler" },
+        { "name": "DepthSampler" }
+    ],
+    "uniforms": [
+        { "name": "ProjMat",      "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "OutSize",      "type": "float",     "count": 2,  "values": [ 1.0, 1.0 ] },
+        { "name": "Time",         "type": "float",     "count": 1,  "values": [ 0.0 ] },
+        { "name": "Mode",         "type": "float",     "count": 1,  "values": [ 0.0 ] },
+        { "name": "UseDepth",     "type": "float",     "count": 1,  "values": [ 1.0 ] },
+        { "name": "Center",       "type": "float",     "count": 3,  "values": [ 0.0, 0.0, 0.0 ] },
+        { "name": "Radius",       "type": "float",     "count": 1,  "values": [ 1.0 ] },
+        { "name": "Strength",     "type": "float",     "count": 1,  "values": [ 0.1 ] },
+        { "name": "Progress",     "type": "float",     "count": 1,  "values": [ 1.0 ] },
+        { "name": "CenterUV",     "type": "float",     "count": 2,  "values": [ 0.5, 0.5 ] },
+        { "name": "ScreenRadius", "type": "float",     "count": 1,  "values": [ 0.25 ] },
+        { "name": "CamPos",       "type": "float",     "count": 3,  "values": [ 0.0, 0.0, 0.0 ] },
+        { "name": "CamForward",   "type": "float",     "count": 3,  "values": [ 0.0, 0.0, 1.0 ] },
+        { "name": "CamRight",     "type": "float",     "count": 3,  "values": [ -1.0, 0.0, 0.0 ] },
+        { "name": "CamUp",        "type": "float",     "count": 3,  "values": [ 0.0, 1.0, 0.0 ] },
+        { "name": "TanHalfFov",   "type": "float",     "count": 1,  "values": [ 0.7 ] },
+        { "name": "Aspect",       "type": "float",     "count": 1,  "values": [ 1.7777778 ] },
+        { "name": "Near",         "type": "float",     "count": 1,  "values": [ 0.05 ] },
+        { "name": "Far",          "type": "float",     "count": 1,  "values": [ 512.0 ] }
+    ]
+}
