@@ -7,32 +7,27 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
 /**
- * 球形冲击波：落点处一个**压扁的上半球**（罩子），向外膨胀到冲击半径。
+ * 冲击波周围的**空气波**：一个几乎透明、只有轮廓略亮的球壳。
  *
- * <p>参考的是"天基激光砸地"那种冲击波：贴地的亮环 + 低矮的半球形气浪 +
- * 从落点向外/向上的放射状火星，而不是一颗完整的透明球。
+ * <p>它不是"光罩"。参考图里真正读得出来的冲击波是：
+ * <ul>
+ *   <li>贴地扩散波（{@code OrbitalImpactRenderer} 里的 {@code shockWall} + 平面环）；</li>
+ *   <li>向外/向上的火花爆炸；</li>
+ *   <li>以及一圈很淡、只在边缘才看得见的空气扰动——就是这个壳。</li>
+ * </ul>
  *
- * <p><b>为什么是压扁的</b>：完整球在贴地时上半球高度 = 半径，看起来像"玻璃球"；
- * 参考图的罩子高度只有大约半径的一半，所以这里 y 方向乘 {@link #HEIGHT}。
+ * <p>所以这里的 alpha 压得非常低（内部约 0.01、边缘约 0.1），
+ * 颜色也保持中性，不再是一个绿色/蓝色的实心罩子。真正"亮"的部分交给地面波和火花。
  *
- * <p><b>为什么只画上半球</b>：下半球在地下，深度测试会挡住，白白浪费顶点；
- * 直接从地平线扫到天顶即可。
- *
- * <p><b>为什么每个 quad 只发 4 个顶点</b>：{@code entityTranslucentEmissive}
- * 的顶点模式是 QUADS，不是 TRIANGLES。之前误发了 6 个顶点（两个三角形），
- * 缓冲区会把不同 quad 的顶点拼错，看起来就是"蓝色线框球"——这张图里的网格感就是它。
- *
- * <p>顶点格式走 {@code RenderType.entityTranslucentEmissive}，和主光束同一条渲染路径，
- * 避免自定义 {@code POSITION_COLOR} RenderType 在 Oculus 下出现块状伪影。
+ * <p><b>顶点模式</b>：{@code entityTranslucentEmissive} 是 QUADS，
+ * 每个四边形必须恰好 4 个顶点；上一版 6 个顶点把缓冲区拼错，才出现"线框球"。
  */
 public final class ShockwaveShell {
 
-    /** 经度分段。48 段在近处也够圆。 */
-    private static final int LON = 48;
-    /** 纬度分段（从地平线到天顶）。 */
-    private static final int LAT = 16;
-    /** 罩子高度相对半径的比例。0.55 接近参考图的低矮半球。 */
-    private static final float HEIGHT = 0.55F;
+    /** 经度分段。 */
+    private static final int LON = 40;
+    /** 纬度分段。 */
+    private static final int LAT = 18;
 
     private ShockwaveShell() {
     }
@@ -41,10 +36,10 @@ public final class ShockwaveShell {
      * @param vc         {@code RenderType.entityTranslucentEmissive} 的顶点消费者
      * @param m          已经平移到冲击点的 pose 矩阵
      * @param camLocal   相机相对冲击点的位置
-     * @param radius     当前罩子半径
+     * @param radius     当前空气波半径
      * @param alpha      整体透明度（调用方已乘光影倍率）
      * @param brightness 光影倍率，只用于边缘轻微提亮
-     * @param ticks      动画时间，用来让罩面有轻微起伏
+     * @param ticks      动画时间，用来让壳面有轻微起伏
      */
     public static void draw(VertexConsumer vc, Matrix4f m, Vec3 camLocal, float radius,
                             float alpha, float brightness, float ticks) {
@@ -53,13 +48,14 @@ public final class ShockwaveShell {
         }
         boolean inside = camLocal.lengthSqr() < (double) radius * radius;
 
-        float cr = ShaderEffects.tintR(1.00F);
-        float cg = ShaderEffects.tintG(0.88F);
-        float cb = ShaderEffects.tintB(0.62F);
+        // 暖白：空气波不抢地面波的颜色，也不按参考图那种蓝去调（蓝色是背景/阵营叠加）。
+        float cr = 0.95F;
+        float cg = 0.90F;
+        float cb = 0.82F;
 
         for (int i = 0; i < LAT; i++) {
-            double phi0 = Math.PI * 0.5D * i / LAT;
-            double phi1 = Math.PI * 0.5D * (i + 1) / LAT;
+            double phi0 = -Math.PI / 2.0 + Math.PI * i / LAT;
+            double phi1 = -Math.PI / 2.0 + Math.PI * (i + 1) / LAT;
             double cp0 = Math.cos(phi0);
             double sp0 = Math.sin(phi0);
             double cp1 = Math.cos(phi1);
@@ -75,17 +71,22 @@ public final class ShockwaveShell {
 
                 double phiMid = (phi0 + phi1) * 0.5D;
                 double thMid = (th0 + th1) * 0.5D;
-                Vec3 normal = ellipsoidNormal(phiMid, thMid);
+                Vec3 normal = new Vec3(Math.cos(thMid) * Math.cos(phiMid),
+                        Math.sin(phiMid),
+                        Math.sin(thMid) * Math.cos(phiMid)).normalize();
                 Vec3 centerPoint = point(radius, Math.cos(phiMid), Math.sin(phiMid), thMid, ticks);
                 if (!inside && normal.dot(camLocal.subtract(centerPoint)) <= 0.0D) {
                     continue;
                 }
 
-                // 高度越低越亮（贴地亮环），越靠近天顶越淡；每个 quad 用同一个 alpha，
-                // 避免 QUADS 内部按三角形插值出现对角线接缝。
-                float base = 1.0F - (float) (phiMid / (Math.PI * 0.5D));
-                float a = alpha * (0.10F + 0.90F * (float) Math.pow(base, 1.25D));
-                float glow = 1.0F + 0.20F * base * brightness;
+                // 只在轮廓亮：正对视线几乎完全透明。
+                Vec3 view = camLocal.subtract(centerPoint);
+                float facing = view.lengthSqr() < 1.0E-8D
+                        ? 1.0F
+                        : (float) Math.abs(normal.dot(view.normalize()));
+                float rim = (float) Math.pow(1.0F - facing, 2.6D);
+                float a = alpha * (0.012F + 0.135F * rim);
+                float glow = 1.0F + 0.25F * rim * brightness;
 
                 vertex(vc, m, p00, normal, cr * glow, cg * glow, cb * glow, a);
                 vertex(vc, m, p01, normal, cr * glow, cg * glow, cb * glow, a);
@@ -96,22 +97,12 @@ public final class ShockwaveShell {
     }
 
     private static Vec3 point(float radius, double cosPhi, double sinPhi, double theta, float ticks) {
-        // 轻微起伏：让罩面不是完美的几何面，读起来更像"被推开的空气"。
-        float wobble = 1.0F + 0.020F * (float) Math.sin(theta * 3.0D + sinPhi * 7.0D + ticks * 0.35F);
+        // 极轻微的起伏，让轮廓不是完美的圆。
+        float wobble = 1.0F + 0.015F * (float) Math.sin(theta * 3.0D + sinPhi * 7.0D + ticks * 0.35F);
         float x = (float) (Math.cos(theta) * cosPhi * radius * wobble);
-        float y = (float) (sinPhi * radius * HEIGHT * wobble);
+        float y = (float) (sinPhi * radius * wobble);
         float z = (float) (Math.sin(theta) * cosPhi * radius * wobble);
         return new Vec3(x, y, z);
-    }
-
-    private static Vec3 ellipsoidNormal(double phi, double theta) {
-        double cp = Math.cos(phi);
-        double sp = Math.sin(phi);
-        // 椭球面 x²/R² + y²/(R·HEIGHT)² + z²/R² = 1 的梯度
-        double x = Math.cos(theta) * cp;
-        double z = Math.sin(theta) * cp;
-        double y = sp / (HEIGHT * HEIGHT);
-        return new Vec3(x, y, z).normalize();
     }
 
     private static void vertex(VertexConsumer vc, Matrix4f m, Vec3 p, Vec3 normal,

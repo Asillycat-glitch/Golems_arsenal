@@ -88,23 +88,45 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
 
-        // **球形冲击波壳**：替代原来的实心白热球。
-        // 外层 + 内层，膨胀到 radius；边缘亮、中心透明；地面以下由深度测试挡住。
-        float shellT = Math.min(1.0F, p / 0.95F);
+        // **冲击波的三段**：扩散 → 亮段 → 消失。
+        // 参考图 8 的"消失段"：亮墙和亮环先没，空气波和残余火星再淡出。
+        float bright;
+        if (p < 0.12F) {
+            bright = p / 0.12F;
+        } else if (p < 0.55F) {
+            bright = 1.0F;
+        } else {
+            bright = Math.max(0.0F, 1.0F - (p - 0.55F) / 0.35F);
+        }
+        float air = p < 0.20F
+                ? p / 0.20F
+                : Math.max(0.0F, 1.0F - (p - 0.65F) / 0.35F);
+
+        float shellT = Math.min(1.0F, p / 0.55F);
         float shellExpand = 1.0F - (1.0F - shellT) * (1.0F - shellT) * (1.0F - shellT);
         float shellR = radius * (0.18F + 0.82F * shellExpand);
-        float shellAlpha = 0.95F * (float) Math.pow(Math.sin(Math.PI * p), 0.55D) * brightness;
-        if (shellAlpha > 0.002F) {
-            ShockwaveShell.draw(vc, m, camLocal, shellR, shellAlpha, brightness, ticks);
-            ShockwaveShell.draw(vc, m, camLocal, shellR * 0.86F,
-                    shellAlpha * 0.35F, brightness, ticks);
-            // 罩子底部的贴地亮环：参考图里最抓眼的是"一圈很亮的边界"，
-            // 不是罩子顶部；这一圈跟着 shellR 一起扩散。
-            ringBand(m, vc, shellR, Math.max(0.05F, shellR * 0.035F),
+
+        // 空气波：只留很淡的轮廓，不是光罩；它的消失比亮段晚。
+        float airAlpha = 0.95F * air * brightness;
+        if (airAlpha > 0.002F) {
+            ShockwaveShell.draw(vc, m, camLocal, shellR, airAlpha, brightness, ticks);
+        }
+
+        // 贴地扩散波：一圈有高度的低矮光墙 + 一条平面亮环。
+        // 参考图 5–7 里那个"像罩子"的上半部分，其实是这圈波和火花重叠出来的。
+        float wallH = Math.max(0.12F, radius * 0.16F * (1.0F - 0.30F * p));
+        float wallW = Math.max(0.05F, radius * 0.035F);
+        float wallAlpha = 0.70F * bright * brightness;
+        if (wallAlpha > 0.002F) {
+            shockWall(m, vc, shellR, wallH, wallW,
+                    ShaderEffects.tintR(1.00F),
+                    ShaderEffects.tintG(0.95F),
+                    ShaderEffects.tintB(0.82F), wallAlpha);
+            ringBand(m, vc, shellR, wallW * 1.6F,
                     ShaderEffects.tintR(1.00F),
                     ShaderEffects.tintG(0.95F),
                     ShaderEffects.tintB(0.82F),
-                    shellAlpha * 0.90F);
+                    wallAlpha * 0.85F);
         }
 
         // **贴地冲击环**（保留）：各自按出生时间推进，缓出扩散，后段淡出
@@ -275,6 +297,33 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             vertex(vc, m, c0 * outer, s0 * outer, 1.0F, r, g, b, alpha);
             vertex(vc, m, c1 * outer, s1 * outer, 1.0F, r, g, b, alpha);
             vertex(vc, m, c1 * inner, s1 * inner, 0.0F, r, g, b, alpha);
+        }
+    }
+
+    /**
+     * 贴地扩散波：一圈有高度的低矮光墙，底边亮、顶边淡。
+     *
+     * <p>参考图里冲击波"看起来像罩子"的那一半，其实是这圈墙和同时炸开的火花重叠出来的；
+     * 它本身只有约 0.16R 高，不是半球。
+     */
+    private static void shockWall(Matrix4f m, VertexConsumer vc, float radius,
+                                  float height, float width,
+                                  float r, float g, float b, float alpha) {
+        float inner = Math.max(0.01F, radius - width * 0.5F);
+        float outer = radius + width * 0.5F;
+        float topAlpha = alpha * 0.12F;
+        for (int i = 0; i < RING_SEGS; i++) {
+            float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
+            float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
+            float c0 = (float) Math.cos(a0);
+            float s0 = (float) Math.sin(a0);
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+
+            vertex(vc, m, c0 * inner, 0.0F, s0 * inner, 0.0F, r, g, b, alpha);
+            vertex(vc, m, c0 * outer, 0.0F, s0 * outer, 1.0F, r, g, b, alpha);
+            vertex(vc, m, c1 * outer, height, s1 * outer, 1.0F, r, g, b, topAlpha);
+            vertex(vc, m, c1 * inner, height, s1 * inner, 0.0F, r, g, b, topAlpha);
         }
     }
 
