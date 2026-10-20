@@ -80,62 +80,70 @@ tintB = b * 0.35;
 - 现在一根柱子的每一像素只有一层，亮度直接减半；
 - 球体也是前半球，不再前后叠加。
 
-### 2.4 白热球 → 空气波 + 贴地扩散波
+### 2.4 白热球 → 无色屏幕空间冲击波
 
-`OrbitalImpactRenderer` 里原来的"白热球"已删除。参考图 5–7 里那个"像罩子"的东西，
-其实是**贴地扩散波和火花爆炸重叠**出来的，不是真的光罩；图 8 还展示了它的**消失段**。
+`OrbitalImpactRenderer` 里原来的"白热球"已删除，落点不再有一个可见的光罩。
 
-现在落点由三部分组成：
+参考图 3–7 的连续过程是：**弹体下坠 → 命中 → 贴地扩散波 + 火花爆炸**；
+图 5–7 里看起来像"罩子"的上半部分，其实是极亮的扩散波和火花在画面里重叠。
+图 8 是它的**消失段**。图 2/7 里真正细微但关键的是**周围被推开的空气波**。
 
-1. **空气波**（`ShockwaveShell`）：一个几乎透明、只有轮廓略亮的球壳，中性暖白；
-   alpha 内部约 0.01、边缘约 0.1，只负责"空气被推开"的暗示，不是可见光罩。
-2. **贴地扩散波**（`shockWall` + 平面环）：一圈有高度（约 0.16R）的低矮光墙 +
-   一条亮环，跟着半径扩散；亮的部分主要在这里。
-3. **火花**：48 条向外/向上的短光条，和扩散波重叠，形成参考图 5–7 的"上半相连"观感。
+现在这部分由 `ImpactShockwaveFx` 完成，做法参考秘法涡流的 `warp_world`：
 
-时间上明确分三段（`OrbitalImpactRenderer`）：
+- 在 `AFTER_LEVEL` 用 `PostPass` 把主画面作为 `DiffuseSampler`，输出到 swap，再 blit 回主目标；
+- CPU 把冲击点投影成 `CenterUV` / `ScreenRadius`，shader 只在投影圆环附近偏移 UV；
+- **不添加任何颜色**，所以是"无色"的：只有背景被推开，没有白色/蓝色光罩；
+- 圆环在约 55% 时长内扩到 **3× 冲击半径**（半径 14 时约 42 格），然后消失；
+- `ViewportEvent.ComputeCameraAngles` 里有一次很短、随距离衰减的屏幕震动（前 40% 时长）。
 
+这里没有用 3D 球壳/网格：玩家常常就站在落点上，网格球会把相机包在里面；
+全屏圆环用投影半径驱动，站在落点上也仍然能看到一圈从脚下扩散出去。
+`ShockwaveShell` / `shockWall` / 平面亮环都已删除。
+
+`OrbitalImpactRenderer` 现在只负责：
+- 弹体残留热痕（`drawTrail`）；
+- 48 条向外/向上的火星（`drawSparks`）。
+
+爆炸由实体自带的 `ParticleTypes.EXPLOSION` + 火星 + 热痕承担；冲击波不再抢颜色。
+
+```text
+0% ───── 55% ───── 100%   冲击波
+  膨胀到 3R     淡出
+0% ─ 40%                  屏幕震动（很短的一次）
 ```
-0.00–0.12  亮段淡入
-0.12–0.55  扩散 + 保持（波到达 radius）
-0.55–0.90  亮墙/亮环淡出（图 8 的消失段）
-0.65–1.00  空气波最后淡出，火星同时收尾
-```
 
-**一个关键 bug**：`entityTranslucentEmissive` 的顶点模式是 **QUADS**，每个四边形必须是 4 个顶点。
-上一版按 TRIANGLES 的习惯发了 6 个顶点（两个三角形），缓冲区会把相邻四边形的顶点拼错，
-于是看起来像一个**蓝色线框球/三角面板球**。现在改回每个 quad 4 个顶点，
-并且每个 quad 用同一个 alpha，避免内部对角线接缝。
-
-旧参数 `FLASH_END` / `BALL_RADIUS_RATIO` / `BALL_ALPHA` 已删除；火星数量从 26 提到 48。
+**旧版本的 QUADS bug** 已不存在：`ShockwaveShell` 已删除，不再有可见球壳/三角面板。
 
 ## 3. 涉及的文件
 
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
-client/ShockwaveShell.java              球形冲击波壳（替代白热球）
+client/ImpactShockwaveFx.java           屏幕拷贝 + 无色折射 + 屏幕震动
+client/OrbitalImpactRenderer.java       只保留热痕和火星；白热球/光罩已删除
 client/GuidanceBeamRenderer.java        压 alpha / 暖色 / 背面剔除
 client/OrbitalBeamRenderer.java         同上
 client/OrbitalProjectileRenderer.java   同上
-client/OrbitalImpactRenderer.java       球壳/环/拖尾/火星全部压 alpha + 背面剔除
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
+assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
 ```
 
 ## 4. 怎么测
 
 1. 进游戏，开 MakeUp（Oculus 光影设置里选 `MakeUp-UltraFast-9.1e.zip`）；
 2. `/ga full 14`；
-3. 看：
-   - 引导光柱是不是**金色/暖白**，而不是白柱；
-   - 夜里还能不能看到光柱的轮廓（应该能，但不再炸成一片）；
-   - 落点白热球是不是"金色火球 + 外圈亮边"，而不是白罩；
-   - 白天光柱是否还读得出来（会偏淡，这是预期）。
-4. 如果还是白：
-   - 先把 `config/golems_arsenal-common.toml` 里 `shader_effect_brightness` 调到 `0.25`；
-   - 如果 `0.25` 仍然纯白，说明 MakeUp 的 entity gbuffer **完全忽略 alpha**，
-     仅靠压 alpha 不够，需要进一步改 RGB（或考虑在 shaderpack final 之后绘制，代价很大）。
-5. 如果太暗：调到 `0.45`~`0.55`，或临时设为 `1.0` 对比。
+3. 看**落点**（不是 `/gafx all` 的试验球）：
+   - 命中瞬间：没有白色/蓝色光罩，只有背景被**径向推开一圈**的无色折射；
+   - 折射环在约 0.6 秒内扩到很远，然后消失；
+   - 屏幕有一次很短的震动；
+   - 弹体热痕和 48 条火星还在，承担爆炸/破坏的观感；
+   - 引导光柱本身仍是金色/暖白，不是白柱。
+4. 如果**完全看不到折射环**：
+   - 先看日志有没有 `[GA-Shockwave] shader loaded`；
+   - 没有的话是自定义 core shader 没加载/被 Oculus 替换，把日志发我；
+   - 有的话调大 `impact_shockwave.fsh` 里的 `0.075`（这是最大屏幕偏移比例）。
+5. 如果光柱还是白：把 `config/golems_arsenal-common.toml` 里 `shader_effect_brightness` 调到 `0.25`。
+6. 如果太暗：调到 `0.45`~`0.55`，或临时设为 `1.0` 对比。
 
 ## 5. 已知限制
 
