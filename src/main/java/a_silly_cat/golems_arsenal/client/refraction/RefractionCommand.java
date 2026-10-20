@@ -94,7 +94,7 @@ public final class RefractionCommand {
         }
         String extra = mode.usesPost() ? "  后处理已请求" : "  纯几何";
         return ok(src, String.format(Locale.ROOT,
-                "%s 已启动：半径 %.1f 格，%.1f 秒，中心 (%.1f, %.1f, %.1f)%s",
+                "%s 已启动：半径 %.1f 格，%d 秒，中心 (%.1f, %.1f, %.1f)%s",
                 mode.id(), radius, seconds, center.x, center.y, center.z, extra));
     }
 
