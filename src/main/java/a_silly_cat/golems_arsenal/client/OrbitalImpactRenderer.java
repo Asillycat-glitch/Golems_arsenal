@@ -15,22 +15,15 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import org.joml.Matrix4f;
 
 /**
- * 发射段落点特效渲染：**贴地冲击环（3 圈）+ 中心短闪柱**。
+ * 发射段落点特效渲染：**一条带拖尾的贴地冲击环** + 弹体热痕 + 火星。
  *
- * <p>参考秘法涡流 {@code Shockwave} 的参数结构（size / expandSpeed / intensity / fade），
- * 但这里不引入它的类，只借"每一圈有自己的出生时间、速度、淡出"这个结构：
- * <pre>
- *   圈 0  出生 0%    速度 1.00x   宽度 0.30   颜色 近白
- *   圈 1  出生 12%   速度 0.78x   宽度 0.22   颜色 暖金
- *   圈 2  出生 26%   速度 0.55x   宽度 0.16   颜色 暖橙（最淡）
- * </pre>
+ * <p>参考图 3–8 的「五雷天罚」主体：不是几圈各自扩散的独立环，而是
+ * **一条领先的环带，后面拖着一段逐渐淡掉的尾迹**——像冲击波前沿扫过地面后
+ * 留下的余波。环带本身用一条四边形带画出来，外缘亮、内缘透明，所以是一条
+ * 连续的带，不是多条线。
  *
- * <p><b>闪柱</b>：前 40% 的时间里，中心有一根很短的亮柱（高 {@link #FLASH_HEIGHT}），
- * 之后快速淡出。它是"炮口火光"的对应物——用户的瞄准段已经把能量聚到中心，
- * 发射的瞬间需要一根短促的爆闪，而不是继续留着细光柱。
- *
- * <p><b>过曝控制</b>：三层都是加法混合，所以每层 alpha 都压得很低（0.2~0.5），
- * 靠叠加出亮度而不是单独一层就拉满。
+ * <p>更外层的空气波交给 {@link ImpactShockwaveFx}（无色屏幕折射）；
+ * 这里只负责可见的贴地爆开。
  */
 @OnlyIn(Dist.CLIENT)
 public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
@@ -41,19 +34,6 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
 
     /** 贴地环的分段数。48 段在近处也够圆。 */
     private static final int RING_SEGS = 48;
-
-    /**
-     * 贴地冲击环参数表：{出生进度, 速度系数, 带宽, R, G, B, 基础 alpha}。
-     *
-     * <p>参考图 3–8 的"五雷天罚"主体：亮的地面扩散波 + 火花，
-     * 不是一颗白色发光球。这里恢复的是那道低矮光墙 + 多圈平面环。
-     */
-    private static final float[][] RINGS = {
-            {0.00F, 0.88F, 0.26F, 1.00F, 0.97F, 0.88F, 0.55F},   // 白热冲击
-            {0.12F, 0.66F, 0.19F, 1.00F, 0.78F, 0.35F, 0.48F},   // 暖金
-            {0.26F, 0.46F, 0.14F, 1.00F, 0.62F, 0.20F, 0.36F},   // 橙
-            {0.30F, 1.02F, 0.08F, 0.95F, 0.22F, 0.14F, 0.44F},   // 地面红环（余烬）
-    };
 
     /** 贴地抬升，避免 z-fighting。 */
     private static final float LIFT = 0.04F;
@@ -82,8 +62,8 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
 
-        // 主体：贴地扩散波 + 多圈平面环（参考图 3–8 的"五雷天罚"）。
-        // 冲击波本身的空气波交给 ImpactShockwaveFx（无色屏幕折射），这里只负责可见的爆炸扩散。
+        // 主体：**一条**贴地环带，外缘亮、内缘透明，形成向后拖的尾迹。
+        // 不再画多圈独立环；更外层的空气波由 ImpactShockwaveFx 负责。
         float bright;
         if (p < 0.12F) {
             bright = p / 0.12F;
@@ -95,41 +75,13 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
 
         float shellT = Math.min(1.0F, p / 0.55F);
         float shellExpand = 1.0F - (1.0F - shellT) * (1.0F - shellT) * (1.0F - shellT);
-        float shellR = radius * (0.18F + 0.82F * shellExpand);
+        float shellR = radius * (0.10F + 0.90F * shellExpand);
 
-        float wallH = Math.max(0.16F, radius * 0.20F * (1.0F - 0.25F * p));
-        float wallW = Math.max(0.06F, radius * 0.040F);
-        float wallAlpha = 0.82F * bright * brightness;
-        if (wallAlpha > 0.002F) {
-            shockWall(m, vc, shellR, wallH, wallW,
-                    ShaderEffects.tintR(1.00F),
-                    ShaderEffects.tintG(0.95F),
-                    ShaderEffects.tintB(0.82F), wallAlpha);
-            ringBand(m, vc, shellR, wallW * 1.7F,
-                    ShaderEffects.tintR(1.00F),
-                    ShaderEffects.tintG(0.95F),
-                    ShaderEffects.tintB(0.82F),
-                    wallAlpha * 0.90F);
-        }
-
-        // 多圈平面环：各自出生时间/速度/淡出
-        for (float[] ring : RINGS) {
-            float born = ring[0];
-            if (p < born) {
-                continue;
-            }
-            float t = (p - born) / (1.0F - born);
-            float ease = 1.0F - (1.0F - t) * (1.0F - t);
-            float r = radius * ring[1] * ease;
-            if (r <= 0.05F) {
-                continue;
-            }
-            float fade = t < 0.75F ? 1.0F : (1.0F - (t - 0.75F) / 0.25F);
-            float alpha = ring[6] * Math.max(0.0F, fade) * brightness;
-            ringBand(m, vc, r, ring[2],
-                    ShaderEffects.tintR(ring[3]),
-                    ShaderEffects.tintG(ring[4]),
-                    ShaderEffects.tintB(ring[5]), alpha);
+        float alpha = 0.85F * bright * brightness;
+        if (alpha > 0.002F) {
+            float lead = Math.max(0.10F, radius * 0.045F);
+            float trail = Math.max(1.0F, radius * 0.32F);
+            ringBandTrail(m, vc, shellR, lead, trail, alpha);
         }
 
         // 弹体残留线（从落点往上到发射高度）
@@ -262,38 +214,23 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         }
     }
 
-    /** 一圈贴地圆环（带宽度）：内圈半径、外圈半径各画一圈顶点连成环带。 */
-    private static void ringBand(Matrix4f m, VertexConsumer vc, float radius, float width,
-                                 float r, float g, float b, float alpha) {
-        float inner = Math.max(0.0F, radius - width * 0.5F);
-        float outer = radius + width * 0.5F;
-        for (int i = 0; i < RING_SEGS; i++) {
-            float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
-            float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
-            float c0 = (float) Math.cos(a0);
-            float s0 = (float) Math.sin(a0);
-            float c1 = (float) Math.cos(a1);
-            float s1 = (float) Math.sin(a1);
-
-            vertex(vc, m, c0 * inner, s0 * inner, 0.0F, r, g, b, alpha);
-            vertex(vc, m, c0 * outer, s0 * outer, 1.0F, r, g, b, alpha);
-            vertex(vc, m, c1 * outer, s1 * outer, 1.0F, r, g, b, alpha);
-            vertex(vc, m, c1 * inner, s1 * inner, 0.0F, r, g, b, alpha);
-        }
-    }
-
     /**
-     * 贴地扩散波：一圈有高度的低矮光墙，底边亮、顶边淡。
+     * 一条贴地环带 + 拖尾。
      *
-     * <p>参考图 5–7 里"像罩子"的上半部分，是这圈低墙和同时炸开的火花重叠出来的；
-     * 它本身只有约 0.2R 高，不是半球。
+     * <p>外缘在 {@code radius + lead/2}，内缘在 {@code radius - trail}：
+     * 外缘是白热前沿，内缘 alpha 为 0、颜色偏橙红，所以看起来是**一条带**，
+     * 前面亮、后面慢慢散掉——不是几圈各自独立的环。
      */
-    private static void shockWall(Matrix4f m, VertexConsumer vc, float radius,
-                                  float height, float width,
-                                  float r, float g, float b, float alpha) {
-        float inner = Math.max(0.01F, radius - width * 0.5F);
-        float outer = radius + width * 0.5F;
-        float topAlpha = alpha * 0.12F;
+    private static void ringBandTrail(Matrix4f m, VertexConsumer vc, float radius,
+                                      float lead, float trail, float alpha) {
+        float outer = radius + lead * 0.5F;
+        float inner = Math.max(0.01F, radius - trail);
+        float rOuter = ShaderEffects.tintR(1.00F);
+        float gOuter = ShaderEffects.tintG(0.96F);
+        float bOuter = ShaderEffects.tintB(0.86F);
+        float rInner = ShaderEffects.tintR(1.00F);
+        float gInner = ShaderEffects.tintG(0.35F);
+        float bInner = ShaderEffects.tintB(0.10F);
         for (int i = 0; i < RING_SEGS; i++) {
             float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
             float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
@@ -302,10 +239,10 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             float c1 = (float) Math.cos(a1);
             float s1 = (float) Math.sin(a1);
 
-            vertex(vc, m, c0 * inner, 0.0F, s0 * inner, 0.0F, r, g, b, alpha);
-            vertex(vc, m, c0 * outer, 0.0F, s0 * outer, 1.0F, r, g, b, alpha);
-            vertex(vc, m, c1 * outer, height, s1 * outer, 1.0F, r, g, b, topAlpha);
-            vertex(vc, m, c1 * inner, height, s1 * inner, 0.0F, r, g, b, topAlpha);
+            vertex(vc, m, c0 * outer, s0 * outer, 1.0F, rOuter, gOuter, bOuter, alpha);
+            vertex(vc, m, c1 * outer, s1 * outer, 1.0F, rOuter, gOuter, bOuter, alpha);
+            vertex(vc, m, c1 * inner, s1 * inner, 0.0F, rInner, gInner, bInner, 0.0F);
+            vertex(vc, m, c0 * inner, s0 * inner, 0.0F, rInner, gInner, bInner, 0.0F);
         }
     }
 
