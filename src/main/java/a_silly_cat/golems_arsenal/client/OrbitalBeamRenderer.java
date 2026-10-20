@@ -136,6 +136,7 @@ public class OrbitalBeamRenderer extends EntityRenderer<OrbitalBeamEntity> {
         float camAngle = (float) Math.atan2(camPos.z - entity.getZ(), camPos.x - entity.getX());
 
         VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(BEAM_TEXTURE));
+        float brightness = ShaderEffects.brightness();
         pose.pushPose();
         pose.translate(0.0, from - entity.getY(), 0.0);
         pose.mulPose(Axis.YP.rotationDegrees(-SPIN_DEGREES_PER_TICK * ticks));
@@ -143,9 +144,9 @@ public class OrbitalBeamRenderer extends EntityRenderer<OrbitalBeamEntity> {
 
         // 外层热晕（宽、偏红），再画内芯（窄、白热）
         swept(m, vc, outerHalf, (float) (to - from), v0, v1, camAngle,
-                OUTER_ALPHA, OUTER_FACING_POW, ticks, true);
+                OUTER_ALPHA * brightness, OUTER_FACING_POW, ticks, true);
         swept(m, vc, innerHalf, (float) (to - from), v0, v1, camAngle,
-                INNER_ALPHA, INNER_FACING_POW, ticks, false);
+                INNER_ALPHA * brightness, INNER_FACING_POW, ticks, false);
         pose.popPose();
 
         super.render(entity, entityYaw, partialTick, pose, buffer, light);
@@ -159,6 +160,13 @@ public class OrbitalBeamRenderer extends EntityRenderer<OrbitalBeamEntity> {
     private static void swept(Matrix4f m, VertexConsumer vc, float half, float height,
                               float v0, float v1, float camAngle,
                               float alpha, float facingPow, float ticks, boolean outer) {
+        float hotR = ShaderEffects.tintR(HOT_R);
+        float hotG = ShaderEffects.tintG(HOT_G);
+        float hotB = ShaderEffects.tintB(HOT_B);
+        float coolR = ShaderEffects.tintR(COOL_R);
+        float coolG = ShaderEffects.tintG(COOL_G);
+        float coolB = ShaderEffects.tintB(COOL_B);
+
         for (int i = 0; i < SLICES; i++) {
             float y0 = height * i / SLICES;
             float y1 = height * (i + 1) / SLICES;
@@ -183,16 +191,22 @@ public class OrbitalBeamRenderer extends EntityRenderer<OrbitalBeamEntity> {
                 float a1 = (float) ((j + 1) * Math.PI * 2.0 / SEGMENTS);
                 float am = (a0 + a1) * 0.5F;
 
+                // 只画朝向相机的那半圈，避免正反两层叠加把 alpha 推到饱和
+                float signedFacing = (float) Math.cos(am - camAngle);
+                if (signedFacing <= 0.0F) {
+                    continue;
+                }
+
                 // 该段的朝向（用于 alpha 与温度渐变）
-                float facing = Math.abs((float) Math.cos(am - camAngle));
+                float facing = signedFacing;
                 float shade = (float) Math.pow(facing, facingPow);
                 float a = alpha * (0.04F + 0.96F * shade);
 
                 // 温度：正对相机处白热，轮廓处红热
                 float t = shade;
-                float cr = COOL_R + (HOT_R - COOL_R) * t;
-                float cg = COOL_G + (HOT_G - COOL_G) * t;
-                float cb = COOL_B + (HOT_B - COOL_B) * t;
+                float cr = coolR + (hotR - coolR) * t;
+                float cg = coolG + (hotG - coolG) * t;
+                float cb = coolB + (hotB - coolB) * t;
                 if (outer) {
                     // 外层整体压暗一档，别抢内芯
                     cr *= 0.85F;
@@ -218,10 +232,8 @@ public class OrbitalBeamRenderer extends EntityRenderer<OrbitalBeamEntity> {
                 float u0 = v0 + (v1 - v0) * f0;
                 float u1 = v0 + (v1 - v0) * f1;
 
-                // 正反各一遍，任何角度都可见
+                // 正反各一遍会翻倍 alpha；这里只画正面
                 quad(vc, m, x00, z00, x10, z10, y0, y1, x01, z01, x11, z11,
-                        u0, u1, cr, cg, cb, a);
-                quad(vc, m, x10, z10, x00, z00, y0, y1, x11, z11, x01, z01,
                         u0, u1, cr, cg, cb, a);
             }
         }

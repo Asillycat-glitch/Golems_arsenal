@@ -11,6 +11,7 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.joml.Matrix4f;
@@ -51,7 +52,7 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     /** 白热球最大半径相对冲击半径的比例。 */
     private static final float BALL_RADIUS_RATIO = 0.60F;
     /** 白热球的峰值亮度（加法混合，别拉满，否则一片白）。 */
-    private static final float BALL_ALPHA = 1.00F;
+    private static final float BALL_ALPHA = 0.65F;
     /** 贴地环的分段数。48 段在近处也够圆。 */
     private static final int RING_SEGS = 48;
 
@@ -88,6 +89,11 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         float radius = entity.radius();
         VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
 
+        // 光影包 bloom 刹车：压 alpha、把近白拉成暖金、球体只画正面。
+        float brightness = ShaderEffects.brightness();
+        Vec3 camLocal = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()
+                .subtract(entity.position());
+
         pose.pushPose();
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
@@ -106,12 +112,15 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 continue;
             }
             float fade = t < 0.75F ? 1.0F : (1.0F - (t - 0.75F) / 0.25F);
-            float alpha = ring[6] * Math.max(0.0F, fade);
-            ringBand(m, vc, r, ring[2], ring[3], ring[4], ring[5], alpha);
+            float alpha = ring[6] * Math.max(0.0F, fade) * brightness;
+            ringBand(m, vc, r, ring[2],
+                    ShaderEffects.tintR(ring[3]),
+                    ShaderEffects.tintG(ring[4]),
+                    ShaderEffects.tintB(ring[5]), alpha);
         }
 
         // 弹体残留线（从落点往上到发射高度）
-        drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p);
+        drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
 
         // 中心白热球（对应参考图的"爆闪球"，不是一根柱子）
         if (p < FLASH_END) {
@@ -123,12 +132,15 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             float expandEase = 1.0F - ie * ie * ie;
             float ballR = radius * BALL_RADIUS_RATIO * (0.25F + 1.05F * expandEase);
             // 亮度衰减略快于尺寸增长：越散越薄，最后自然消失
-            float alpha = BALL_ALPHA * (float) Math.pow(1.0F - t, 1.6F);
-            ball(m, vc, ballR, 1.0F, 0.99F, 0.94F, alpha);
+            float alpha = BALL_ALPHA * (float) Math.pow(1.0F - t, 1.6F) * brightness;
+            ball(m, vc, ballR,
+                    ShaderEffects.tintR(1.0F),
+                    ShaderEffects.tintG(0.99F),
+                    ShaderEffects.tintB(0.94F), alpha, camLocal);
         }
 
         // **溅射光粒**：砸出来的细小火星，全部用几何画（不是原版粒子）
-        drawSparks(m, vc, radius, p);
+        drawSparks(m, vc, radius, p, brightness);
 
         pose.popPose();
         super.render(entity, entityYaw, partialTick, pose, buffer, light);
@@ -157,7 +169,8 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
      *
      * <p>配色沿用整段的温度曲线：白热 → 金黄 → 暗红。
      */
-    private static void drawSparks(Matrix4f m, VertexConsumer vc, float radius, float p) {
+    private static void drawSparks(Matrix4f m, VertexConsumer vc, float radius, float p,
+                                   float brightness) {
         for (int i = 0; i < SPARKS; i++) {
             // 用一个混合哈希把索引打散成 5 个 [0,1) 常数
             long h = (i * 0x9E3779B97F4A7C15L) ^ 0x5DEECE66DL;
@@ -210,10 +223,13 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 cg = 0.69F - 0.52F * k;
                 cb = 0.17F - 0.11F * k;
             }
-            float alpha = 0.85F * (1.0F - t) * (1.0F - t);
+            float alpha = 0.85F * (1.0F - t) * (1.0F - t) * brightness;
 
             // 用两片交叉细面近似一根短亮线（不做 billboard，省事且够看）
-            sparkQuad(vc, m, bx, yBack, bz, x, y, z, SPARK_HALF, cr, cg, cb, alpha);
+            sparkQuad(vc, m, bx, yBack, bz, x, y, z, SPARK_HALF,
+                    ShaderEffects.tintR(cr),
+                    ShaderEffects.tintG(cg),
+                    ShaderEffects.tintB(cb), alpha);
         }
     }
 
@@ -276,7 +292,8 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
      * <p>用户要求"弹体经过的空气要留下一条像激光的线"。这里用两片交叉的竖面近似，
      * 亮度沿高度和时间同时衰减——所以是"热气散掉"，不是"贴图消失"。
      */
-    private static void drawTrail(Matrix4f m, VertexConsumer vc, float topLocal, float p) {
+    private static void drawTrail(Matrix4f m, VertexConsumer vc, float topLocal, float p,
+                                  float brightness) {
         if (topLocal <= 1.0F) {
             return;
         }
@@ -284,22 +301,28 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             return;
         }
         float fade = 1.0F - p / 0.95F;
-        float alpha = 0.55F * fade;
+        float alpha = 0.55F * fade * brightness;
         float half = 0.85F * (0.45F + 0.55F * fade);
+        float r = ShaderEffects.tintR(1.0F);
+        float g = ShaderEffects.tintG(0.45F);
+        float b = ShaderEffects.tintB(0.16F);
+        float tr = ShaderEffects.tintR(0.85F);
+        float tg = ShaderEffects.tintG(0.16F);
+        float tb = ShaderEffects.tintB(0.06F);
 
         for (int k = 0; k < 2; k++) {
             float nx = k == 0 ? half : 0.0F;
             float nz = k == 0 ? 0.0F : half;
-            vc.vertex(m, -nx, 0.0F, -nz).color(1.0F, 0.45F, 0.16F, alpha)
+            vc.vertex(m, -nx, 0.0F, -nz).color(r, g, b, alpha)
                     .uv(0.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
                     .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
-            vc.vertex(m, nx, 0.0F, nz).color(1.0F, 0.45F, 0.16F, alpha)
+            vc.vertex(m, nx, 0.0F, nz).color(r, g, b, alpha)
                     .uv(1.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
                     .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
-            vc.vertex(m, nx, topLocal, nz).color(0.85F, 0.16F, 0.06F, alpha * 0.35F)
+            vc.vertex(m, nx, topLocal, nz).color(tr, tg, tb, alpha * 0.35F)
                     .uv(1.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
                     .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
-            vc.vertex(m, -nx, topLocal, -nz).color(0.85F, 0.16F, 0.06F, alpha * 0.35F)
+            vc.vertex(m, -nx, topLocal, -nz).color(tr, tg, tb, alpha * 0.35F)
                     .uv(0.0F, 1.0F).overlayCoords(OverlayTexture.NO_OVERLAY)
                     .uv2(FULL_BRIGHT).normal(0.0F, 0.0F, 1.0F).endVertex();
         }
@@ -314,9 +337,11 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
      * 网格数取 12 × 6 = 72 个四边形，只在爆闪的 0.5 秒内绘制，代价可接受。
      */
     private static void ball(Matrix4f m, VertexConsumer vc, float radius,
-                             float r, float g, float b, float alpha) {
+                             float r, float g, float b, float alpha, Vec3 camLocal) {
         final int lon = 12;
         final int lat = 6;
+        // 玩家站在球里时，看到的是球的内表面；这时不能按"外表面正面"剔除，否则整个球会消失。
+        boolean inside = camLocal.lengthSqr() < (double) radius * radius;
         for (int i = 0; i < lat; i++) {
             // 纬度从 -90° 到 +90°
             double phi0 = -Math.PI / 2.0 + Math.PI * i / lat;
@@ -335,6 +360,19 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 float s0 = (float) Math.sin(t0);
                 float c1 = (float) Math.cos(t1);
                 float s1 = (float) Math.sin(t1);
+
+                // 只画朝向相机的前半球；以前整球都画，正反两面叠加等于 alpha 翻倍。
+                float px = (c0 * r0 + c1 * r0 + c1 * r1 + c0 * r1) * 0.25F;
+                float py = (y0 + y1) * 0.5F;
+                float pz = (s0 * r0 + s1 * r0 + s1 * r1 + s0 * r1) * 0.25F;
+                Vec3 normal = new Vec3(px, py, pz);
+                if (normal.lengthSqr() < 1.0E-6D) {
+                    continue;
+                }
+                normal = normal.normalize();
+                if (!inside && normal.dot(camLocal.subtract(new Vec3(px, py, pz))) <= 0.0D) {
+                    continue;
+                }
 
                 vc.vertex(m, c0 * r0, y0, s0 * r0).color(r, g, b, a0)
                         .uv(0.0F, 0.0F).overlayCoords(OverlayTexture.NO_OVERLAY)

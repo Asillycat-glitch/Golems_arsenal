@@ -107,6 +107,14 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_HIT_RADIUS;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_LIFE;
     public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_WIDTH;
+    /**
+     * 光影包开启时，天基激光/落点特效的亮度倍率。
+     *
+     * <p>MakeUp 这类包的 bloom 阈值是 {@code luma(color * exposure) > 0.85}，
+     * 夜里 exposure 可以到 3.6，所以纯白/近白的自发光几何一定会烧成一片。
+     * 把它降到 1.0 以下是最直接的止血；1.0 = 不调整。
+     */
+    public static final ForgeConfigSpec.DoubleValue SHADER_EFFECT_BRIGHTNESS;
     // ===== 天基激光（第 2 刀：引导升级）=====
     /** 破坏地形（负面代价）。我们自己挖，不用 Mekanism 的激光。 */
     public static final ForgeConfigSpec.BooleanValue ORBITAL_BEAM_BREAK_BLOCKS;
@@ -621,6 +629,10 @@ public final class Config {
                 .defineInRange("life", 40, 1, 72000);
         ORBITAL_BEAM_WIDTH = BUILDER.comment("Rendered beam width (blocks) = the OUTER prism's width. The renderer draws two nested four-sided prisms: a wide translucent outer one at this width, plus a bright inner one at 40% of it. This is purely cosmetic - the damaging column radius is hit_radius")
                 .defineInRange("width", 0.6, 0.05, 8.0);
+        SHADER_EFFECT_BRIGHTNESS = BUILDER.comment("Brightness multiplier for the orbital laser and impact VFX when an Iris/Oculus shaderpack is active",
+                        "MakeUp-style packs bloom anything with luma(color * exposure) above 0.85; at night exposure can reach 3.6, so near-white emissive geometry blows out.",
+                        "Lower this until the beam keeps its colour. 1.0 disables the adjustment.")
+                .defineInRange("shader_effect_brightness", 0.35D, 0.05D, 1.0D);
         BUILDER.pop();
 
         // ============================================================================
