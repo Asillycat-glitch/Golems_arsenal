@@ -138,13 +138,7 @@ public class OrbitalImpactEntity extends Entity {
                     1, 0.0D, 0.0D, 0.0D, 0.0D);
             server.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION,
                     this.getX(), this.getY() + 0.8D, this.getZ(),
-                    4, r * 0.25D, 0.25D, r * 0.25D, 0.0D);
-            server.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
-                    this.getX(), this.getY() + 0.8D, this.getZ(),
-                    24, r * 0.55D, 0.5D, r * 0.55D, 0.06D);
-            server.sendParticles(net.minecraft.core.particles.ParticleTypes.CAMPFIRE_COSY_SMOKE,
-                    this.getX(), this.getY() + 1.0D, this.getZ(),
-                    12, r * 0.45D, 0.6D, r * 0.45D, 0.02D);
+                    2, r * 0.25D, 0.25D, r * 0.25D, 0.0D);
             server.sendParticles(net.minecraft.core.particles.ParticleTypes.FLAME,
                     this.getX(), this.getY() + 0.6D, this.getZ(),
                     40, r * 0.5D, 0.6D, r * 0.5D, 0.08D);

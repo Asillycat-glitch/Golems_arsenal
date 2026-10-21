@@ -89,11 +89,10 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             ringBandTrail(m, vc, shellR, lead, trail, alpha);
         }
 
-        // 爆炸核心的第一版：一根很短的金白闪光柱，不是白球。
-        // 先给落点一个"炸开"的中心，后面再补烟尘/碎块/二次爆。
+        // 爆炸核心：先只留短闪光柱，把"橙色透明球"撤掉。
+        // 日冕那种效果不能靠半透明球堆，需要贴图 billboard + 分层时序；
+        // 在拿到动态参考前先不做错误方向的加法。
         drawFlashCore(m, vc, radius, p, brightness);
-        // 短寿命火球：橙白两层球，快速膨胀后消失；这是这次爆炸重做的主体。
-        drawFireball(m, vc, radius, p, brightness);
 
         // 弹体残留线（从落点往上到发射高度）
         drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
