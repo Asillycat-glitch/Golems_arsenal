@@ -41,19 +41,19 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
     /** 圆柱段数。细光柱用 10 段已经看不出棱角。 */
     private static final int SEGMENTS = 16;
 
-    // 主光（细、亮）
+    // 主光（细、亮、白蓝）
     private static final float CORE_ALPHA = 0.85F;
-    private static final float CORE_R = 1.00F;
-    private static final float CORE_G = 0.97F;
-    private static final float CORE_B = 0.86F;
+    private static final float CORE_R = 0.82F;
+    private static final float CORE_G = 0.94F;
+    private static final float CORE_B = 1.00F;
     private static final float CORE_FACING_POW = 1.30F;
 
-    // 辉光（宽、淡、暖）
+    // 辉光（宽、淡、电蓝）
     private static final float GLOW_SCALE = 2.6F;
     private static final float GLOW_ALPHA = 0.28F;
-    private static final float GLOW_R = 1.00F;
-    private static final float GLOW_G = 0.72F;
-    private static final float GLOW_B = 0.28F;
+    private static final float GLOW_R = 0.22F;
+    private static final float GLOW_G = 0.52F;
+    private static final float GLOW_B = 1.00F;
     private static final float GLOW_FACING_POW = 0.60F;
 
     /** 余晖：往回追多少个采样点、每点间隔多少进度。 */

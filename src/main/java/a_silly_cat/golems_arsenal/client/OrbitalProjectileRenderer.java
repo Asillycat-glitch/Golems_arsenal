@@ -56,16 +56,16 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
     /** 拖尾根部半径相对头部的比例（越往上越细）。 */
     private static final float TAIL_TAPER = 0.08F;
 
-    // 温度色
-    private static final float HOT_R = 1.00F;
-    private static final float HOT_G = 0.99F;
-    private static final float HOT_B = 0.95F;
-    private static final float MID_R = 1.00F;
-    private static final float MID_G = 0.55F;
-    private static final float MID_B = 0.18F;
-    private static final float TAIL_R = 0.75F;
-    private static final float TAIL_G = 0.10F;
-    private static final float TAIL_B = 0.05F;
+    // 温度色：白蓝 → 电蓝 → 深蓝
+    private static final float HOT_R = 0.90F;
+    private static final float HOT_G = 0.97F;
+    private static final float HOT_B = 1.00F;
+    private static final float MID_R = 0.35F;
+    private static final float MID_G = 0.65F;
+    private static final float MID_B = 1.00F;
+    private static final float TAIL_R = 0.10F;
+    private static final float TAIL_G = 0.22F;
+    private static final float TAIL_B = 0.75F;
 
     /** 整体亮度（加法混合，别拉满）。 */
     private static final float ALPHA = 1.0F;
@@ -168,9 +168,9 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
         if (alpha <= 0.002F) {
             return;
         }
-        float r = ShaderEffects.tintR(1.00F);
-        float g = ShaderEffects.tintG(0.92F);
-        float b = ShaderEffects.tintB(0.72F);
+        float r = ShaderEffects.tintR(0.62F);
+        float g = ShaderEffects.tintG(0.82F);
+        float b = ShaderEffects.tintB(1.00F);
         for (int j = 0; j < SEGMENTS; j++) {
             float a0 = (float) (j * Math.PI * 2.0 / SEGMENTS);
             float a1 = (float) ((j + 1) * Math.PI * 2.0 / SEGMENTS);
