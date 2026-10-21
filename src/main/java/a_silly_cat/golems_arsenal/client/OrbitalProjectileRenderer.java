@@ -42,19 +42,19 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
      * <p>参考图六：弹体亮点头上拖着**一整条长而扭的热痕**，不是一小截。
      * 60 格 ≈ 下落 5 tick 的距离（12 格/tick），看上去才像"划破空气"。
      */
-    private static final float TRAIL_LENGTH = 80.0F;
+    private static final float TRAIL_LENGTH = 28.0F;
     /** 沿拖尾的切片数。切片多一点，扭曲才平滑。 */
     private static final int SLICES = 20;
     /** 拖尾的横向扭曲幅度（格）与频率——参考图六那种"扭动"的形态。 */
-    private static final float TRAIL_WOBBLE = 0.90F;
+    private static final float TRAIL_WOBBLE = 0.50F;
     private static final float TRAIL_WOBBLE_FREQ = 0.20F;
     /** 绕一圈的段数。 */
     private static final int SEGMENTS = 16;
 
     /** 头部半径相对宽度的比例。 */
-    private static final float HEAD_SCALE = 1.8F;
+    private static final float HEAD_SCALE = 0.55F;
     /** 拖尾根部半径相对头部的比例（越往上越细）。 */
-    private static final float TAIL_TAPER = 0.08F;
+    private static final float TAIL_TAPER = 0.06F;
 
     // 温度色：白蓝 → 电蓝 → 深蓝
     private static final float HOT_R = 0.90F;
@@ -68,7 +68,7 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
     private static final float TAIL_B = 0.75F;
 
     /** 整体亮度（加法混合，别拉满）。 */
-    private static final float ALPHA = 1.0F;
+    private static final float ALPHA = 0.55F;
 
     private static final int FULL_BRIGHT = LightTexture.FULL_BRIGHT;
 
@@ -147,8 +147,7 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
             }
         }
 
-        // 头部冲击套环：让"这一发"比一条细光柱更粗、更像会砸出坑的东西。
-        drawShockCollar(vc, m, half, fadeIn, brightness);
+        // 头部冲击套环先不画：它会把拖尾又扩成一根白柱。
 
         pose.popPose();
 

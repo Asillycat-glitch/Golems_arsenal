@@ -97,8 +97,8 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         // 不再画电弧——参考里的“细线”是空气折射，不是闪电。
         drawEnergyDome(m, vc, radius, p, brightness);
 
-        // 弹体残留线（从落点往上到发射高度）
-        drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
+        // 不再画落点残留的实体光柱：它会在夜里变成一根巨大的白柱，
+        // 把真正的空气折射完全盖住。拖尾交给 TrailRefractionFx。
 
         // **溅射光粒**：砸出来的细小火星，全部用几何画（不是原版粒子）
         drawSparks(m, vc, radius, p, brightness);

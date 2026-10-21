@@ -83,7 +83,7 @@ public final class TrailRefractionFx {
         float aspect = m11 / m00;
 
         Vec3 head = projectile.position();
-        Vec3 top = head.add(0.0D, 80.0D, 0.0D);
+        Vec3 top = head.add(0.0D, 28.0D, 0.0D);
         float[] screenHead = project(head, cameraPos, forward, right, up, tanHalfFov, aspect);
         float[] screenTop = project(top, cameraPos, forward, right, up, tanHalfFov, aspect);
         if (screenHead == null || screenTop == null) {
@@ -91,7 +91,7 @@ public final class TrailRefractionFx {
         }
 
         float zAverage = Math.max(0.5F, (screenHead[2] + screenTop[2]) * 0.5F);
-        float worldWidth = Math.max(0.8F, projectile.beamWidth() * 1.35F);
+        float worldWidth = Math.max(0.6F, projectile.beamWidth() * 0.8F);
         float screenWidth = worldWidth / (2.0F * zAverage * tanHalfFov);
         screenWidth = Math.max(0.006F, Math.min(0.14F, screenWidth));
 
