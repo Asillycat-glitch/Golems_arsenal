@@ -20,6 +20,9 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * 天基炮落点的**无色冲击波**：不画可见光罩，只把已经渲染好的画面拷一份，
  * 在屏幕空间里沿一个不断扩大的圆环做折射。效果是"背景被推开一圈"，没有额外颜色。
@@ -49,6 +52,7 @@ public final class ImpactShockwaveFx {
 
     private static Wave activeWave;
     private static int activeImpactId = -1;
+    private static final Set<Integer> CONSUMED_IMPACTS = new HashSet<>();
     private static long lastRenderNanos = 0L;
 
     private static PostPass warpPass;
@@ -75,8 +79,12 @@ public final class ImpactShockwaveFx {
         if (mc.level == null) {
             activeWave = null;
             activeImpactId = -1;
+            CONSUMED_IMPACTS.clear();
             return;
         }
+        // 实体生命周期 26 tick，波只有 24 tick；不记录已消费实体的话，
+        // 波结束后会从同一个旧实体再起一圈，正好就是“两次空气波”。
+        CONSUMED_IMPACTS.removeIf(id -> mc.level.getEntity(id) == null);
         long now = mc.level.getGameTime();
         if (activeWave != null && now - activeWave.start >= DURATION) {
             activeWave = null;
@@ -88,12 +96,13 @@ public final class ImpactShockwaveFx {
         }
         for (OrbitalImpactEntity impact : mc.level.getEntitiesOfClass(
                 OrbitalImpactEntity.class, mc.player.getBoundingBox().inflate(160.0D))) {
-            if (!impact.isAlive()) {
+            if (!impact.isAlive() || CONSUMED_IMPACTS.contains(impact.getId())) {
                 continue;
             }
             activeWave = new Wave(impact.position(), now,
                     Math.max(8.0F, impact.radius() * MAX_RADIUS_MULT));
             activeImpactId = impact.getId();
+            CONSUMED_IMPACTS.add(activeImpactId);
             Golems_arsenal.LOGGER.info("[GA-Wave] start id={} active=1", activeImpactId);
             break;
         }

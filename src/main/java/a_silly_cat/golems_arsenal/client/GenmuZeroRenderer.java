@@ -159,7 +159,7 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
      */
     private static final int AURA_RGB = 0xD8FFF0;
     private static final float AURA_ALPHA = 0.45F;
-    private static final int CORE_RGB = 0xFFFFFF;
+    private static final int CORE_RGB = 0xE8FFF6;
     private static final float CORE_ALPHA = 0.75F;
 
     /**
@@ -307,6 +307,8 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
         // 月牙走**加法混合**：幻梦零的剑气是发光的能量，不是半透明的塑料片。
         // 加法 = 往画面里加光，边缘叠加会自然变亮；半透明 = 透过一块有色玻璃看，观感完全不同。
         VertexConsumer auraVc = buffer.getBuffer(TrailRenderTypes.ADDITIVE_TRIANGLES);
+        // 光影包 bloom 刹车：加法混合的 aura/wake 统一压 alpha。
+        float shaderAlpha = ShaderEffects.brightness();
 
         if (ENABLE_AURA) {
             // 刀身"高"用世界正上方、"厚"用水平侧向 → 竖立的扁刀锋，而不是圆宝石
@@ -329,12 +331,12 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
             // 外壳
             AuraMesh.octahedron(auraVc, p, origin, dir, upPerp, sidePerp,
                     AURA_RADIUS_UP, AURA_RADIUS_SIDE, AURA_HALF_LENGTH,
-                    spin, eye, AURA_RGB, AURA_ALPHA, AURA_FRESNEL_POW);
+                    spin, eye, AURA_RGB, AURA_ALPHA * shaderAlpha, AURA_FRESNEL_POW);
 
             // 内芯：叠一层更小更亮的，形成"里面有光"
             AuraMesh.octahedron(auraVc, p, origin, dir, upPerp, sidePerp,
                     CORE_RADIUS_UP, CORE_RADIUS_SIDE, CORE_HALF_LENGTH,
-                    spin, eye, CORE_RGB, CORE_ALPHA, AURA_FRESNEL_POW);
+                    spin, eye, CORE_RGB, CORE_ALPHA * shaderAlpha, AURA_FRESNEL_POW);
         }
 
         if (ENABLE_TRAIL) {
@@ -362,7 +364,7 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
                     TUBE_THICK * WAKE_ROOT_SCALE, TUBE_THIN * WAKE_ROOT_SCALE,
                     WAKE_LENGTH, WAKE_ALONG_SEGS, TUBE_AROUND_SEGS,
                     eye, WAKE_NEAR_RGB, WAKE_FAR_RGB,
-                    WAKE_NEAR_ALPHA, WAKE_FAR_ALPHA, TUBE_FRESNEL_POW);
+                    WAKE_NEAR_ALPHA * shaderAlpha, WAKE_FAR_ALPHA, TUBE_FRESNEL_POW);
 
             // 副尾：上下各一条更细的，暗示月牙两个尖拖出的余势
             for (int s = -1; s <= 1; s += 2) {
@@ -372,7 +374,7 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
                         WAKE_LENGTH * WAKE_SIDE_LENGTH_RATIO,
                         WAKE_ALONG_SEGS, TUBE_AROUND_SEGS,
                         eye, WAKE_NEAR_RGB, WAKE_FAR_RGB,
-                        WAKE_NEAR_ALPHA * WAKE_SIDE_ALPHA_RATIO, WAKE_FAR_ALPHA,
+                        WAKE_NEAR_ALPHA * WAKE_SIDE_ALPHA_RATIO * shaderAlpha, WAKE_FAR_ALPHA,
                         TUBE_FRESNEL_POW);
             }
         }
@@ -396,7 +398,7 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
                     TUBE_SPAN, TUBE_BOW, TUBE_THICK, TUBE_THIN,
                     TUBE_ALONG_SEGS, TUBE_AROUND_SEGS,
                     eye, TUBE_FRONT_RGB, TUBE_BACK_RGB,
-                    TUBE_FRONT_ALPHA, TUBE_BACK_ALPHA, TUBE_FRESNEL_POW);
+                    TUBE_FRONT_ALPHA * shaderAlpha, TUBE_BACK_ALPHA * shaderAlpha, TUBE_FRESNEL_POW);
 
             // ② 外发光：**加法混合**，稍大一圈、极低 alpha。
             //    它只负责"有一圈光"，不承担形状 —— 所以就算叠加也不会盖住本体的颜色。
@@ -405,7 +407,7 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
                     TUBE_THICK * GLOW_SCALE, TUBE_THIN * GLOW_SCALE,
                     TUBE_ALONG_SEGS, TUBE_AROUND_SEGS,
                     eye, GLOW_RGB, GLOW_BACK_RGB,
-                    GLOW_ALPHA, GLOW_BACK_ALPHA, TUBE_FRESNEL_POW);
+                    GLOW_ALPHA * shaderAlpha, GLOW_BACK_ALPHA * shaderAlpha, TUBE_FRESNEL_POW);
         }
 
         if (ENABLE_CRESCENT) {
@@ -423,14 +425,14 @@ public class GenmuZeroRenderer extends EntityRenderer<PhantomBladeEntity> {
                         spanAxis, sliceWidth, sliceBow,
                         CRESCENT_SPAN, CRESCENT_THICK, CRESCENT_BOW,
                         GLOW_HEAD_RGB, GLOW_TAIL_RGB,
-                        GLOW_HEAD_ALPHA * alphaScale, TAIL_ALPHA,
+                        GLOW_HEAD_ALPHA * alphaScale * shaderAlpha, TAIL_ALPHA,
                         CRESCENT_SEGMENTS, THICKNESS_POW);
 
                 TrailMesh.crescentOriented(auraVc, p, origin,
                         spanAxis, sliceWidth, sliceBow,
                         CRESCENT_SPAN, CRESCENT_THICK, CRESCENT_BOW,
                         CORE_HEAD_RGB, CORE_TAIL_RGB,
-                        CORE_HEAD_ALPHA * alphaScale, TAIL_ALPHA,
+                        CORE_HEAD_ALPHA * alphaScale * shaderAlpha, TAIL_ALPHA,
                         CRESCENT_SEGMENTS, THICKNESS_POW);
             }
         }

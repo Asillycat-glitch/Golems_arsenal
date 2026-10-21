@@ -74,17 +74,26 @@ public class OrbitalSigilRenderer extends EntityRenderer<OrbitalSigilEntity> {
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
 
+        // 光影包 bloom 刹车：压 alpha、拉暖色，保留法阵色相。
+        float brightness = ShaderEffects.brightness();
+        float coreR = ShaderEffects.tintR(CORE_R);
+        float coreG = ShaderEffects.tintG(CORE_G);
+        float coreB = ShaderEffects.tintB(CORE_B);
+        float glowR = ShaderEffects.tintR(GLOW_R);
+        float glowG = ShaderEffects.tintG(GLOW_G);
+        float glowB = ShaderEffects.tintB(GLOW_B);
+
         // 先辉光后亮芯（混合顺序）
         drawSegments(m, vc, radius, drawn, GLOW_HALF,
-                GLOW_R, GLOW_G, GLOW_B, GLOW_ALPHA * fade);
+                glowR, glowG, glowB, GLOW_ALPHA * fade * brightness);
         drawSegments(m, vc, radius, drawn, RIBBON_HALF,
-                CORE_R, CORE_G, CORE_B, CORE_ALPHA * fade);
+                coreR, coreG, coreB, CORE_ALPHA * fade * brightness);
 
         // 笔尖亮斑
         if (progress < 1.0F && drawn > 0) {
             float[] s = OrbitalGuidancePath.figureSegment(drawn - 1, radius);
             if (s != null) {
-                dot(m, vc, s[2], s[3], 0.32F * fade);
+                dot(m, vc, s[2], s[3], 0.32F * fade * brightness);
             }
         }
         pose.popPose();

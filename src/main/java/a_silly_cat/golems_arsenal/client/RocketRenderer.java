@@ -139,9 +139,10 @@ public class RocketRenderer extends EntityRenderer<RocketEntity> {
         pose.mulPose(Axis.YP.rotationDegrees(180.0F - entityYaw));
 
         VertexConsumer vc = buffer.getBuffer(RenderType.entitySolid(TEXTURE));
-        // 全亮：升空时它本来就是自发光的焰体，不该受环境光影响变暗
+        // 全亮但不要纯白：光影包 bloom 下压一点亮度，避免火箭变成白色光团。
+        float shade = 0.55F + 0.45F * ShaderEffects.brightness();
         this.model.renderToBuffer(pose, vc, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY,
-                1.0F, 1.0F, 1.0F, 1.0F);
+                shade, shade, shade, 1.0F);
 
         pose.popPose();
         super.render(entity, entityYaw, partialTick, pose, buffer, light);

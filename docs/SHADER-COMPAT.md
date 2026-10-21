@@ -150,9 +150,13 @@ tintB = b * 0.35;
 颜色从暖金改成白蓝。`GuidanceBeamRenderer` 也同步成白蓝主光/电蓝辉光；
 如果之后确认引导也该保持暖金，再把这一处单独回退。
 
-**关于“两次屏幕空间空气波”**：不是环带/半球的问题，而是 `WAVES` map 里可能同时有
-两个冲击实体。现在改成**同一时间只允许一个 activeWave**，并在渲染端做时间防抖；
-日志会打印 `[GA-Wave] start id=... active=1`。
+**关于“两次屏幕空间空气波”**：真正原因是实体生命周期 **26 tick**、波只有 **24 tick**；
+波结束后扫描仍能看到同一个旧冲击实体，于是又起一圈。现在两层限制：
+
+- `CONSUMED_IMPACTS` 记录已经起过波的实体 ID，同一个实体不会再起第二圈；
+- 同一时间只允许一个 `activeWave`，渲染端再加 2ms 防抖。
+
+日志会打印 `[GA-Wave] start id=... active=1`，同一个 id 只应出现一次。
 
 **光影下过曝的参考：秘法涡流 `arcanevortex:nebula_bow`**：
 
@@ -204,13 +208,16 @@ tintB = b * 0.35;
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
-client/ImpactShockwaveFx.java           无色空气波（保留）+ 屏幕震动 + 波合并
+client/ImpactShockwaveFx.java           单个屏幕空间空气波 + 屏幕震动
 client/TrailRefractionFx.java           弹体拖尾的空气折射（无色）
-client/OrbitalImpactRenderer.java       闪光柱/短细火星；不再画环带/半球
+client/OrbitalImpactRenderer.java       环带/半球/闪光柱/短细火星
 client/GuidanceBeamRenderer.java        瞄准光柱 + 聚合爆闪修复（蓝白）
 client/OrbitalBeamRenderer.java         压 alpha / 暖色 / 背面剔除
 client/OrbitalProjectileRenderer.java   蓝白小头部/短拖尾（28 格）
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
+client/GenmuZeroRenderer.java           剑气 aura/wake 的 alpha 统一乘 ShaderEffects.brightness
+client/OrbitalSigilRenderer.java        法阵 alpha 乘 brightness + 暖色 tint
+client/RocketRenderer.java              火箭模型全亮色乘 0.55~1.0，避免纯白光团
 assets/.../shaders/program/impact_shockwave.*  无色空气波 shader
 assets/.../shaders/program/trail_refraction.*  拖尾空气折射 shader
 base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
@@ -276,21 +283,26 @@ base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
 
 ## 6. 已知限制
 
-- **只处理了天基激光这一条线**（引导 / 主光束 / 弹体 / 落点 / 受击光柱）。
-  Genmu Zero 剑气、键刃拖尾、其他 `TrailRenderTypes` 特效还没接这套倍率；
-  如果它们也过曝，下一轮按同样方式接 `ShaderEffects`。
+- **已接 `ShaderEffects` 的特效**：天基激光整条线（引导 / 主光束 / 弹体 / 落点 / 受击光柱）、
+  Genmu Zero 剑气的 aura/wake、轨道法阵、火箭模型。
+  `KeyBladeRenderer` 是普通物品模型、`GolemComboLayer` 是半透明拖影，不走全亮自发光，
+  这轮没有改它们的渲染路径。
 - MakeUp 的 bloom 在夜里阈值极低，**不可能既保持"纯白高亮"又不 bloom**；
-  现在的目标是"金色、有轮廓、可读"，不是"完全不发光"。
+  现在的目标是"蓝白、有轮廓、可读"，不是"完全不发光"。
 - 如果某个包把半透明实体写进不透明 gbuffer（alpha 被丢弃），
-  压 alpha 不会生效，只能靠暖色 tint 和背面剔除；这也是为什么这次同时改了颜色。
+  压 alpha 不会生效，只能靠 tint 和背面剔除；这也是为什么这次同时改了颜色。
 - 光影包切换后最多 1 秒（20 tick）生效，不需要重进世界。
 
 ## 6. 下一步
 
-先让用户用 MakeUp 实测这一版，重点回答两个问题：
+先用 MakeUp 实测这一版：
 
-1. 光柱是不是从"白柱"变成了"金色柱"？
-2. `shader_effect_brightness` 在哪个值附近既能看清、又不炸？
+1. 屏幕空间空气波是不是只有一层（日志 `[GA-Wave] start ... active=1`）；
+2. 环带/半球恢复后表现是否回到"够用"；
+3. Genmu Zero / 法阵 / 火箭在光影下是否也不再炸白。
+
+彻底的方案仍是把落点光效移到类似 `nebula_cube` 的后处理合成里；
+这一版只是先给所有自发光/加法特效统一接上 `ShaderEffects` 刹车。
 
 拿到这两个答案后再决定是否：
 - 把同样的倍率接到 Genmu Zero / 键刃 / 其他特效；
