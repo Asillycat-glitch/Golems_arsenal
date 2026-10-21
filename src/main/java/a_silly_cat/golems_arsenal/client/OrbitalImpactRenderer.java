@@ -93,9 +93,9 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         // 日冕那种效果不能靠半透明球堆，需要贴图 billboard + 分层时序；
         // 在拿到动态参考前先不做错误方向的加法。
         drawFlashCore(m, vc, radius, p, brightness);
-        // 日冕五雷天罚的落地核心：白蓝半球能罩 + 分叉电弧 + 烟/碎片。
+        // 日冕五雷天罚的落地核心：白蓝半球能罩 + 烟/碎片。
+        // 不再画电弧——参考里的“细线”是空气折射，不是闪电。
         drawEnergyDome(m, vc, radius, p, brightness);
-        drawArcs(m, vc, radius, p, brightness);
 
         // 弹体残留线（从落点往上到发射高度）
         drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
@@ -362,51 +362,6 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 vertex(vc, m, c1 * r0, y0, s1 * r0, 1.0F, br, bg, bb, a);
                 vertex(vc, m, c1 * r1, y1, s1 * r1, 1.0F, tr, tg, tb, a);
                 vertex(vc, m, c0 * r1, y1, s0 * r1, 0.0F, tr, tg, tb, a);
-            }
-        }
-    }
-
-    /**
-     * 落地分叉电弧：从高处向落点收敛的白色/电蓝细线。
-     */
-    private static void drawArcs(Matrix4f m, VertexConsumer vc, float radius,
-                                 float p, float brightness) {
-        if (p <= 0.0F || p >= 0.45F) {
-            return;
-        }
-        float env = (float) Math.pow(Math.sin(Math.PI * Math.min(1.0F, p / 0.45F)), 0.55D);
-        float alpha = 0.72F * env * brightness;
-        if (alpha <= 0.002F) {
-            return;
-        }
-        final int arcs = 8;
-        final int steps = 12;
-        float top = radius * 2.8F;
-        for (int i = 0; i < arcs; i++) {
-            long seed = i * 0x9E3779B97F4A7C15L + 0x51ED270B;
-            double angle = hashUnit(seed) * Math.PI * 2.0D;
-            float off = radius * (0.08F + 0.55F * hashUnit(seed ^ 0x2545F491));
-            float ox = (float) Math.cos(angle) * off;
-            float oz = (float) Math.sin(angle) * off;
-            float prevX = ox;
-            float prevY = top;
-            float prevZ = oz;
-            for (int s = 1; s <= steps; s++) {
-                float t = s / (float) steps;
-                float y = top * (1.0F - t);
-                float converge = 1.0F - t;
-                float x = ox * converge
-                        + (float) Math.sin(t * 11.0F + hashUnit(seed ^ 0x6C8E9CF5) * 8.0F
-                        + p * 20.0F) * radius * 0.16F * converge;
-                float z = oz * converge
-                        + (float) Math.cos(t * 9.0F + hashUnit(seed ^ 0x1B56C4E9) * 8.0F
-                        + p * 17.0F) * radius * 0.14F * converge;
-                float w = Math.max(0.035F, radius * 0.006F);
-                sparkQuad(vc, m, prevX, prevY, prevZ, x, y, z, w,
-                        0.58F, 0.80F, 1.00F, alpha);
-                prevX = x;
-                prevY = y;
-                prevZ = z;
             }
         }
     }

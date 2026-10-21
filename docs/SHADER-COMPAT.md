@@ -125,32 +125,40 @@ tintB = b * 0.35;
 - `OrbitalImpactRenderer#isPrimaryImpact`：同一个区域内只让 ID 最小的冲击实体画主体，
   另一个实体不会重复画环带/闪光。
 
-### 2.5 主体：日冕「五雷天罚」更新版（蓝白雷击）
+### 2.5 主体：日冕「五雷天罚」更新版（蓝白 + 空气折射）
 
 参考视频：[【日冕】神州阵营拓展协议——五雷天罚特效更新](https://www.bilibili.com/video/BV1RCqDYKEZ9/)
-（已用 ffmpeg 抽帧确认：**白蓝雷柱/电弧 → 白蓝半球 → 黑灰烟 + 碎片**，不是橙色火球。）
+（已用 ffmpeg 抽帧确认：白蓝半球 → 黑灰烟 + 碎片，不是橙色火球。）
+
+**按用户的判断：参考里没有真正的闪电。** 那些细长、扭动的“电弧”是
+**高速弹体拖尾把空气加热后，背景/拖尾被折射**出来的形状，不是独立闪电几何。
+所以这一版：
+
+- **删除 8 道电弧**（`drawArcs`）；
+- 新增 `TrailRefractionFx`：沿弹体拖尾的屏幕投影做无色波浪折射；
+- 保留白蓝能量半球、蓝白环带/火星、灰烟 + 灰烬 + 熔岩 + 电火花。
 
 现在的落地主体：
 
 - **白蓝能量半球**：贴地向上鼓起，外层蓝、内层白，高 alpha，短寿命；
-- **8 道分叉电弧**：从高处向落点收敛的白/电蓝细线；
 - **一条蓝白环带 + 拖尾**（冲击波主体没改）；
 - 64 条蓝白火星；
 - 灰烟 + 灰烬 + 熔岩 + 电火花；
 - 弹体热痕。
 
-颜色从暖金改成了参考视频的**白蓝**。因为颜色统一，`GuidanceBeamRenderer`
-也同步改成白蓝主光/电蓝辉光；如果不改引导，会出现“蓝白爆炸 + 金色瞄准”的割裂。
+颜色从暖金改成白蓝。`GuidanceBeamRenderer` 也同步成白蓝主光/电蓝辉光；
+如果之后确认引导也该保持暖金，再把这一处单独回退。
 
-**已删除**：橙色两层火球、`LARGE_SMOKE` 白团、`EXPLOSION_EMITTER` 白色大云。
+**已删除**：橙色两层火球、`LARGE_SMOKE` 白团、`EXPLOSION_EMITTER` 白色大云、电弧。
 **保留不动**：球面空气波（你说很漂亮的震荡）。
 
-**弹体**：
+**弹体 / 拖尾**：
 
-- 头部保持 1.8×，拖尾 80 格；
-- 颜色改成白蓝 → 电蓝 → 深蓝；
-- 头部冲击套环改成电蓝；
-- 仍然是“会砸下来的能量弹”，不是瞬时雷击。
+- 头部 1.8×，拖尾 80 格；
+- 颜色白蓝 → 电蓝 → 深蓝；
+- 头部冲击套环电蓝；
+- **新增拖尾空气折射**：`TrailRefractionFx` 把主画面沿拖尾投影做低频波浪偏移，
+  不添加颜色，只让背景和拖尾“折弯”。
 
 ### 2.6 瞄准聚合的“外围突然消失”修复
 
@@ -171,13 +179,15 @@ tintB = b * 0.35;
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
-client/ImpactShockwaveFx.java           无色折射（保留）+ 屏幕震动 + 波合并
-client/OrbitalImpactRenderer.java       单条环带+拖尾/闪光柱/火球/热痕/64 条火星
-client/GuidanceBeamRenderer.java        瞄准光柱 + 聚合爆闪修复
+client/ImpactShockwaveFx.java           无色空气波（保留）+ 屏幕震动 + 波合并
+client/TrailRefractionFx.java           弹体拖尾的空气折射（无色）
+client/OrbitalImpactRenderer.java       单条环带+拖尾/闪光柱/白蓝半球/热痕/64 条火星
+client/GuidanceBeamRenderer.java        瞄准光柱 + 聚合爆闪修复（蓝白）
 client/OrbitalBeamRenderer.java         压 alpha / 暖色 / 背面剔除
-client/OrbitalProjectileRenderer.java   头部放大/拖尾加长/冲击套环
+client/OrbitalProjectileRenderer.java   蓝白头部/拖尾/冲击套环
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
-assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
+assets/.../shaders/program/impact_shockwave.*  无色空气波 shader
+assets/.../shaders/program/trail_refraction.*  拖尾空气折射 shader
 base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
 ```
 
@@ -196,12 +206,18 @@ base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
 看**落点**：
 
 - 命中瞬间：**蓝白能量半球**贴地鼓起，外层蓝、内层白；
-- 穹顶周围有 **8 道白蓝电弧**从高处收向落点；
+- **没有电弧/闪电几何**；
 - 一条蓝白环带 + 拖尾向外扫，和 64 条蓝白火星重叠；
 - 之后是灰烟/灰烬/熔岩 + 碎片，不再是橙色透明火球或白色烟团；
 - 屏幕短促震一下；
 - 那层**大球面空气波保留**（就是上一版被夸"很漂亮"的震荡）；
 - 引导光柱改成白蓝/电蓝，和落点统一。
+
+看**弹体拖尾**：
+
+- 弹体下落时，拖尾周围背景应该出现轻微波浪/折弯；
+- 不是一条条独立电弧；
+- 如果完全没有折射，可能是 `TrailRefractionFx` 后处理被光影包覆盖，日志里会有 `[GA-Trail] 拖尾空气折射管线就绪`。
 
 看**瞄准收束**：
 
