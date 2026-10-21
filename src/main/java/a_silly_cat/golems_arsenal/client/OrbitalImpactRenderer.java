@@ -92,6 +92,8 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         // 爆炸核心的第一版：一根很短的金白闪光柱，不是白球。
         // 先给落点一个"炸开"的中心，后面再补烟尘/碎块/二次爆。
         drawFlashCore(m, vc, radius, p, brightness);
+        // 短寿命火球：橙白两层球，快速膨胀后消失；这是这次爆炸重做的主体。
+        drawFireball(m, vc, radius, p, brightness);
 
         // 弹体残留线（从落点往上到发射高度）
         drawTrail(m, vc, entity.trailTopY() - (float) entity.getY(), p, brightness);
@@ -296,6 +298,60 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             vertex(vc, m, dx, height, dz, 1.0F, topR, topG, topB, 0.0F);
             vertex(vc, m, dx, 0.0F, dz, 1.0F, r, g, b, alpha);
             vertex(vc, m, -dx, 0.0F, -dz, 0.0F, r, g, b, alpha);
+        }
+    }
+
+    /**
+     * 短寿命火球：外层橙、内层白，8 tick 内从 0.18R 膨胀到 0.78R 并淡出。
+     * 它不是持续存在的白球，而是爆炸瞬间的火团。
+     */
+    private static void drawFireball(Matrix4f m, VertexConsumer vc, float radius,
+                                     float p, float brightness) {
+        if (p <= 0.0F || p >= 0.32F) {
+            return;
+        }
+        float life = Math.min(1.0F, p / 0.32F);
+        float f = 1.0F - life;
+        float ease = 1.0F - f * f * f;
+        float outerRadius = radius * (0.18F + 0.60F * ease);
+        float alpha = 0.85F * f * f * brightness;
+        if (alpha <= 0.002F) {
+            return;
+        }
+        fireballLayer(m, vc, outerRadius, alpha * 0.55F,
+                ShaderEffects.tintR(1.00F),
+                ShaderEffects.tintG(0.40F),
+                ShaderEffects.tintB(0.10F));
+        fireballLayer(m, vc, outerRadius * 0.58F, alpha * 0.85F,
+                ShaderEffects.tintR(1.00F),
+                ShaderEffects.tintG(0.90F),
+                ShaderEffects.tintB(0.66F));
+    }
+
+    private static void fireballLayer(Matrix4f m, VertexConsumer vc, float radius, float alpha,
+                                      float r, float g, float b) {
+        final int lat = 8;
+        final int lon = 16;
+        for (int i = 0; i < lat; i++) {
+            double phi0 = -Math.PI / 2.0 + Math.PI * i / lat;
+            double phi1 = -Math.PI / 2.0 + Math.PI * (i + 1) / lat;
+            float y0 = (float) Math.sin(phi0) * radius;
+            float y1 = (float) Math.sin(phi1) * radius;
+            float r0 = (float) Math.cos(phi0) * radius;
+            float r1 = (float) Math.cos(phi1) * radius;
+            for (int j = 0; j < lon; j++) {
+                double t0 = Math.PI * 2.0 * j / lon;
+                double t1 = Math.PI * 2.0 * (j + 1) / lon;
+                float c0 = (float) Math.cos(t0);
+                float s0 = (float) Math.sin(t0);
+                float c1 = (float) Math.cos(t1);
+                float s1 = (float) Math.sin(t1);
+
+                vertex(vc, m, c0 * r0, y0, s0 * r0, 0.0F, r, g, b, alpha);
+                vertex(vc, m, c1 * r0, y0, s1 * r0, 1.0F, r, g, b, alpha);
+                vertex(vc, m, c1 * r1, y1, s1 * r1, 1.0F, r, g, b, alpha);
+                vertex(vc, m, c0 * r1, y1, s0 * r1, 0.0F, r, g, b, alpha);
+            }
         }
     }
 

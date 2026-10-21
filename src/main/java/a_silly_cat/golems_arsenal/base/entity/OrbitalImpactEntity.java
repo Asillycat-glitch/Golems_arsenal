@@ -124,17 +124,36 @@ public class OrbitalImpactEntity extends Entity {
         }
         float r = this.radius() * 0.45F;
         // 火星主体已经由渲染端的几何火粒（OrbitalImpactRenderer#drawSparks）负责，
-        // 这里只留极少量原版火花做"杂讯"，否则两种火星会互相打架。
+        // 这里补原版火花/烟尘/碎屑，让爆炸有体积和残留。
         server.sendParticles(net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK,
                 this.getX(), this.getY() + 0.4D, this.getZ(),
-                2, r * 0.45D, 0.2D, r * 0.45D, 0.3D);
+                4, r * 0.55D, 0.35D, r * 0.55D, 0.45D);
         server.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA,
                 this.getX(), this.getY() + 0.2D, this.getZ(),
-                2, r * 0.3D, 0.1D, r * 0.3D, 0.0D);
+                3, r * 0.4D, 0.15D, r * 0.4D, 0.0D);
         if (this.tickCount == 1) {
-            // 一次大闪光 + 一声爆炸，作为"炮"的听觉锚点
+            // 爆炸主粒子：一个大的爆炸云 + 火团 + 烟 + 向外甩的熔岩/电火花
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION_EMITTER,
+                    this.getX(), this.getY() + 0.8D, this.getZ(),
+                    1, 0.0D, 0.0D, 0.0D, 0.0D);
             server.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION,
-                    this.getX(), this.getY() + 0.5D, this.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
+                    this.getX(), this.getY() + 0.8D, this.getZ(),
+                    4, r * 0.25D, 0.25D, r * 0.25D, 0.0D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                    this.getX(), this.getY() + 0.8D, this.getZ(),
+                    24, r * 0.55D, 0.5D, r * 0.55D, 0.06D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.CAMPFIRE_COSY_SMOKE,
+                    this.getX(), this.getY() + 1.0D, this.getZ(),
+                    12, r * 0.45D, 0.6D, r * 0.45D, 0.02D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.FLAME,
+                    this.getX(), this.getY() + 0.6D, this.getZ(),
+                    40, r * 0.5D, 0.6D, r * 0.5D, 0.08D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA,
+                    this.getX(), this.getY() + 0.4D, this.getZ(),
+                    20, r * 0.6D, 0.4D, r * 0.6D, 0.6D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK,
+                    this.getX(), this.getY() + 0.5D, this.getZ(),
+                    50, r * 0.7D, 0.7D, r * 0.7D, 0.9D);
             server.playSound(null, this.getX(), this.getY(), this.getZ(),
                     net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE,
                     net.minecraft.sounds.SoundSource.PLAYERS, 2.5F, 0.6F);

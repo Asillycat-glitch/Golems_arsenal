@@ -41,10 +41,10 @@ public final class ImpactShockwaveFx {
     private static final float EXPAND_END = 0.55F;
 
     /**
-     * 暂时关闭屏幕空间空气波，保证地面只有一条亮环带。
-     * 爆炸重做完后再决定是恢复、还是让它和亮环带同半径合并。
+     * 这两张实机图里的"很漂亮的震荡"就是这层屏幕空间空气波，所以保留。
+     * 它和地面亮环带是同一个落点的两层：亮环带负责"看见"，空气波负责"空间被推开"。
      */
-    private static final boolean SCREEN_WARP_ENABLED = false;
+    private static final boolean SCREEN_WARP_ENABLED = true;
 
     private static final Map<Integer, Wave> WAVES = new HashMap<>();
 

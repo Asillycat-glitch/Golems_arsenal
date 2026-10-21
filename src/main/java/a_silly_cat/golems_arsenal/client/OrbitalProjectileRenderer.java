@@ -42,17 +42,17 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
      * <p>参考图六：弹体亮点头上拖着**一整条长而扭的热痕**，不是一小截。
      * 60 格 ≈ 下落 5 tick 的距离（12 格/tick），看上去才像"划破空气"。
      */
-    private static final float TRAIL_LENGTH = 60.0F;
+    private static final float TRAIL_LENGTH = 80.0F;
     /** 沿拖尾的切片数。切片多一点，扭曲才平滑。 */
     private static final int SLICES = 20;
     /** 拖尾的横向扭曲幅度（格）与频率——参考图六那种"扭动"的形态。 */
-    private static final float TRAIL_WOBBLE = 0.55F;
+    private static final float TRAIL_WOBBLE = 0.90F;
     private static final float TRAIL_WOBBLE_FREQ = 0.20F;
     /** 绕一圈的段数。 */
     private static final int SEGMENTS = 16;
 
     /** 头部半径相对宽度的比例。 */
-    private static final float HEAD_SCALE = 1.0F;
+    private static final float HEAD_SCALE = 1.8F;
     /** 拖尾根部半径相对头部的比例（越往上越细）。 */
     private static final float TAIL_TAPER = 0.08F;
 
@@ -68,7 +68,7 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
     private static final float TAIL_B = 0.05F;
 
     /** 整体亮度（加法混合，别拉满）。 */
-    private static final float ALPHA = 0.95F;
+    private static final float ALPHA = 1.0F;
 
     private static final int FULL_BRIGHT = LightTexture.FULL_BRIGHT;
 
@@ -146,9 +146,55 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
                         c0, c1, shade * fadeIn);
             }
         }
+
+        // 头部冲击套环：让"这一发"比一条细光柱更粗、更像会砸出坑的东西。
+        drawShockCollar(vc, m, half, fadeIn, brightness);
+
         pose.popPose();
 
         super.render(entity, entityYaw, partialTick, pose, buffer, light);
+    }
+
+    /**
+     * 头部冲击套环：一圈很淡的白热圆柱，底亮顶透明。
+     * 它不改变伤害，只让弹体在画面上有"体积"和"排开空气"的感觉。
+     */
+    private static void drawShockCollar(VertexConsumer vc, Matrix4f m, float half,
+                                        float fadeIn, float brightness) {
+        float radius = half * 2.2F;
+        float y0 = -half * 0.6F;
+        float y1 = half * 1.3F;
+        float alpha = 0.34F * fadeIn * brightness;
+        if (alpha <= 0.002F) {
+            return;
+        }
+        float r = ShaderEffects.tintR(1.00F);
+        float g = ShaderEffects.tintG(0.92F);
+        float b = ShaderEffects.tintB(0.72F);
+        for (int j = 0; j < SEGMENTS; j++) {
+            float a0 = (float) (j * Math.PI * 2.0 / SEGMENTS);
+            float a1 = (float) ((j + 1) * Math.PI * 2.0 / SEGMENTS);
+            float c0 = (float) Math.cos(a0);
+            float s0 = (float) Math.sin(a0);
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+
+            collarVertex(vc, m, c0 * radius, y0, s0 * radius, r, g, b, alpha);
+            collarVertex(vc, m, c1 * radius, y0, s1 * radius, r, g, b, alpha);
+            collarVertex(vc, m, c1 * radius, y1, s1 * radius, r, g, b, 0.0F);
+            collarVertex(vc, m, c0 * radius, y1, s0 * radius, r, g, b, 0.0F);
+        }
+    }
+
+    private static void collarVertex(VertexConsumer vc, Matrix4f m, float x, float y, float z,
+                                     float r, float g, float b, float alpha) {
+        vc.vertex(m, x, y, z)
+                .color(r, g, b, alpha)
+                .uv(0.5F, 0.5F)
+                .overlayCoords(OverlayTexture.NO_OVERLAY)
+                .uv2(FULL_BRIGHT)
+                .normal(0.0F, 1.0F, 0.0F)
+                .endVertex();
     }
 
     /** f=0 头部（白热）→ f=1 拖尾末端（暗红、近透明）。 */

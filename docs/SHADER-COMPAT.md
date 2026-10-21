@@ -100,15 +100,15 @@ tintB = b * 0.35;
 全屏圆环用投影半径驱动，站在落点上也仍然能看到一圈从脚下扩散出去。
 `ShockwaveShell` / `shockWall` / 平面亮环都已删除。
 
-> **这一版暂时关闭了屏幕空间空气波**（`ImpactShockwaveFx.SCREEN_WARP_ENABLED = false`），
-> 因为实机里它和亮环带叠在一起会被看成"两段冲击波"。先保证地面只有一条亮环带；
-> 爆炸重做完后再决定恢复，还是让它和亮环带同半径合并。
+> **屏幕空间空气波保留**（`ImpactShockwaveFx.SCREEN_WARP_ENABLED = true`）。
+> 实机截图里那层被夸"很漂亮"的大球面震荡就是它；这是本模组目前最接近参考图
+> 空气被推开的层次，所以不再关闭。
 
 `OrbitalImpactRenderer` 现在负责：
 - 一条带拖尾的贴地环带；
 - 弹体残留热痕（`drawTrail`）；
 - 64 条向外/向上的火星（`drawSparks`）；
-- 很短的金白闪光柱（`drawFlashCore`，爆炸第一版）。
+- 短闪光柱 + 橙白两层短寿命火球（爆炸第一版）。
 
 ```text
 0% ───── 55% ───── 100%   冲击波
@@ -144,22 +144,42 @@ tintB = b * 0.35;
 没有低矮光墙，也没有 4 圈各自不同速度的环；这样地面上只有**一条**亮环带。
 白色发光球没有回来——参考图里那个"罩子"是地面波 + 火花重叠。
 
-**爆炸第一版**：前 20% 时长加了一根很短的金白闪光柱（`drawFlashCore`，四片交叉、
-不是球），只给落点一个"中心炸开"的瞬间。烟尘、碎块、二次爆还没做，
-这版先作为可测试的爆炸核心。
+**爆炸重做第一版**：
+
+- `drawFlashCore`：前 20% 时长一根金白闪光柱（4 片交叉，不是球）；
+- `drawFireball`：橙白两层短寿命火球，8 tick 内从 0.18R 膨胀到 0.78R 并淡出；
+- `spawnDebris`：爆炸云 + 火焰 + 大烟 + 熔岩 + 电火花，不再只有 1 个 EXPLOSION；
+- 这些还不是完整爆炸，烟尘/碎块/二次爆继续做。
+
+**弹体增强**：
+
+- 头部半径从 1.0× 提到 1.8×；
+- 拖尾从 60 格拉到 80 格，横向扭动加大；
+- 头部加了一圈 2.2× 半径的冲击套环，弹体不再像一根细光柱。
+
+### 2.6 瞄准聚合的爆闪修复
+
+聚合完成的那一 tick，`GuidanceBeamRenderer` 以前会**同时**画：
+- 六条已经重合在圆心的引导光（总 alpha ≈ 1.0）；
+- 新出现的中心大光柱（再叠 0.85）。
+
+等于突然多出一整层亮度，所以会"啪"地闪一下。
+现在聚合完成后**只画中心那一条**，六条不再重复叠加；中心 alpha 取和六条总亮度
+接近的值，避免亮度跳变。
 
 ## 3. 涉及的文件
 
 ```
 Config.java                             新增 orbital_beam.shader_effect_brightness
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
-client/ImpactShockwaveFx.java           无色折射（本版暂时关闭）+ 屏幕震动 + 波合并
-client/OrbitalImpactRenderer.java       单条环带+拖尾/闪光柱/热痕/64 条火星
-client/GuidanceBeamRenderer.java        压 alpha / 暖色 / 背面剔除
-client/OrbitalBeamRenderer.java         同上
-client/OrbitalProjectileRenderer.java   同上
+client/ImpactShockwaveFx.java           无色折射（保留）+ 屏幕震动 + 波合并
+client/OrbitalImpactRenderer.java       单条环带+拖尾/闪光柱/火球/热痕/64 条火星
+client/GuidanceBeamRenderer.java        瞄准光柱 + 聚合爆闪修复
+client/OrbitalBeamRenderer.java         压 alpha / 暖色 / 背面剔除
+client/OrbitalProjectileRenderer.java   头部放大/拖尾加长/冲击套环
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
 assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
+base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
 ```
 
 ## 4. 怎么测
@@ -177,17 +197,20 @@ assets/.../shaders/program/impact_shockwave.*  无色冲击波 shader
 看**落点**：
 
 - 命中瞬间：**一条**亮的贴地环带向外扫，后面拖着一段渐隐尾迹；
-- 环带中央有一根很短的金白闪光柱（爆炸第一版）；
+- 中央有短闪光柱 + 橙白火球，伴随爆炸云/烟/熔岩/电火花；
 - 环带和 64 条火星重叠，不再是多圈独立环；
-- 爆炸粒子 + 爆炸声 + 弹体热痕；
 - 屏幕短促震一下；
-- 这一版**不应该再看到**那圈无色空气波；如果还有第二圈，说明是另一个冲击实体，
-  现在 `isPrimaryImpact` 也会只留一个；
+- 那层**大球面空气波保留**（就是上一版被夸"很漂亮"的震荡）；
 - 引导光柱保持暖金。
 
+看**瞄准收束**：
+
+- 六条光收拢到中心时，不应该再突然爆闪一下；
+- 聚合完成后应该是平滑地变成一条中心大光柱。
+
 如果环带太窄/尾迹太短：调 `OrbitalImpactRenderer` 里的 `lead`、`trail`、`alpha`。
-如果闪光柱太细/太长：调 `drawFlashCore` 里的 `height`、`width`。
-如果还是多圈亮环，把 `/ga shot` 前后的日志和截图发我，我按实际绘制来源再收。
+如果火球太小/太大：调 `drawFireball` 的 `outerRadius` 系数。
+如果瞄准还是闪：把 `/ga full` 最后 1 秒录屏/截图发我，我再按相位边界收。
 
 ## 5. 已知限制
 

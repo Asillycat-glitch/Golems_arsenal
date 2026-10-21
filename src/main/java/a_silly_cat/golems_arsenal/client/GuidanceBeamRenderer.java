@@ -117,20 +117,26 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
             }
         }
 
-        // ② 六条引导激光：辉光层 + 亮芯
+        // ② 六条引导激光：辉光层 + 亮芯。
+        // 聚合完成（centerScale > 1）后**不要再画六条**：它们已经重合在圆心，
+        // 再叠上中心大光柱会在相位切换的那一 tick 突然多出 6 份 alpha，造成爆闪。
         float baseAlpha = aim.alphaMul();
-        drawSix(vc, pose, entity, aim, radius, from, to, width * GLOW_SCALE, camPos,
-                glowR, glowG, glowB, GLOW_ALPHA * baseAlpha * brightness, GLOW_FACING_POW);
-        drawSix(vc, pose, entity, aim, radius, from, to, width, camPos,
-                coreR, coreG, coreB, CORE_ALPHA * baseAlpha * brightness, CORE_FACING_POW);
+        boolean centerPhase = aim.centerScale() > 1.001F;
+        if (!centerPhase) {
+            drawSix(vc, pose, entity, aim, radius, from, to, width * GLOW_SCALE, camPos,
+                    glowR, glowG, glowB, GLOW_ALPHA * baseAlpha * brightness, GLOW_FACING_POW);
+            drawSix(vc, pose, entity, aim, radius, from, to, width, camPos,
+                    coreR, coreG, coreB, CORE_ALPHA * baseAlpha * brightness, CORE_FACING_POW);
+        }
 
-        // ③ 聚合完成：中心那一条稍微放大（亮度已随放大回落，避免过曝）
-        if (aim.centerScale() > 1.001F) {
+        // ③ 聚合完成：只画中心那一条，宽度随 centerScale 放大。
+        // alpha 取和六条总亮度接近的值，避免"六条消失 → 一条出现"的亮度跳变。
+        if (centerPhase) {
             float grow = width * aim.centerScale();
             drawBeam(vc, pose, entity, 0.0F, 0.0F, from, to, grow * GLOW_SCALE, camPos,
-                    glowR, glowG, glowB, GLOW_ALPHA * 0.8F * brightness, GLOW_FACING_POW);
+                    glowR, glowG, glowB, GLOW_ALPHA * brightness, GLOW_FACING_POW);
             drawBeam(vc, pose, entity, 0.0F, 0.0F, from, to, grow, camPos,
-                    coreR, coreG, coreB, CORE_ALPHA * 0.85F * brightness, CORE_FACING_POW);
+                    coreR, coreG, coreB, CORE_ALPHA * brightness, CORE_FACING_POW);
         }
 
         super.render(entity, entityYaw, partialTick, pose, buffer, light);
