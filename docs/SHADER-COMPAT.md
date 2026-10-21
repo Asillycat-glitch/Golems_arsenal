@@ -140,18 +140,27 @@ tintB = b * 0.35;
 
 现在的落地主体：
 
-- **白蓝能量半球**：贴地向上鼓起，外层蓝、内层白，高 alpha，短寿命；
-- **一条蓝白环带 + 拖尾**（冲击波主体没改）；
-- 64 条蓝白火星；
+- **只保留一层冲击波**：`ImpactShockwaveFx` 的屏幕空间空气波；
+- 贴地蓝白环带、白蓝能量半球**都删了**——它们和空气波叠在一起就是“两拨冲击波”；
+- 48 条更短、更细、亮度更低的蓝白火星；
 - 灰烟 + 灰烬 + 熔岩 + 电火花；
 - 不再画落点残留的实体光柱。
 
 颜色从暖金改成白蓝。`GuidanceBeamRenderer` 也同步成白蓝主光/电蓝辉光；
 如果之后确认引导也该保持暖金，再把这一处单独回退。
 
+参考秘法涡流的做法：**一个屏幕空间冲击波**就够了，不要在地面再叠一个可见环/半球。
 **已删除**：橙色两层火球、`LARGE_SMOKE` 白团、`EXPLOSION_EMITTER` 白色大云、电弧、
-落点残留光柱。
+落点残留光柱、贴地环带、白蓝能量半球。
 **保留不动**：球面空气波（你说很漂亮的震荡）。
+
+**火星调整（光影下更容易过曝）**：
+
+- 数量 64 → **48**；
+- 单条长度 `back` 0.12 → **0.055**；
+- 宽度 0.045 → **0.022**，并按随机数再做 0.55~1.30 的粗细变化；
+- alpha 0.85 → **0.62**；
+- 颜色压低白色分量（白蓝 → 电蓝），避免在 bloom 里糊成一片白。
 
 **弹体 / 拖尾（这一版缩小）**：
 
@@ -185,10 +194,10 @@ Config.java                             新增 orbital_beam.shader_effect_bright
 client/ShaderEffects.java               光影检测 + 倍率 + 暖色 tint
 client/ImpactShockwaveFx.java           无色空气波（保留）+ 屏幕震动 + 波合并
 client/TrailRefractionFx.java           弹体拖尾的空气折射（无色）
-client/OrbitalImpactRenderer.java       单条环带+拖尾/闪光柱/白蓝半球/热痕/64 条火星
+client/OrbitalImpactRenderer.java       闪光柱/短细火星；不再画环带/半球
 client/GuidanceBeamRenderer.java        瞄准光柱 + 聚合爆闪修复（蓝白）
 client/OrbitalBeamRenderer.java         压 alpha / 暖色 / 背面剔除
-client/OrbitalProjectileRenderer.java   蓝白头部/拖尾/冲击套环
+client/OrbitalProjectileRenderer.java   蓝白小头部/短拖尾（28 格）
 client/BeaconPillarRenderer.java        受击光柱只压 alpha（保留绿色）
 assets/.../shaders/program/impact_shockwave.*  无色空气波 shader
 assets/.../shaders/program/trail_refraction.*  拖尾空气折射 shader
@@ -197,7 +206,7 @@ base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
 
 ## 4. 怎么测
 
-光影部分暂时不用管，直接进游戏：
+开光影测，重点看蓝白效果在 bloom 下会不会糊成一片白。
 
 ```
 /ga shot 14
@@ -209,13 +218,13 @@ base/entity/OrbitalImpactEntity.java    爆炸粒子/烟尘/熔岩
 
 看**落点**：
 
-- 命中瞬间：**蓝白能量半球**贴地鼓起，外层蓝、内层白；
-- **没有电弧/闪电几何**；
-- 一条蓝白环带 + 拖尾向外扫，和 64 条蓝白火星重叠；
-- 之后是灰烟/灰烬/熔岩 + 碎片，不再是橙色透明火球或白色烟团；
+- 只应该有**一层**冲击波：ImpactShockwaveFx 的球面空气波；
+- **没有**贴地环带、**没有**白蓝能量半球、**没有**电弧/闪电几何；
+- 中央只有短闪光柱；
+- 48 条更短、更细、偏电蓝的火星，不应再是长直白线；
+- 灰烟/灰烬/熔岩 + 碎片；
 - 屏幕短促震一下；
-- 那层**大球面空气波保留**（就是上一版被夸"很漂亮"的震荡）；
-- 引导光柱改成白蓝/电蓝，和落点统一。
+- 引导光柱是白蓝/电蓝。
 
 看**弹体拖尾**：
 

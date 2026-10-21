@@ -67,35 +67,9 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
 
-        // 主体：**一条**贴地环带，外缘亮、内缘透明，形成向后拖的尾迹。
-        // 不再画多圈独立环；更外层的空气波由 ImpactShockwaveFx 负责。
-        float bright;
-        if (p < 0.12F) {
-            bright = p / 0.12F;
-        } else if (p < 0.55F) {
-            bright = 1.0F;
-        } else {
-            bright = Math.max(0.0F, 1.0F - (p - 0.55F) / 0.35F);
-        }
-
-        float shellT = Math.min(1.0F, p / 0.55F);
-        float shellExpand = 1.0F - (1.0F - shellT) * (1.0F - shellT) * (1.0F - shellT);
-        float shellR = radius * (0.10F + 0.90F * shellExpand);
-
-        float alpha = 0.85F * bright * brightness;
-        if (alpha > 0.002F) {
-            float lead = Math.max(0.10F, radius * 0.045F);
-            float trail = Math.max(1.0F, radius * 0.32F);
-            ringBandTrail(m, vc, shellR, lead, trail, alpha);
-        }
-
-        // 爆炸核心：先只留短闪光柱，把"橙色透明球"撤掉。
-        // 日冕那种效果不能靠半透明球堆，需要贴图 billboard + 分层时序；
-        // 在拿到动态参考前先不做错误方向的加法。
+        // 只保留一个冲击波：ImpactShockwaveFx 的屏幕空间空气波。
+        // 这里不再画贴地环带/白蓝半球，否则会和空气波叠成“两拨”。
         drawFlashCore(m, vc, radius, p, brightness);
-        // 日冕五雷天罚的落地核心：白蓝半球能罩 + 烟/碎片。
-        // 不再画电弧——参考里的“细线”是空气折射，不是闪电。
-        drawEnergyDome(m, vc, radius, p, brightness);
 
         // 不再画落点残留的实体光柱：它会在夜里变成一根巨大的白柱，
         // 把真正的空气折射完全盖住。拖尾交给 TrailRefractionFx。
@@ -111,11 +85,11 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     /**
      * 火星数量。**不多**：靠"不规则"取胜，不是靠数量堆。
      */
-    private static final int SPARKS = 64;
+    private static final int SPARKS = 48;
     /** 火星长度（拖尾长度，格）。 */
     private static final float SPARK_STREAK = 0.9F;
     /** 火星粗细（格）。 */
-    private static final float SPARK_HALF = 0.045F;
+    private static final float SPARK_HALF = 0.022F;
 
     /**
      * 溅射光粒：从落点向外甩出、受重力回落的细小火星。
@@ -162,7 +136,7 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
             float z = (float) (Math.sin(ang) * dist);
 
             // 拖尾：沿"当前点 → 稍早一点的位置"画一条短亮线
-            float back = 0.12F;
+            float back = 0.055F;
             float tBack = Math.max(0.0F, t - back);
             float distBack = speed * tBack;
             float yBack = up * tBack - radius * 0.85F * tBack * tBack;
@@ -184,10 +158,11 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 cg = 0.85F - 0.50F * k;
                 cb = 1.00F;
             }
-            float alpha = 0.85F * (1.0F - t) * (1.0F - t) * brightness;
+            float alpha = 0.62F * (1.0F - t) * (1.0F - t) * brightness;
 
             // 用两片交叉细面近似一根短亮线（不做 billboard，省事且够看）
-            sparkQuad(vc, m, bx, yBack, bz, x, y, z, SPARK_HALF,
+            sparkQuad(vc, m, bx, yBack, bz, x, y, z,
+                    SPARK_HALF * (0.55F + 0.75F * r1),
                     ShaderEffects.tintR(cr),
                     ShaderEffects.tintG(cg),
                     ShaderEffects.tintB(cb), alpha);
@@ -273,7 +248,7 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         float f = 1.0F - p / 0.20F;
         float height = radius * (0.90F + 0.80F * f);
         float width = Math.max(0.06F, radius * 0.07F * f);
-        float alpha = 0.85F * f * f * brightness;
+        float alpha = 0.55F * f * f * brightness;
         if (alpha <= 0.002F) {
             return;
         }
