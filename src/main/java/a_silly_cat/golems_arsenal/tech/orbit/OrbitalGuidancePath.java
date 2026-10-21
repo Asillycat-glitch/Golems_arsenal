@@ -119,8 +119,8 @@ public final class OrbitalGuidancePath {
      * </pre>
      */
     public static final int AIM_ROTATE_TICKS = 8;
-    public static final int AIM_CONVERGE_TICKS = 16;
-    public static final int AIM_GROW_TICKS = 16;
+    public static final int AIM_CONVERGE_TICKS = 20;
+    public static final int AIM_GROW_TICKS = 12;
     public static final int AIM_TOTAL_TICKS = AIM_ROTATE_TICKS + AIM_CONVERGE_TICKS + AIM_GROW_TICKS;
 
     /** 相位边界（按 progress 0..1 换算）。 */
@@ -195,9 +195,9 @@ public final class OrbitalGuidancePath {
      *
      * <p>时间轴（progress）：
      * <pre>
-     *   0.00 .. 0.20   原地顺时针转 60°（半径不变，无径向速度）  10 tick
-     *   0.20 .. 0.60   加速向内聚合：半径 1 → 0，同时再转 120°   20 tick（角速度不变）
-     *   0.60 .. 1.00   中心放大：1.0 → 1.35 倍，亮度回落     20 tick
+     *   0.00 .. 0.20   原地顺时针转 60°（半径不变，无径向速度）  8 tick
+     *   0.20 .. 0.70   加速向内聚合：半径 1 → 0，同时再转 120°   20 tick（角速度不变）
+     *   0.70 .. 1.00   中心放大：1.0 → 1.35 倍，亮度回落     12 tick
      * </pre>
      * 合计 40 tick = 2 秒。
      */

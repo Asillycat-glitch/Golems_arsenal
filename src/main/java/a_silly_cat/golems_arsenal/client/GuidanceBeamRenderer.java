@@ -118,25 +118,32 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
         }
 
         // ② 六条引导激光：辉光层 + 亮芯。
-        // 聚合完成（centerScale > 1）后**不要再画六条**：它们已经重合在圆心，
-        // 再叠上中心大光柱会在相位切换的那一 tick 突然多出 6 份 alpha，造成爆闪。
+        // 聚合完成后不要立刻把六条丢掉：它们已经到圆心，先用 4 tick 把六条淡出、
+        // 中心大光柱淡入，避免"外侧突然消失 → 中心突然出现"的跳变。
         float baseAlpha = aim.alphaMul();
         boolean centerPhase = aim.centerScale() > 1.001F;
-        if (!centerPhase) {
+        float centerFade = 0.0F;
+        if (centerPhase) {
+            float centerT = (aim.centerScale() - 1.0F)
+                    / (OrbitalGuidancePath.AIM_CENTER_SCALE - 1.0F);
+            centerFade = Math.min(1.0F, Math.max(0.0F, centerT / 0.25F));
+            centerFade = centerFade * centerFade * (3.0F - 2.0F * centerFade);
+        }
+        if (!centerPhase || centerFade < 0.999F) {
+            float sixMul = centerPhase ? 1.0F - centerFade : 1.0F;
             drawSix(vc, pose, entity, aim, radius, from, to, width * GLOW_SCALE, camPos,
-                    glowR, glowG, glowB, GLOW_ALPHA * baseAlpha * brightness, GLOW_FACING_POW);
+                    glowR, glowG, glowB, GLOW_ALPHA * baseAlpha * sixMul * brightness, GLOW_FACING_POW);
             drawSix(vc, pose, entity, aim, radius, from, to, width, camPos,
-                    coreR, coreG, coreB, CORE_ALPHA * baseAlpha * brightness, CORE_FACING_POW);
+                    coreR, coreG, coreB, CORE_ALPHA * baseAlpha * sixMul * brightness, CORE_FACING_POW);
         }
 
-        // ③ 聚合完成：只画中心那一条，宽度随 centerScale 放大。
-        // alpha 取和六条总亮度接近的值，避免"六条消失 → 一条出现"的亮度跳变。
+        // ③ 聚合完成：中心那一条随 centerFade 淡入，宽度随 centerScale 放大。
         if (centerPhase) {
             float grow = width * aim.centerScale();
             drawBeam(vc, pose, entity, 0.0F, 0.0F, from, to, grow * GLOW_SCALE, camPos,
-                    glowR, glowG, glowB, GLOW_ALPHA * brightness, GLOW_FACING_POW);
+                    glowR, glowG, glowB, GLOW_ALPHA * centerFade * brightness, GLOW_FACING_POW);
             drawBeam(vc, pose, entity, 0.0F, 0.0F, from, to, grow, camPos,
-                    coreR, coreG, coreB, CORE_ALPHA * brightness, CORE_FACING_POW);
+                    coreR, coreG, coreB, CORE_ALPHA * centerFade * brightness, CORE_FACING_POW);
         }
 
         super.render(entity, entityYaw, partialTick, pose, buffer, light);
