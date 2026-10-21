@@ -67,9 +67,30 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         pose.translate(0.0, LIFT, 0.0);
         Matrix4f m = pose.last().pose();
 
-        // 只保留一个冲击波：ImpactShockwaveFx 的屏幕空间空气波。
-        // 这里不再画贴地环带/白蓝半球，否则会和空气波叠成“两拨”。
+        // 可见的地面环带 + 白蓝半球保留；它们不是“屏幕空间空气波”，
+        // 两拨问题由 ImpactShockwaveFx 只保留一个活动波解决。
+        float bright;
+        if (p < 0.12F) {
+            bright = p / 0.12F;
+        } else if (p < 0.55F) {
+            bright = 1.0F;
+        } else {
+            bright = Math.max(0.0F, 1.0F - (p - 0.55F) / 0.35F);
+        }
+
+        float shellT = Math.min(1.0F, p / 0.55F);
+        float shellExpand = 1.0F - (1.0F - shellT) * (1.0F - shellT) * (1.0F - shellT);
+        float shellR = radius * (0.10F + 0.90F * shellExpand);
+
+        float alpha = 0.85F * bright * brightness;
+        if (alpha > 0.002F) {
+            float lead = Math.max(0.10F, radius * 0.045F);
+            float trail = Math.max(1.0F, radius * 0.32F);
+            ringBandTrail(m, vc, shellR, lead, trail, alpha * 0.65F);
+        }
+
         drawFlashCore(m, vc, radius, p, brightness);
+        drawEnergyDome(m, vc, radius, p, brightness);
 
         // 不再画落点残留的实体光柱：它会在夜里变成一根巨大的白柱，
         // 把真正的空气折射完全盖住。拖尾交给 TrailRefractionFx。
@@ -213,8 +234,8 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                                       float lead, float trail, float alpha) {
         float outer = radius + lead * 0.5F;
         float inner = Math.max(0.01F, radius - trail);
-        float rOuter = ShaderEffects.tintR(0.86F);
-        float gOuter = ShaderEffects.tintG(0.95F);
+        float rOuter = ShaderEffects.tintR(0.55F);
+        float gOuter = ShaderEffects.tintG(0.80F);
         float bOuter = ShaderEffects.tintB(1.00F);
         float rInner = ShaderEffects.tintR(0.20F);
         float gInner = ShaderEffects.tintG(0.45F);
@@ -252,11 +273,11 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         if (alpha <= 0.002F) {
             return;
         }
-        float r = ShaderEffects.tintR(0.86F);
-        float g = ShaderEffects.tintG(0.95F);
+        float r = ShaderEffects.tintR(0.55F);
+        float g = ShaderEffects.tintG(0.80F);
         float b = ShaderEffects.tintB(1.00F);
-        float topR = ShaderEffects.tintR(0.30F);
-        float topG = ShaderEffects.tintG(0.55F);
+        float topR = ShaderEffects.tintR(0.20F);
+        float topG = ShaderEffects.tintG(0.42F);
         float topB = ShaderEffects.tintB(1.00F);
 
         for (int plane = 0; plane < 4; plane++) {
@@ -295,12 +316,12 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         if (alpha <= 0.002F) {
             return;
         }
-        domeLayer(m, vc, domeR, alpha * 0.48F,
-                0.18F, 0.42F, 1.00F,
-                0.82F, 0.94F, 1.00F);
-        domeLayer(m, vc, domeR * 0.70F, alpha * 0.82F,
-                0.72F, 0.88F, 1.00F,
-                1.00F, 1.00F, 1.00F);
+        domeLayer(m, vc, domeR, alpha * 0.38F,
+                0.16F, 0.38F, 1.00F,
+                0.55F, 0.78F, 1.00F);
+        domeLayer(m, vc, domeR * 0.70F, alpha * 0.55F,
+                0.40F, 0.62F, 1.00F,
+                0.72F, 0.88F, 1.00F);
     }
 
     private static void domeLayer(Matrix4f m, VertexConsumer vc, float radius, float alpha,

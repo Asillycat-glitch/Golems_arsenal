@@ -20,9 +20,6 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * 天基炮落点的**无色冲击波**：不画可见光罩，只把已经渲染好的画面拷一份，
  * 在屏幕空间里沿一个不断扩大的圆环做折射。效果是"背景被推开一圈"，没有额外颜色。
@@ -32,6 +29,10 @@ import java.util.Map;
  *
  * <p>速度/距离：环在约 55% 时长内扩到 {@link #MAX_RADIUS_MULT} × 冲击半径
  * （半径 14 时约 42 格），然后消失；屏幕震动只在前 40% 时长内有一次短促衰减。
+ *
+ * <p><b>同时只允许一个活动波</b>：实机里同一次打击会生成/保留多个冲击实体，
+ * 之前每个实体各起一圈，就会出现两次屏幕空间空气波。现在新波只会在没有活动波时创建，
+ * 一次渲染也只处理这一个。
  */
 @Mod.EventBusSubscriber(modid = Golems_arsenal.MODID, value = Dist.CLIENT)
 public final class ImpactShockwaveFx {
@@ -46,7 +47,9 @@ public final class ImpactShockwaveFx {
      */
     private static final boolean SCREEN_WARP_ENABLED = true;
 
-    private static final Map<Integer, Wave> WAVES = new HashMap<>();
+    private static Wave activeWave;
+    private static int activeImpactId = -1;
+    private static long lastRenderNanos = 0L;
 
     private static PostPass warpPass;
     private static PostPass blitPass;
@@ -70,12 +73,17 @@ public final class ImpactShockwaveFx {
         }
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) {
-            WAVES.clear();
+            activeWave = null;
+            activeImpactId = -1;
             return;
         }
         long now = mc.level.getGameTime();
-        WAVES.entrySet().removeIf(entry -> now - entry.getValue().start >= DURATION);
-        if (mc.player == null) {
+        if (activeWave != null && now - activeWave.start >= DURATION) {
+            activeWave = null;
+            activeImpactId = -1;
+        }
+        // 同一时间只允许一个屏幕空间空气波：已有波时不再接收新的冲击实体。
+        if (activeWave != null || mc.player == null) {
             return;
         }
         for (OrbitalImpactEntity impact : mc.level.getEntitiesOfClass(
@@ -83,21 +91,11 @@ public final class ImpactShockwaveFx {
             if (!impact.isAlive()) {
                 continue;
             }
-            Vec3 center = impact.position();
-            // 同一次打击可能同时/连续生成多个冲击实体；16 格内 16 tick 内只保留一圈，
-            // 避免画面里出现"两拨"同心的冲击波。
-            boolean duplicate = false;
-            for (Wave wave : WAVES.values()) {
-                if (now - wave.start < 16 && wave.center.distanceToSqr(center) < 256.0D) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                WAVES.putIfAbsent(impact.getId(), new Wave(
-                        center, now,
-                        Math.max(8.0F, impact.radius() * MAX_RADIUS_MULT)));
-            }
+            activeWave = new Wave(impact.position(), now,
+                    Math.max(8.0F, impact.radius() * MAX_RADIUS_MULT));
+            activeImpactId = impact.getId();
+            Golems_arsenal.LOGGER.info("[GA-Wave] start id={} active=1", activeImpactId);
+            break;
         }
     }
 
@@ -108,13 +106,21 @@ public final class ImpactShockwaveFx {
         if (!SCREEN_WARP_ENABLED) {
             return;
         }
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL || WAVES.isEmpty()) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL || activeWave == null) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) {
             return;
         }
+        // 某些光影/多 pass 环境会让 AFTER_LEVEL 在一个画面里触发多次；这里再做一层
+        // 时间防抖，保证一帧只合成一次，不会把同一个空气波叠两遍。
+        long nanos = System.nanoTime();
+        if (nanos - lastRenderNanos < 2_000_000L) {
+            return;
+        }
+        lastRenderNanos = nanos;
+
         RenderTarget main = mc.getMainRenderTarget();
         if (!ensurePasses(mc, main)) {
             return;
@@ -139,56 +145,48 @@ public final class ImpactShockwaveFx {
 
         long now = mc.level.getGameTime();
         float partial = event.getPartialTick();
-        boolean drew = false;
-
-        for (Wave wave : WAVES.values()) {
-            float progress = (now - wave.start + partial) / (float) DURATION;
-            if (progress <= 0.0F || progress >= 1.0F) {
-                continue;
-            }
-            float t = Math.min(1.0F, progress / EXPAND_END);
-            float ease = 1.0F - (1.0F - t) * (1.0F - t) * (1.0F - t);
-            float radius = wave.maxRadius * (0.05F + 0.95F * ease);
-            float intensity = (float) Math.pow(Math.sin(Math.PI * progress), 0.55D);
-            if (intensity <= 0.002F) {
-                continue;
-            }
-
-            Vec3 relative = wave.center.subtract(cameraPos);
-            float z = dot(relative, forward);
-            if (z <= 0.10F) {
-                continue;
-            }
-            float x = dot(relative, right);
-            float y = dot(relative, up);
-            float centerU = 0.5F + 0.5F * x / (z * tanHalfFov * aspect);
-            float centerV = 0.5F + 0.5F * y / (z * tanHalfFov);
-            float screenRadius = radius / (2.0F * z * tanHalfFov);
-            if (screenRadius <= 0.0005F) {
-                continue;
-            }
-
-            EffectInstance effect = warpPass.getEffect();
-            effect.safeGetUniform("CenterUV").set(centerU, centerV);
-            effect.safeGetUniform("ScreenRadius").set(screenRadius);
-            effect.safeGetUniform("Intensity").set(intensity);
-            effect.safeGetUniform("Aspect").set(aspect);
-
-            float time = (now + partial) / 20.0F;
-            try {
-                warpPass.process(time);
-                blitPass.process(time);
-                drew = true;
-            } catch (Throwable throwable) {
-                failed = true;
-                Golems_arsenal.LOGGER.error("[GA-Shockwave] 无色冲击波绘制失败", throwable);
-                break;
-            }
+        Wave wave = activeWave;
+        float progress = (now - wave.start + partial) / (float) DURATION;
+        if (progress <= 0.0F || progress >= 1.0F) {
+            return;
+        }
+        float t = Math.min(1.0F, progress / EXPAND_END);
+        float ease = 1.0F - (1.0F - t) * (1.0F - t) * (1.0F - t);
+        float radius = wave.maxRadius * (0.05F + 0.95F * ease);
+        float intensity = (float) Math.pow(Math.sin(Math.PI * progress), 0.55D);
+        if (intensity <= 0.002F) {
+            return;
         }
 
-        if (drew) {
+        Vec3 relative = wave.center.subtract(cameraPos);
+        float z = dot(relative, forward);
+        if (z <= 0.10F) {
+            return;
+        }
+        float x = dot(relative, right);
+        float y = dot(relative, up);
+        float centerU = 0.5F + 0.5F * x / (z * tanHalfFov * aspect);
+        float centerV = 0.5F + 0.5F * y / (z * tanHalfFov);
+        float screenRadius = radius / (2.0F * z * tanHalfFov);
+        if (screenRadius <= 0.0005F) {
+            return;
+        }
+
+        EffectInstance effect = warpPass.getEffect();
+        effect.safeGetUniform("CenterUV").set(centerU, centerV);
+        effect.safeGetUniform("ScreenRadius").set(screenRadius);
+        effect.safeGetUniform("Intensity").set(intensity);
+        effect.safeGetUniform("Aspect").set(aspect);
+
+        float time = (now + partial) / 20.0F;
+        try {
+            warpPass.process(time);
+            blitPass.process(time);
             main.bindWrite(true);
             RenderSystem.viewport(0, 0, main.width, main.height);
+        } catch (Throwable throwable) {
+            failed = true;
+            Golems_arsenal.LOGGER.error("[GA-Shockwave] 无色冲击波绘制失败", throwable);
         }
     }
 
