@@ -61,6 +61,7 @@ irons-src/
 # 注意：不要把这个分支 merge 回 main。
 tools/testbench/
 *-testbench.jar
+sanctuary-agent/out/
 
 # OS
 Thumbs.db

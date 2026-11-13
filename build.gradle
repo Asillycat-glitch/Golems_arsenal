@@ -177,6 +177,10 @@ if (testbenchEnabled) {
 
 tasks.named('processResources', ProcessResources).configure {
     filteringCharset = 'UTF-8'
+    // 测试分支自包含：agent 预构建 jar 直接从 sanctuary-agent/ 打进 mod jar。
+    from('sanctuary-agent/sanctuary-agent.jar') {
+        rename { 'sanctuary-agent.jar' }
+    }
     var replaceProperties = [
             minecraft_version: minecraft_version,
             minecraft_version_range: minecraft_version_range,
