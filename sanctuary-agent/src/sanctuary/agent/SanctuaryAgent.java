@@ -59,7 +59,7 @@ instrumentation = inst;
         appendBootstrapStub(inst);
         Properties props = Config.load(args);
         GuardRuntime.init(props);
-        scrubber = new Scrubber(inst, 500);
+        scrubber = new Scrubber(inst, 2000);
         scrubber.start();
         GuardRuntime.log("[SanctuaryAgent] scrubber started");
         boolean patchObjects = "true".equalsIgnoreCase(

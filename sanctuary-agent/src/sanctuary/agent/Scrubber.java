@@ -129,6 +129,9 @@ public final class Scrubber implements Runnable {
             if (isSkipped(name)) {
                 continue;
             }
+            if (isClientClass(cls)) {
+                continue;
+            }
             try {
                 total += scrubClass(cls, ids);
             } catch (Throwable ignored) {
@@ -153,29 +156,60 @@ public final class Scrubber implements Runnable {
         return false;
     }
 
+    /**
+     * 客户端类链不扫。像 DeadKingAmbienceSoundInstance 这种类名不在 client 包，
+     * 但父类是 net.minecraft.client.*；在 Scrubber 线程上 getDeclaredFields()
+     * 会触发父类加载，服务端/错误 classloader 下直接报 ClassNotFoundException。
+     */
+    private static boolean isClientClass(Class<?> cls) {
+        try {
+            for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+                String name = c.getName();
+                if (name.startsWith("net.minecraft.client.")
+                        || name.startsWith("com.mojang.blaze3d.")) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
     private int scrubClass(Class<?> cls, Set<UUID> ids) {
-        int removedHere = 0;
-        for (Field field : cls.getDeclaredFields()) {
-            if (!Modifier.isStatic(field.getModifiers())) {
-                continue;
-            }
-            Class<?> type = field.getType();
-            boolean isMap = Map.class.isAssignableFrom(type);
-            boolean isCollection = Collection.class.isAssignableFrom(type);
-            if (!isMap && !isCollection) {
-                continue;
-            }
-            try {
-                field.setAccessible(true);
-                Object value = field.get(null);
-                if (value == null) {
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        ClassLoader loader = cls.getClassLoader();
+        if (loader != null && loader != previous) {
+            thread.setContextClassLoader(loader);
+        }
+        try {
+            int removedHere = 0;
+            for (Field field : cls.getDeclaredFields()) {
+                if (!Modifier.isStatic(field.getModifiers())) {
                     continue;
                 }
-                removedHere += isMap ? scrubMap((Map<?, ?>) value, ids) : scrubCollection((Collection<?>) value, ids);
-            } catch (Throwable ignored) {
+                Class<?> type = field.getType();
+                boolean isMap = Map.class.isAssignableFrom(type);
+                boolean isCollection = Collection.class.isAssignableFrom(type);
+                if (!isMap && !isCollection) {
+                    continue;
+                }
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(null);
+                    if (value == null) {
+                        continue;
+                    }
+                    removedHere += isMap ? scrubMap((Map<?, ?>) value, ids) : scrubCollection((Collection<?>) value, ids);
+                } catch (Throwable ignored) {
+                }
+            }
+            return removedHere;
+        } finally {
+            if (loader != null && loader != previous) {
+                thread.setContextClassLoader(previous);
             }
         }
-        return removedHere;
     }
 
     private int scrubMap(Map<?, ?> map, Set<UUID> ids) {
