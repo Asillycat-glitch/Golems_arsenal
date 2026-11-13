@@ -56,10 +56,9 @@ irons-in/
 irons-src/
 
 # ============================ 私有测试台（testbench） ============================
-# 私活测试代码：逐项量化"绕过减伤"的手段（tag 档位 / 反取消 / 各阶段 floor /
-# END 层返还 / 多段 / 写血 / 摘附魔）。**不进版本库、不上传 GitHub、不进发布 jar。**
-# 构建方式见 build.gradle 顶部的说明：gradlew build -Ptestbench
-testbench/
+# 本 testbench 分支专门承载测试/学习代码，testbench/ 由本分支正常跟踪；
+# 构建方式仍是 gradlew build -Ptestbench，产物 *-testbench.jar 不入库。
+# 注意：不要把这个分支 merge 回 main。
 tools/testbench/
 *-testbench.jar
 

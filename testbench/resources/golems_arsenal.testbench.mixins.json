@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "a_silly_cat.golems_arsenal.testbench.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "golems_arsenal.testbench.refmap.json",
+  "mixins": [
+    "LivingEntityTraceMixin",
+    "EntityTraceMixin",
+    "GuardedEntityTraceMixin",
+    "SynchedEntityDataTraceMixin",
+    "ClientboundRemoveEntitiesPacketTraceMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

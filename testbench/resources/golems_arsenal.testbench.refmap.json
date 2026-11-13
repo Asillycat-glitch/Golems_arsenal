@@ -1,0 +1,36 @@
+{
+  "mappings": {
+    "a_silly_cat/golems_arsenal/testbench/mixin/LivingEntityTraceMixin": {
+      "setHealth": "Lnet/minecraft/world/entity/LivingEntity;m_21153_(F)V",
+      "getHealth": "Lnet/minecraft/world/entity/LivingEntity;m_21223_()F"
+    },
+    "a_silly_cat/golems_arsenal/testbench/mixin/EntityTraceMixin": {
+      "setRemoved": "Lnet/minecraft/world/entity/Entity;m_142467_(Lnet/minecraft/world/entity/Entity$RemovalReason;)V"
+    },
+    "a_silly_cat/golems_arsenal/testbench/mixin/GuardedEntityTraceMixin": {
+      "setHealth": "Ldev/xkmc/modulargolems/content/entity/common/GuardedEntity;m_21153_(F)V",
+      "getHealth": "Ldev/xkmc/modulargolems/content/entity/common/GuardedEntity;m_21223_()F"
+    },
+    "a_silly_cat/golems_arsenal/testbench/mixin/SynchedEntityDataTraceMixin": {
+      "set": "Lnet/minecraft/network/syncher/SynchedEntityData;m_135381_(Lnet/minecraft/network/syncher/EntityDataAccessor;Ljava/lang/Object;)V"
+    }
+  },
+  "data": {
+    "searge": {
+      "a_silly_cat/golems_arsenal/testbench/mixin/LivingEntityTraceMixin": {
+        "setHealth": "Lnet/minecraft/world/entity/LivingEntity;m_21153_(F)V",
+        "getHealth": "Lnet/minecraft/world/entity/LivingEntity;m_21223_()F"
+      },
+      "a_silly_cat/golems_arsenal/testbench/mixin/EntityTraceMixin": {
+        "setRemoved": "Lnet/minecraft/world/entity/Entity;m_142467_(Lnet/minecraft/world/entity/Entity$RemovalReason;)V"
+      },
+      "a_silly_cat/golems_arsenal/testbench/mixin/GuardedEntityTraceMixin": {
+        "setHealth": "Ldev/xkmc/modulargolems/content/entity/common/GuardedEntity;m_21153_(F)V",
+        "getHealth": "Ldev/xkmc/modulargolems/content/entity/common/GuardedEntity;m_21223_()F"
+      },
+      "a_silly_cat/golems_arsenal/testbench/mixin/SynchedEntityDataTraceMixin": {
+        "set": "Lnet/minecraft/network/syncher/SynchedEntityData;m_135381_(Lnet/minecraft/network/syncher/EntityDataAccessor;Ljava/lang/Object;)V"
+      }
+    }
+  }
+}
