@@ -51,7 +51,13 @@ public final class Scrubber implements Runnable {
             // L2 框架 / Modular Golems：宿主与能力系统自身不是墓碑来源；
             // 跳过它们可以避免在 Scrubber 线程上触发大量能力类的字段加载。
             "dev.xkmc.l2",
-            "dev.xkmc.modulargolems."
+            "dev.xkmc.modulargolems.",
+            // 原版/Forge/ASM 不是敌意墓碑来源；跳过它们能显著降低全量扫描成本。
+            "net.minecraft.",
+            "net.minecraftforge.",
+            "com.mojang.",
+            "org.spongepowered.",
+            "org.objectweb.asm."
     };
 
     private final Instrumentation inst;
