@@ -238,6 +238,17 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         return MODIFIED_CLASSES.size();
     }
 
+    /** 给已加载类补 retransform 前的轻量判断；bytes 为 null 时保守放行。 */
+    public boolean isInterested(String className, byte[] bytes) {
+        if (rules.containsKey(className)
+                || NEUTRALIZE.containsKey(className)
+                || isVanillaGateClass(className)
+                || TRACE.contains(className)) {
+            return true;
+        }
+        return bytes == null || containsInterestNeedle(bytes);
+    }
+
     private static boolean containsInterestNeedle(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return false;

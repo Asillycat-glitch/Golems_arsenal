@@ -18,6 +18,7 @@ public final class SanctuaryAgent {
     private static Instrumentation instrumentation;
     private static volatile boolean started;
     private static volatile Scrubber scrubber;
+    private static volatile SanctuaryTransformer transformer;
     /** 类查找缓存：findLoaded 每 3 秒扫全 JVM 是周期性成本，找到一次就固定。 */
     private static final java.util.Map<String, Class<?>> CLASS_CACHE =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -73,7 +74,8 @@ instrumentation = inst;
         GuardRuntime.log("[SanctuaryAgent] scrubber started");
         boolean patchObjects = "true".equalsIgnoreCase(
                 props.getProperty("patch_object_returns", "false"));
-        inst.addTransformer(new SanctuaryTransformer(patchObjects), true);
+        transformer = new SanctuaryTransformer(patchObjects);
+        inst.addTransformer(transformer, true);
         // attach 之前已经加载的外来类不会经过 transformer，必须补一次 retransform：
         // 顺带把那些类上已经应用的第三方 mixin 剥掉（mixin 是 launcher plugin，不是 transformer）。
         retransformHostile(inst);
@@ -436,9 +438,15 @@ instrumentation = inst;
     private static void retransformHostile(Instrumentation inst) {
         try {
             java.util.List<Class<?>> batch = new java.util.ArrayList<>();
+            SanctuaryTransformer current = transformer;
             for (Class<?> c : inst.getAllLoadedClasses()) {
                 String name = c.getName().replace('.', '/');
                 if (SanctuaryTransformer.isHostile(name) && inst.isModifiableClass(c)) {
+                    // 先用原始 class bytes 做常量池预筛；不命中就不 retransform。
+                    byte[] bytes = readClassBytes(c);
+                    if (current != null && !current.isInterested(name, bytes)) {
+                        continue;
+                    }
                     batch.add(c);
                 }
             }
@@ -455,6 +463,15 @@ instrumentation = inst;
                 java.nio.file.Files.writeString(java.nio.file.Path.of("sanctuary-agent-fail.txt"), java.time.LocalDateTime.now() + "\n" + sw);
             } catch (Throwable ignored) { }
             GuardRuntime.log("[SanctuaryAgent] retransform failed: " + t);
+        }
+    }
+
+    private static byte[] readClassBytes(Class<?> cls) {
+        try (java.io.InputStream in = cls.getClassLoader()
+                .getResourceAsStream(cls.getName().replace('.', '/') + ".class")) {
+            return in == null ? null : in.readAllBytes();
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
