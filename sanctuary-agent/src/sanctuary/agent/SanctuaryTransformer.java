@@ -10,9 +10,11 @@ import org.objectweb.asm.Type;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 引擎层的两道门：
@@ -117,6 +119,21 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
 
     private final Map<String, Rule> rules = new HashMap<>();
     private final boolean patchObjectReturns;
+    /** 真正改过字节的类（internal name）；后续重转只碰这批。 */
+    private static final Set<String> MODIFIED_CLASSES = ConcurrentHashMap.newKeySet();
+    /** 已确认 no-op 的类 + 字节哈希，避免重复 ASM。 */
+    private final Map<String, Integer> noPatchHash = new ConcurrentHashMap<>();
+
+    /** 预筛常量池里是否出现字段/方法门需要的东西；不命中就不进 ASM。 */
+    private static final String[] INTEREST_NEEDLES = {
+            "f_135391_", "f_19825_", "f_19826_", "f_185933_", "f_146795_",
+            "f_146801_", "isAddedToWorld", "canUpdate",
+            "setHealth", "getHealth", "getMaxHealth",
+            "setRemoved", "remove", "kill", "die"
+    };
+    /** 类层次缓存，避免每条帧都 Class.forName。 */
+    private static final Map<String, Class<?>> CLASS_RESOLVE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> COMMON_SUPER_CACHE = new ConcurrentHashMap<>();
 
     public SanctuaryTransformer(boolean patchObjectReturns) {
         this.patchObjectReturns = patchObjectReturns;
@@ -132,6 +149,12 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         // 2026-11-12 新增：MainRemove 是 AV 的"拆索引/回调"主入口，之前只有字段门。
         rules.put("com/luoee/arcanevortex/Content/Item/EntityRemover/RemoveHelp/MainRemove",
                 new Rule(false, "remove", "forceRemove", "clearEntity", "chunkMapRemove", "deleteFrom"));
+        // 2026-11-14：VanSh Shift+左键走 EntityKillerHelp.tickDeath，不经过普通 hurt 链。
+        // 这组方法都直接拿 Entity 当第一参，入口必须挡住。
+        rules.put("com/luoee/arcanevortex/Help/EntityKillerHelp",
+                new Rule(false, "tickDeath", "killEntity", "kill", "remove",
+                        "AsynchronousRemove", "setRemoved", "removeServerLevelEntity",
+                        "deleteEntity", "setEntityPos", "setEntityPosReflection"));
         rules.put("com/luoee/arcanevortex/NativeAgent/NativeAgentHealthMethod",
                 new Rule(true, "forceSetHealth", "forceSetMaxHealth"));
 
@@ -206,6 +229,29 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         return out;
     }
 
+    /** 真正被改过字节的类（internal name），供后续只重转这批。 */
+    public static Set<String> modifiedClassNames() {
+        return new java.util.HashSet<>(MODIFIED_CLASSES);
+    }
+
+    public static int modifiedClassCount() {
+        return MODIFIED_CLASSES.size();
+    }
+
+    private static boolean containsInterestNeedle(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return false;
+        }
+        // 常量池里的 name 是 ASCII；用 Latin-1 做低成本字节搜索，不解析 class。
+        String raw = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        for (String needle : INTEREST_NEEDLES) {
+            if (raw.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Map<String, Rule> rules() {
         return rules;
     }
@@ -222,6 +268,19 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         boolean hostile = isHostile(className) || (isModClass(domain) && !GuardRuntime.isExcludedDotted(className.replace('/', '.')));
         if (rule == null && neutralize == null && !vanillaGate && !hostile) {
             return null;
+        }
+        int classHash = Arrays.hashCode(classfileBuffer);
+        boolean forced = rule != null || neutralize != null || vanillaGate
+                || TRACE.contains(className);
+        if (!forced) {
+            Integer previous = noPatchHash.get(className);
+            if (previous != null && previous == classHash) {
+                return null;
+            }
+            if (hostile && !containsInterestNeedle(classfileBuffer)) {
+                noPatchHash.put(className, classHash);
+                return null;
+            }
         }
         try {
             ClassReader reader = new ClassReader(classfileBuffer);
@@ -272,8 +331,11 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
             };
             reader.accept(visitor, 0);
             if (patchedMethods[0] == 0 && patchedFields[0] == 0) {
+                noPatchHash.put(className, classHash);
                 return null;
             }
+            MODIFIED_CLASSES.add(className);
+            noPatchHash.remove(className);
             GuardRuntime.log("[SanctuaryAgent] patched " + className
                     + " methods=" + patchedMethods[0] + " fields=" + patchedFields[0]);
             return writer.toByteArray();
@@ -531,26 +593,45 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         if (a == null || b == null || a.equals(b)) {
             return a == null ? "java/lang/Object" : a;
         }
-        try {
-            Class<?> ca = Class.forName(a.replace('/', '.'), false, loader);
-            Class<?> cb = Class.forName(b.replace('/', '.'), false, loader);
-            if (ca.isAssignableFrom(cb)) {
-                return a;
-            }
-            if (cb.isAssignableFrom(ca)) {
-                return b;
-            }
-            if (ca.isInterface() || cb.isInterface()) {
-                return "java/lang/Object";
-            }
-            Class<?> c = ca;
-            do {
-                c = c.getSuperclass();
-            } while (c != null && !c.isAssignableFrom(cb));
-            return c == null ? "java/lang/Object" : c.getName().replace('.', '/');
-        } catch (Throwable ignored) {
-            return "java/lang/Object";
+        String cacheKey = System.identityHashCode(loader) + "|" + a + "|" + b;
+        String cached = COMMON_SUPER_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
         }
+        String result = "java/lang/Object";
+        try {
+            Class<?> ca = resolveClass(a, loader);
+            Class<?> cb = resolveClass(b, loader);
+            if (ca.isAssignableFrom(cb)) {
+                result = a;
+            } else if (cb.isAssignableFrom(ca)) {
+                result = b;
+            } else if (ca.isInterface() || cb.isInterface()) {
+                result = "java/lang/Object";
+            } else {
+                Class<?> c = ca;
+                do {
+                    c = c.getSuperclass();
+                } while (c != null && !c.isAssignableFrom(cb));
+                if (c != null) {
+                    result = c.getName().replace('.', '/');
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        COMMON_SUPER_CACHE.put(cacheKey, result);
+        return result;
+    }
+
+    private static Class<?> resolveClass(String internalName, ClassLoader loader) throws ClassNotFoundException {
+        String key = System.identityHashCode(loader) + "|" + internalName;
+        Class<?> cached = CLASS_RESOLVE_CACHE.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Class<?> resolved = Class.forName(internalName.replace('/', '.'), false, loader);
+        CLASS_RESOLVE_CACHE.put(key, resolved);
+        return resolved;
     }
 
     /** Slot of the first parameter whose type lives in net/minecraft/world/entity/. */

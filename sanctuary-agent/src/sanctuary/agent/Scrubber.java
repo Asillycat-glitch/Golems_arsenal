@@ -62,6 +62,24 @@ public final class Scrubber implements Runnable {
             "org.objectweb.asm."
     };
 
+    /**
+     * Scrubber 只扫这些敌意写入方。和 {@code SanctuaryTransformer.HOSTILE} 保持同一口径：
+     * 全量扫描所有 mod 类会把 Create/SophisticatedCore 这类正常模组的父类也初始化，
+     * 造成 server tick 20 秒级卡顿，而且它们本来就不是墓碑来源。
+     */
+    private static final String[] SCRUB_SCOPE = {
+            "com.luoee.arcanevortex.",
+            "com.csdy.jzyy.",
+            "com.csdy.tcondiadema.",
+            "com.mizi.miztinker.",
+            "com.momosensei.momotinker.",
+            "com.wzz.witherzilla.",
+            "plz.lizi.supersteve.",
+            "net.diexv.",
+            "flashfur.omnimobs.",
+            "dev.othinus.toaru."
+    };
+
     private final Instrumentation inst;
     private final long periodMillis;
     private final AtomicLong removed = new AtomicLong();
@@ -147,6 +165,9 @@ public final class Scrubber implements Runnable {
             if (isClientClass(cls)) {
                 continue;
             }
+            if (!isInScope(name)) {
+                continue;
+            }
             try {
                 total += scrubClass(cls, ids);
             } catch (Throwable ignored) {
@@ -164,6 +185,15 @@ public final class Scrubber implements Runnable {
 
     private static boolean isSkipped(String dotted) {
         for (String prefix : SKIP_PREFIXES) {
+            if (dotted.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isInScope(String dotted) {
+        for (String prefix : SCRUB_SCOPE) {
             if (dotted.startsWith(prefix)) {
                 return true;
             }

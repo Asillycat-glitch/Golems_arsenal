@@ -18,6 +18,15 @@ public final class SanctuaryAgent {
     private static Instrumentation instrumentation;
     private static volatile boolean started;
     private static volatile Scrubber scrubber;
+    /** 类查找缓存：findLoaded 每 3 秒扫全 JVM 是周期性成本，找到一次就固定。 */
+    private static final java.util.Map<String, Class<?>> CLASS_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile Class<?> nativeBridgeClass;
+    private static volatile java.lang.reflect.Method nativeClearRestoreCache;
+    private static volatile Class<?> restoreManagerClass;
+    private static volatile java.lang.reflect.Method restoreClear;
+    private static volatile java.lang.reflect.Method restoreClearCache;
+    private static volatile java.lang.reflect.Method restoreCount;
 
     public static Scrubber scrubber() {
         return scrubber;
@@ -101,22 +110,31 @@ instrumentation = inst;
 
     /** 调 AV 自己的 nativeClearRestoreCache（如果它的桥已经加载）。 */
     private static void wipeRestoreCache(Instrumentation inst) {
-        for (Class<?> c : inst.getAllLoadedClasses()) {
-            if (!"com.luoee.arcanevortex.NativeAgent.NativeAgentBridge".equals(c.getName())) {
-                continue;
+        Class<?> bridge = nativeBridgeClass;
+        if (bridge == null) {
+            for (Class<?> c : inst.getAllLoadedClasses()) {
+                if ("com.luoee.arcanevortex.NativeAgent.NativeAgentBridge".equals(c.getName())) {
+                    bridge = c;
+                    nativeBridgeClass = c;
+                    break;
+                }
             }
-            try {
-                c.getMethod("nativeClearRestoreCache").invoke(null);
-                GuardRuntime.log("[SanctuaryAgent] AV restore cache cleared");
-            } catch (Throwable t) {
-            try {
-                java.io.StringWriter sw = new java.io.StringWriter();
-                t.printStackTrace(new java.io.PrintWriter(sw));
-                java.nio.file.Files.writeString(java.nio.file.Path.of("sanctuary-agent-fail.txt"), java.time.LocalDateTime.now() + "\n" + sw);
-            } catch (Throwable ignored) { }
-                GuardRuntime.log("[SanctuaryAgent] clear restore cache failed: " + t);
-            }
+        }
+        if (bridge == null) {
             return;
+        }
+        try {
+            java.lang.reflect.Method method = nativeClearRestoreCache;
+            if (method == null) {
+                method = bridge.getMethod("nativeClearRestoreCache");
+                nativeClearRestoreCache = method;
+            }
+            method.invoke(null);
+            GuardRuntime.log("[SanctuaryAgent] AV restore cache cleared");
+        } catch (Throwable t) {
+            nativeBridgeClass = null;
+            nativeClearRestoreCache = null;
+            GuardRuntime.log("[SanctuaryAgent] clear restore cache failed: " + t);
         }
     }
 
@@ -180,23 +198,43 @@ instrumentation = inst;
                     return;
                 }
                 try {
-                    Class<?> mgr = findLoaded("com.luoee.arcanevortex.NativeAgent.ClassRestoreManager");
+                    Class<?> mgr = restoreManagerClass;
                     if (mgr == null) {
-                        continue;
+                        mgr = findLoaded("com.luoee.arcanevortex.NativeAgent.ClassRestoreManager");
+                        if (mgr == null) {
+                            continue;
+                        }
+                        restoreManagerClass = mgr;
                     }
-                    mgr.getMethod("clear").invoke(null);
-                    mgr.getMethod("clearCache").invoke(null);
-                    int left = (int) mgr.getMethod("getRegisteredClassCount").invoke(null);
+                    java.lang.reflect.Method clear = restoreClear;
+                    if (clear == null) {
+                        clear = mgr.getMethod("clear");
+                        restoreClear = clear;
+                    }
+                    java.lang.reflect.Method clearCache = restoreClearCache;
+                    if (clearCache == null) {
+                        clearCache = mgr.getMethod("clearCache");
+                        restoreClearCache = clearCache;
+                    }
+                    java.lang.reflect.Method count = restoreCount;
+                    if (count == null) {
+                        count = mgr.getMethod("getRegisteredClassCount");
+                        restoreCount = count;
+                    }
+                    clear.invoke(null);
+                    clearCache.invoke(null);
+                    int left = (int) count.invoke(null);
                     if (!reported || left > 0) {
-                        GuardRuntime.log("[SanctuaryAgent] restore targets cleared, remaining=" + left);
+                        GuardRuntime.log("[SanctuaryAgent] restore targets cleared, remaining=" + left
+                                + " modified=" + SanctuaryTransformer.modifiedClassCount());
                         reported = true;
                     }
                 } catch (Throwable t) {
-            try {
-                java.io.StringWriter sw = new java.io.StringWriter();
-                t.printStackTrace(new java.io.PrintWriter(sw));
-                java.nio.file.Files.writeString(java.nio.file.Path.of("sanctuary-agent-fail.txt"), java.time.LocalDateTime.now() + "\n" + sw);
-            } catch (Throwable ignored) { }
+                    // 类/方法失效时清缓存，下一轮重新查找。
+                    restoreManagerClass = null;
+                    restoreClear = null;
+                    restoreClearCache = null;
+                    restoreCount = null;
                     if (!reported) {
                         GuardRuntime.log("[SanctuaryAgent] restore killer failed: " + t);
                         reported = true;
@@ -210,16 +248,46 @@ instrumentation = inst;
     }
 
     private static Class<?> findLoaded(String dotted) {
+        Class<?> cached = CLASS_CACHE.get(dotted);
+        if (cached != null) {
+            return cached;
+        }
         Instrumentation inst = instrumentation;
         if (inst == null) {
             return null;
         }
         for (Class<?> c : inst.getAllLoadedClasses()) {
             if (c.getName().equals(dotted)) {
+                CLASS_CACHE.put(dotted, c);
                 return c;
             }
         }
         return null;
+    }
+
+    /** 只重转 SanctuaryTransformer 真正改过字节的类。 */
+    private static void retransformModified(Instrumentation inst) {
+        java.util.Set<String> names = SanctuaryTransformer.modifiedClassNames();
+        if (names.isEmpty()) {
+            return;
+        }
+        java.util.List<Class<?>> batch = new java.util.ArrayList<>();
+        for (Class<?> c : inst.getAllLoadedClasses()) {
+            if (!inst.isModifiableClass(c)) {
+                continue;
+            }
+            String internal = c.getName().replace('.', '/');
+            if (names.contains(internal)) {
+                batch.add(c);
+            }
+        }
+        for (int i = 0; i < batch.size(); i += 40) {
+            try {
+                inst.retransformClasses(batch.subList(i,
+                        Math.min(i + 40, batch.size())).toArray(new Class<?>[0]));
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     /**
@@ -378,7 +446,8 @@ instrumentation = inst;
                 inst.retransformClasses(batch.subList(i, Math.min(i + 40, batch.size()))
                         .toArray(new Class<?>[0]));
             }
-            GuardRuntime.log("[SanctuaryAgent] retransformed hostile classes=" + batch.size());
+            GuardRuntime.log("[SanctuaryAgent] retransformed hostile classes=" + batch.size()
+                    + " modified=" + SanctuaryTransformer.modifiedClassCount());
         } catch (Throwable t) {
             try {
                 java.io.StringWriter sw = new java.io.StringWriter();
