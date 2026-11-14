@@ -186,9 +186,9 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         // 恢复窗口内它的 remove() 会把 DATA_HEALTH 写成 0.1。字段门只在补丁活着时有效，
         // 所以这里直接堵方法入口：只要目标受保护，remove()/m_5551_() 直接 return。
         rules.put("com/luoee/arcanevortex/Content/Item/VanSh/VanShTool/VanShRadiantSun",
-                new Rule(false, "remove"));
+                new Rule(false, "remove", "m_5551_", "onLeftClickEntity"));
         rules.put("com/luoee/arcanevortex/Content/Item/VanSh/VanShTool/VanSh",
-                new Rule(false, "remove", "m_5551_"));
+                new Rule(false, "remove", "m_5551_", "onLeftClickEntity", "onEntitySwing"));
     }
 
     /** 这个类是不是要过字段门。 */
@@ -653,7 +653,10 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         for (Type type : args) {
             if (type.getSort() == Type.OBJECT) {
                 String name = type.getInternalName();
-                if (name.startsWith("net/minecraft/world/entity/")) {
+                // Player 也是 net/minecraft/world/entity/ 下；VanSh.onLeftClickEntity 的
+                // 参数顺序是 (ItemStack, Player, Entity)，不能把 Player 当目标。
+                if (name.startsWith("net/minecraft/world/entity/")
+                        && !name.startsWith("net/minecraft/world/entity/player/")) {
                     return slot;
                 }
             }
