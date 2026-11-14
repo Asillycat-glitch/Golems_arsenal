@@ -97,7 +97,7 @@ public final class GolemChargeHandler {
     private static final int PAUSE_TICKS = 10;
     /** Charges per use with the key blade in hand. */
     private static final int KEY_BLADE_CHARGES = 3;
-    /** The golem never stops closer than this to where it started. */
+    /** 冲撞至少要走这么远；墙比这更近时干脆不冲，避免为了凑距离把傀儡塞进墙。 */
     private static final double MIN_TRAVEL = 1.0;
     /**
      * 星辰之怒（{@code modulargolems:stellar_apocalypse}，傀儡装配 × 诡厄巫法：启示录 联动剑）。
@@ -249,8 +249,9 @@ public final class GolemChargeHandler {
             // Wind-up between the charges of a key-blade combo. The golem is pinned in place so the
             // movement AI cannot turn the pause into a slow drift, and it keeps facing its target so
             // the next charge reads as a separate lunge.
+            Vec3 pinned = GolemMotionHelper.clamp(golem, golem.position(), to);
             golem.setNoGravity(true);
-            golem.setPos(to.x, to.y, to.z);
+            golem.setPos(pinned.x, pinned.y, pinned.z);
             golem.setDeltaMovement(Vec3.ZERO);
             golem.fallDistance = 0;
             LivingEntity next = golem.getTarget();
@@ -272,40 +273,48 @@ public final class GolemChargeHandler {
         // from.lerp(to, ease(1.0)) == to，这样最后一步仍落在缓动曲线上，不会多出一记硬贴。
         // 配合 beginDash 里的 ceil，傀儡每一段就都是均匀且连续地走完的。
         Vec3 pos = from.lerp(to, ease(progress));
+        // 与凤凰/狮子斩同一条护栏：路径上撞到墙就停在最后一个合法点，不硬穿过去。
+        Vec3 safe = GolemMotionHelper.clamp(golem, golem.position(), pos);
         golem.setNoGravity(true);
-        golem.setPos(pos.x, pos.y, pos.z);
+        golem.setPos(safe.x, safe.y, safe.z);
         golem.fallDistance = 0;
         if (progress < 1.0) {
             golem.setDeltaMovement(Vec3.ZERO);
             faceTowards(golem, to.subtract(from));
-            damageAround(golem, pos, tag);
+            // 命中/粒子都按"实际站到的位置"算：被墙拦下时不能用墙后的插值点，否则会隔墙打到人。
+            damageAround(golem, safe, tag);
             if (golem.level() instanceof ServerLevel server) {
-                server.sendParticles(ParticleTypes.CLOUD, pos.x, pos.y + 0.15, pos.z,
+                server.sendParticles(ParticleTypes.CLOUD, safe.x, safe.y + 0.15, safe.z,
                         6, golem.getBbWidth() * 0.4, 0.05, golem.getBbWidth() * 0.4, 0.02);
             }
             return;
         }
-        // 冲到了：位置上面已经设成 to，这里只收尾。速度不清零 —— 留一点向前的惯性，
+        // 冲到了：位置上面已经设成实际落点，这里只收尾。速度不清零 —— 留一点向前的惯性，
         // 落地才不会"顿"一下，AI 接手时是连贯的。
-        pushForward(golem, to.subtract(from));
-        damageAround(golem, to, tag);
+        Vec3 actual = golem.position();
+        pushForward(golem, actual.subtract(from));
+        damageAround(golem, actual, tag);
         int left = tag.getInt(LEFT_KEY);
         if (left > 0) {
             // Key blade combo: stop dead for a moment before the next charge, so the three charges
             // read as three separate lunges instead of one long turnable dash.
+            // 记下实际落点：被墙提前拦下时，下一段起手/停顿也留在这里，而不是墙后。
+            tag.putDouble(TO_X_KEY, actual.x);
+            tag.putDouble(TO_Y_KEY, actual.y);
+            tag.putDouble(TO_Z_KEY, actual.z);
             tag.putInt(LEFT_KEY, left - 1);
             tag.putBoolean(PAUSE_KEY, true);
             tag.putLong(START_KEY, now);
             tag.putInt(TICKS_KEY, PAUSE_TICKS);
             if (golem.level() instanceof ServerLevel server) {
-                server.sendParticles(ParticleTypes.CLOUD, to.x, to.y + 0.15, to.z, 12,
+                server.sendParticles(ParticleTypes.CLOUD, actual.x, actual.y + 0.15, actual.z, 12,
                         golem.getBbWidth() * 0.5, 0.1, golem.getBbWidth() * 0.5, 0.03);
             }
             return;
         }
         if (golem.level() instanceof ServerLevel server) {
-            server.sendParticles(ParticleTypes.SWEEP_ATTACK, to.x, to.y + golem.getBbHeight() * 0.5,
-                    to.z, 3, 0.4, 0.4, 0.4, 0.0);
+            server.sendParticles(ParticleTypes.SWEEP_ATTACK, actual.x,
+                    actual.y + golem.getBbHeight() * 0.5, actual.z, 3, 0.4, 0.4, 0.4, 0.0);
         }
         clear(golem, tag);
     }
@@ -475,11 +484,15 @@ public final class GolemChargeHandler {
         Vec3 dir = delta.scale(1.0 / length);
         double allowed = length;
         Vec3 cursor = from.add(dir.scale(allowed));
-        while (allowed > MIN_TRAVEL && !fits(golem, from, cursor)) {
-            allowed = Math.max(MIN_TRAVEL, allowed - 0.25);
+        while (allowed > 0.0 && !fits(golem, from, cursor)) {
+            allowed = Math.max(0.0, allowed - 0.25);
             cursor = from.add(dir.scale(allowed));
         }
-        return cursor;
+        if (!fits(golem, from, cursor)) {
+            return from;
+        }
+        // 墙比"最小冲撞距离"还近：这一下干脆不冲，别为了凑 1 格把傀儡塞进墙里。
+        return allowed < MIN_TRAVEL ? from : cursor;
     }
 
     private static boolean fits(AbstractGolemEntity<?, ?> golem, Vec3 from, Vec3 at) {

@@ -91,14 +91,15 @@ public class GuidanceBeamRenderer extends EntityRenderer<GuidanceBeamEntity> {
         var camPos = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
         VertexConsumer vc = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
 
-        // 光影包（尤其 MakeUp）的 bloom 对近白自发光非常敏感：压 alpha + 拉暖色。
+        // 光影包（尤其 MakeUp）的 bloom 对近白自发光非常敏感：压 alpha + 压 RGB + 拉暖色。
         float brightness = ShaderEffects.brightness();
-        float coreR = ShaderEffects.tintR(CORE_R);
-        float coreG = ShaderEffects.tintG(CORE_G);
-        float coreB = ShaderEffects.tintB(CORE_B);
-        float glowR = ShaderEffects.tintR(GLOW_R);
-        float glowG = ShaderEffects.tintG(GLOW_G);
-        float glowB = ShaderEffects.tintB(GLOW_B);
+        float colorScale = ShaderEffects.colorScale();
+        float coreR = ShaderEffects.tintR(CORE_R) * colorScale;
+        float coreG = ShaderEffects.tintG(CORE_G) * colorScale;
+        float coreB = ShaderEffects.tintB(CORE_B) * colorScale;
+        float glowR = ShaderEffects.tintR(GLOW_R) * colorScale;
+        float glowG = ShaderEffects.tintG(GLOW_G) * colorScale;
+        float glowB = ShaderEffects.tintB(GLOW_B) * colorScale;
 
         OrbitalGuidancePath.AimSample aim = OrbitalGuidancePath.sampleAim(progress);
 

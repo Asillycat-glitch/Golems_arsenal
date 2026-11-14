@@ -1,6 +1,8 @@
 package a_silly_cat.golems_arsenal;
 
 import a_silly_cat.golems_arsenal.init.ModItems;
+import a_silly_cat.golems_arsenal.init.ModBlocks;
+import a_silly_cat.golems_arsenal.init.ModBlockEntities;
 import a_silly_cat.golems_arsenal.init.ModEntities;
 import a_silly_cat.golems_arsenal.init.GolemEffects;
 import a_silly_cat.golems_arsenal.init.ModAttributes;
@@ -28,8 +30,14 @@ public class Golems_arsenal {
     }
 
     public Golems_arsenal() {
+        // 早鸟调用：这里还读不到配置文件（registerConfig 在本构造函数末尾，Forge 加载文件更晚），
+        // 所以 install() 只会记一行 defer 然后返回，真正的安装在 ModConfigEvent 里做。
+        // 保留这一句是为了"配置刚好已经加载"的边缘情况（热重载/测试环境）。
+        a_silly_cat.golems_arsenal.guard.sanctuary.AgentBootstrap.install();
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         GolemUpgrades.register();
+        ModBlocks.register(modEventBus);
+        ModBlockEntities.register(modEventBus);
         ModItems.register(modEventBus);
         ModEntities.register(modEventBus);
         // 火箭界面。注册本身不引用 MEK 的类，所以无条件注册是安全的；
@@ -45,6 +53,17 @@ public class Golems_arsenal {
         ModNetwork.register();
         modEventBus.addListener(ModAttributes::modifyAttributes);
         CompatDispatch.registerCommon(modEventBus);
+        // fantasy_ending 的 true damage 不走 Forge 伤害事件；只有装了 fantasy 时才加载
+        // 这个引用 CatchActuallyHurt0Event 的适配器类，避免无 fantasy 环境类加载失败。
+        if (net.minecraftforge.fml.ModList.get().isLoaded("fantasy_ending")) {
+            try {
+                Class.forName("a_silly_cat.golems_arsenal.compat.fantasy.FantasyTrueDamageAdapter")
+                        .getMethod("register")
+                        .invoke(null);
+            } catch (Throwable t) {
+                Golems_arsenal.LOGGER.warn("fantasy true-damage adapter not registered: {}", t.toString());
+            }
+        }
         // Z 光剑的近战穿甲：向 l2damagetracker 注册一个监听器（和傀儡地牢遗迹锻锤同一条通道）。
         // l2damagetracker 由本家/莱特兰以 jarjar 形式提供，理论上一定在；仍然兜一层，避免它不是
         // 独立依赖时把整个 mod 加载带崩。

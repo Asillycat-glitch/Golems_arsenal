@@ -40,6 +40,27 @@ public final class OrbitalImpact {
         return Vec3.atBottomCenterOf(new BlockPos(x, groundY, z));
     }
 
+    /**
+     * 从轨道打下来，能不能**真的碰到**这个目标？
+     *
+     * <p>光柱的伤害范围是「从落点那一格往上、水平半径若干格」的柱体，**不往下延伸**。
+     * 因此目标必须至少有一部分在落点平面之上：
+     * <ul>
+     *   <li>站在地表/屋顶/树冠上的目标：{@code getHeight} 返回它脚下的空气层，目标包围盒在落点之上 → 能打；</li>
+     *   <li>地底、山洞、室内被天花板盖住的目标：{@code getHeight} 返回的是**头顶那层遮挡物**的顶面，
+     *       目标包围盒整体在落点之下 → 打不到；</li>
+     *   <li>目标正上方有直通天空的竖井：落点会落到竖井底部，目标在落点之上 → 能打。</li>
+     * </ul>
+     *
+     * <p>这是纯几何判定，不需要射线：落点本来就是"目标 x/z 这一列最高的阻挡物上方"，
+     * 只要比较目标包围盒顶面与落点高度即可。它也正是"地底作战时傀儡一直召唤、却打不到"
+     * 的判据——挡住目标的天花板会让落点跑到目标头顶，光柱自然够不到。
+     */
+    public static boolean canHitFromOrbit(Level level, Entity target) {
+        Vec3 impact = impactPoint(level, target);
+        return target.getBoundingBox().maxY > impact.y + 1.0E-4;
+    }
+
     private OrbitalImpact() {
     }
 }

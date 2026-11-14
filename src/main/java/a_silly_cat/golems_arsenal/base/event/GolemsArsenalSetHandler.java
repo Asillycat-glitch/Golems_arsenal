@@ -5,6 +5,9 @@ import a_silly_cat.golems_arsenal.base.entity.LightPillarEntity;
 import a_silly_cat.golems_arsenal.base.entity.PhantomBladeEntity;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemETankModifier;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgradeLevels;
+import a_silly_cat.golems_arsenal.guard.HealthLedger;
+import a_silly_cat.golems_arsenal.guard.WindowGuard;
+import a_silly_cat.golems_arsenal.util.TimeWindow;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -56,8 +59,8 @@ public final class GolemsArsenalSetHandler {
     private static final int GENMU_VOLLEY_GAP_TICKS = 6;
 
     private static final String REFILL_KEY = "GolemsArsenalSetRefill";
-    private static final String PILLAR_CD_KEY = "GolemsArsenalSetPillarCd";
-    private static final String PILLAR_UNTIL_KEY = "GolemsArsenalSetPillarUntil";
+    public static final String PILLAR_CD_KEY = "GolemsArsenalSetPillarCd";
+    public static final String PILLAR_UNTIL_KEY = "GolemsArsenalSetPillarUntil";
     private static final String GENMU_CD_KEY = "GolemsArsenalSetGenmuCd";
     /** 第二波（平铺）的预定发射时刻；0 = 没有待发的。 */
     private static final String GENMU_VOLLEY2_KEY = "GolemsArsenalSetGenmuVolley2";
@@ -77,9 +80,11 @@ public final class GolemsArsenalSetHandler {
             return;
         }
         // 第二波剑气：这个检查必须每 tick 做，不能等下面 20 tick 的节拍，不然两波会隔太开。
-        long volley2 = golem.getPersistentData().getLong(GENMU_VOLLEY2_KEY);
-        if (volley2 != 0L && golem.level().getGameTime() >= volley2) {
-            golem.getPersistentData().putLong(GENMU_VOLLEY2_KEY, 0L);
+        long now = golem.level().getGameTime();
+        TimeWindow volley2 = TimeWindow.read(golem.getPersistentData(), GENMU_VOLLEY2_KEY,
+                GENMU_VOLLEY_GAP_TICKS).clamp(now);
+        if (volley2.scheduled() && volley2.due(now)) {
+            new TimeWindow(0L, GENMU_VOLLEY_GAP_TICKS).write(golem.getPersistentData(), GENMU_VOLLEY2_KEY);
             if (golem.isAlive() && isActive(golem)) {
                 PhantomBladeEntity.fire(golem, golem.getMainHandItem(),
                         PhantomBladeEntity.Formation.FLAT);
@@ -88,25 +93,25 @@ public final class GolemsArsenalSetHandler {
         if (golem.tickCount % 20 != 0 || !isActive(golem)) {
             return;
         }
-        long now = golem.level().getGameTime();
         CompoundTag tag = golem.getPersistentData();
         int tankLevel = GolemETankModifier.levelOf(golem);
-        long next = tag.getLong(REFILL_KEY);
-        if (next == 0L) {
-            tag.putLong(REFILL_KEY, now + REFILL_TICKS);
+        TimeWindow refill = TimeWindow.read(tag, REFILL_KEY, REFILL_TICKS).clamp(now);
+        if (!refill.scheduled()) {
+            refill.after(now).write(tag, REFILL_KEY);
             return;
         }
-        if (now >= next) {
-            tag.putLong(REFILL_KEY, now + REFILL_TICKS);
+        if (refill.due(now)) {
+            refill.after(now).write(tag, REFILL_KEY);
             GolemETankModifier.storeOne(golem, tankLevel);
         }
         // 幻梦零：套装生效时每 30 秒必定触发一次（不依赖蓄力命中，方便测试）。
         // 分两波：三角阵立刻发，平铺隔 GENMU_VOLLEY_GAP_TICKS 再发。
-        if (now >= tag.getLong(GENMU_CD_KEY)) {
-            tag.putLong(GENMU_CD_KEY, now + GENMU_CD_TICKS);
+        TimeWindow genmu = TimeWindow.read(tag, GENMU_CD_KEY, GENMU_CD_TICKS).clamp(now);
+        if (!genmu.scheduled() || genmu.due(now)) {
+            genmu.after(now).write(tag, GENMU_CD_KEY);
             PhantomBladeEntity.fire(golem, golem.getMainHandItem(),
                     PhantomBladeEntity.Formation.TRIANGLE);
-            tag.putLong(GENMU_VOLLEY2_KEY, now + GENMU_VOLLEY_GAP_TICKS);
+            new TimeWindow(0L, GENMU_VOLLEY_GAP_TICKS).after(now).write(tag, GENMU_VOLLEY2_KEY);
         }
     }
 
@@ -128,11 +133,23 @@ public final class GolemsArsenalSetHandler {
         }
         long now = golem.level().getGameTime();
         CompoundTag tag = golem.getPersistentData();
-        if (now < tag.getLong(PILLAR_CD_KEY)) {
+        TimeWindow pillarCd = TimeWindow.read(tag, PILLAR_CD_KEY, PILLAR_CD_TICKS).clamp(now);
+        if (pillarCd.active(now)) {
             return;
         }
-        tag.putLong(PILLAR_CD_KEY, now + PILLAR_CD_TICKS);
-        tag.putLong(PILLAR_UNTIL_KEY, now + LightPillarEntity.bloomDurationTicks());
+        long lastTrigger = WindowGuard.lastTrigger(golem.getUUID());
+        if (WindowGuard.enabled() && lastTrigger > 0L && now - lastTrigger < PILLAR_CD_TICKS) {
+            long restored = lastTrigger + PILLAR_CD_TICKS;
+            tag.putLong(PILLAR_CD_KEY, restored);
+            WindowGuard.reject(golem, "PillarCd reset inside cooldown; restored to " + restored);
+            return;
+        }
+        pillarCd.after(now).write(tag, PILLAR_CD_KEY);
+        TimeWindow pillarUntil = TimeWindow.read(tag, PILLAR_UNTIL_KEY,
+                LightPillarEntity.bloomDurationTicks()).clamp(now);
+        pillarUntil.after(now).write(tag, PILLAR_UNTIL_KEY);
+        HealthLedger.noteTimerWrite(golem);
+        WindowGuard.recordTrigger(golem.getUUID(), now);
         double damage = golem.getAttributeValue(Attributes.ATTACK_DAMAGE) * PILLAR_DAMAGE_RATIO;
         // 三轮螺旋铺开（顺 → 逆 → 顺，每轮 8 根，同轮共享命中名单 ⇒ 每敌人每轮 1 次）。
         LightPillarEntity.spawnBloom(golem, (float) damage);
@@ -151,7 +168,17 @@ public final class GolemsArsenalSetHandler {
                 || !(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
             return;
         }
-        if (golem.level().getGameTime() < golem.getPersistentData().getLong(PILLAR_UNTIL_KEY)
+        long now = golem.level().getGameTime();
+        long rawUntil = golem.getPersistentData().getLong(PILLAR_UNTIL_KEY);
+        long maxUntil = now + LightPillarEntity.bloomDurationTicks() + 2L;
+        if (WindowGuard.enabled() && rawUntil > maxUntil) {
+            golem.getPersistentData().putLong(PILLAR_UNTIL_KEY, 0L);
+            WindowGuard.reject(golem, "PillarUntil beyond bloom window: " + rawUntil);
+            return;
+        }
+        TimeWindow pillarUntil = TimeWindow.read(golem.getPersistentData(), PILLAR_UNTIL_KEY,
+                LightPillarEntity.bloomDurationTicks()).clamp(now);
+        if (pillarUntil.active(now)
                 && !event.getSource().is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
             event.setCanceled(true);
         }
@@ -164,10 +191,11 @@ public final class GolemsArsenalSetHandler {
         }
         long now = golem.level().getGameTime();
         CompoundTag tag = golem.getPersistentData();
-        if (now < tag.getLong(GENMU_CD_KEY)) {
+        TimeWindow genmu = TimeWindow.read(tag, GENMU_CD_KEY, GENMU_CD_TICKS).clamp(now);
+        if (genmu.active(now)) {
             return false;
         }
-        tag.putLong(GENMU_CD_KEY, now + GENMU_CD_TICKS);
+        genmu.after(now).write(tag, GENMU_CD_KEY);
         return true;
     }
 

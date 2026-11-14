@@ -37,6 +37,8 @@ import net.minecraftforge.event.entity.EntityStruckByLightningEvent;
 import net.minecraftforge.energy.IEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyStorage;
+import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyTier;
+import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyTiers;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyItemProvider;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyStorage;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyModifier;
@@ -99,11 +101,9 @@ public final class WeaponEventHandler {
     private static final String EXPLOSIVE_TAG = "GolemsArsenalExplosive";
     private static final String STANCE_ARROW_TAG = "GolemsArsenalStanceArrow";
     private static final String STANCE_BOW_STRENGTH_TAG = "GolemsArsenalStanceBowStrength";
+    /** Ticks between two golem -> equipment charge passes. Also scales the per-pass budget. */
+    private static final int ENERGY_CHARGE_INTERVAL = 5;
     private static final Set<UUID> TRACKING_ARROWS = ConcurrentHashMap.newKeySet();
-    private static final UUID KATANA_PERCENT_UUID =
-            UUID.nameUUIDFromBytes("golems_arsenal:katana_percent".getBytes());
-    private static final UUID BOW_EXPLOSION_UUID =
-            UUID.nameUUIDFromBytes("golems_arsenal:bow_explosion".getBytes());
     private static final UUID SWORD_REACH_UUID =
             UUID.nameUUIDFromBytes("golems_arsenal:sword_reach".getBytes());
     private static final UUID SWORD_SWEEP_UUID =
@@ -124,7 +124,27 @@ public final class WeaponEventHandler {
             TagKey.create(Registries.DAMAGE_TYPE, new ResourceLocation("tacz", "bullets"));
     private static final String SHIELD_REPAIR_KEY = "golems_arsenal_shield_repair";
     private static volatile Attribute GOLEM_SWEEP_ATTR;
+    /** 上一次看到的装备 NBT 指纹；只用于 detectEquipmentUpdates 的 NBT 变更刷新。 */
+    private static final Map<UUID, Integer> EQUIPMENT_SIGNATURE = new ConcurrentHashMap<>();
     private WeaponEventHandler() {
+    }
+
+    /**
+     * LivingHurtEvent 的唯一入口。
+     *
+     * <p>拆类前先把顺序固定下来：这四个效果原来各自是 NORMAL 的 {@code @SubscribeEvent}，
+     * 顺序依赖方法扫描；但 {@code onGolemHurt}（锤子减伤）和 {@code onGildedDamageTaken}
+     * （镀金读当前伤害）会互相影响，必须显式保序。</p>
+     *
+     * <p>顺序与旧声明顺序一致：攻击方加成 → 玩家猛攻 → 镀金承伤 → 傀儡锤子减伤。
+     * 以后新增第五条时，加到这个数组/序列里，不要另开一个 NORMAL handler。</p>
+     */
+    @SubscribeEvent
+    public static void onLivingHurt(LivingHurtEvent event) {
+        applyGolemAttackHurt(event);
+        applyPlayerOnslaughtAttack(event);
+        applyGildedDamageTaken(event);
+        applyGolemHurt(event);
     }
 
     @SubscribeEvent
@@ -162,11 +182,61 @@ public final class WeaponEventHandler {
             // Refresh attribute modifiers immediately so equipping/removing weapons or upgrades
             // applies or restores stats right away instead of waiting up to 5 ticks.
             ItemStack stack = golem.getMainHandItem();
-            updateWeaponAttributes(golem, stack);
             updateSwordAttributes(golem, stack);
             updateRangedVelocityAttributes(golem, stack);
             updateCannonMagicAttributes(golem);
+            EQUIPMENT_SIGNATURE.remove(golem.getUUID());
         }
+    }
+
+    /**
+     * 装备格没变、但装备物品的 NBT 变了（典型：武士刀/光剑改 unit level）。
+     *
+     * <p>{@code collectEquipmentChanges} 只比较槽位里的 ItemStack；同一个 ItemStack 原地改 NBT
+     * 时它看不到变化，{@code getGolemModifiers} 不会重算。这个入口由
+     * {@code LivingEntity#detectEquipmentUpdates} 的 TAIL mixin 调进来，只在指纹变化时补刷一次，
+     * 不是每 tick 轮询。</p>
+     */
+    public static void onEquipmentNbtChanged(LivingEntity entity) {
+        if (entity.level().isClientSide || !(entity instanceof AbstractGolemEntity<?, ?> golem)) {
+            return;
+        }
+        int signature = equipmentSignature(golem);
+        Integer previous = EQUIPMENT_SIGNATURE.put(golem.getUUID(), signature);
+        if (previous != null && previous == signature) {
+            return;
+        }
+        // 第一次只建立基线；之后 NBT 变化才补刷。
+        if (previous == null) {
+            return;
+        }
+        refreshEquipmentAttributes(golem);
+    }
+
+    private static int equipmentSignature(AbstractGolemEntity<?, ?> golem) {
+        int hash = 1;
+        for (var slot : EquipmentSlot.values()) {
+            ItemStack stack = golem.getItemBySlot(slot);
+            hash = 31 * hash + stack.getItem().hashCode();
+            hash = 31 * hash + stack.getCount();
+            // 只认会影响装备属性重算的 NBT（目前是 UnitLevels）。
+            // 能量/充能/耐久每 tick 都会变，不能把它们算进指纹，否则又变成每 tick 全量刷新。
+            CompoundTag tag = stack.getTag();
+            CompoundTag levels = tag == null ? null : tag.getCompound("UnitLevels");
+            hash = 31 * hash + (levels == null ? 0 : levels.hashCode());
+        }
+        return hash;
+    }
+
+    /** 只补装备/等级决定的静态属性；列车/骑乘等动态量仍由各自的 tick/事件入口维护。 */
+    private static void refreshEquipmentAttributes(AbstractGolemEntity<?, ?> golem) {
+        ItemStack stack = golem.getMainHandItem();
+        refreshStaticWeaponAttributes(golem, stack);
+        updateSwordAttributes(golem, stack);
+        updateRangedVelocityAttributes(golem, stack);
+        updateCannonMagicAttributes(golem);
+        updateTrainAttackAttributes(golem);
+        updateStaffAttributes(golem);
     }
 
     /**
@@ -189,6 +259,7 @@ public final class WeaponEventHandler {
         if (event.getLevel().isClientSide() || !(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)) {
             return;
         }
+        EQUIPMENT_SIGNATURE.remove(golem.getUUID());
         if (!GolemUpgrades.hasStance(golem)) {
             GolemStanceModifier.clearData(golem);
         }
@@ -223,8 +294,7 @@ public final class WeaponEventHandler {
      * golem lookup, one main-hand fetch and one item registry id lookup, then the katana,
      * weapon-upgrade and onslaught effects are applied in order.
      */
-    @SubscribeEvent
-    public static void onGolemAttackHurt(LivingHurtEvent event) {
+    private static void applyGolemAttackHurt(LivingHurtEvent event) {
         if (event.getEntity().level().isClientSide) {
             return;
         }
@@ -319,8 +389,7 @@ public final class WeaponEventHandler {
      * bonus as the golem upgrade (melee attack and percentage TACZ gun damage while armor exceeds
      * the threshold).
      */
-    @SubscribeEvent
-    public static void onPlayerOnslaughtAttack(LivingHurtEvent event) {
+    private static void applyPlayerOnslaughtAttack(LivingHurtEvent event) {
         if (event.getEntity().level().isClientSide) {
             return;
         }
@@ -348,8 +417,7 @@ public final class WeaponEventHandler {
      * health absorbed (30s cooldown permitting) the wearer gains +10/15/20/25/30% armor and
      * armor toughness for 5 seconds, scaled by the set's rarity rank.
      */
-    @SubscribeEvent
-    public static void onGildedDamageTaken(LivingHurtEvent event) {
+    private static void applyGildedDamageTaken(LivingHurtEvent event) {
         if (event.getEntity().level().isClientSide) {
             return;
         }
@@ -595,8 +663,7 @@ public final class WeaponEventHandler {
     }
 
     /** Defensive passives while a golem holds the energy hammer. */
-    @SubscribeEvent
-    public static void onGolemHurt(LivingHurtEvent event) {
+    private static void applyGolemHurt(LivingHurtEvent event) {
         if (event.getEntity().level().isClientSide) {
             return;
         }
@@ -747,15 +814,13 @@ public final class WeaponEventHandler {
     public static void onGolemLivingTick(LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)
                 || golem.level().isClientSide
-                || golem.tickCount % 5 != 0) {
+                || golem.tickCount % ENERGY_CHARGE_INTERVAL != 0) {
             return;
         }
         syncGolemCapacity(golem);
         ItemStack stack = golem.getMainHandItem();
-        // Attribute modifiers are always refreshed/cleaned, even when the last arsenal upgrade was
-        // removed: otherwise the transient modifiers (sword reach/sweep, arrow velocity, cannon
-        // magic bonus) would stay forever once hasArsenalModifier turns false.
-        updateWeaponAttributes(golem, stack);
+        // 静态武器属性已走 getGolemModifiers；这里只维护仍依赖运行时状态的修饰符
+        // （剑触及/扫掠、箭速、炮魔法、列车、法杖）。
         updateSwordAttributes(golem, stack);
         updateRangedVelocityAttributes(golem, stack);
         updateCannonMagicAttributes(golem);
@@ -779,29 +844,26 @@ public final class WeaponEventHandler {
     }
 
     /**
-     * Tech-upgrade scaling is applied as attributes while the weapons are held: the katana gains
-     * ATTACK_DAMAGE (+5% per level) and the bow grants the L2lib explosion damage attribute
-     * (projectile-to-explosion conversion). Without the tech upgrade neither exists.
+     * 只在装备 NBT 原地变化时调用：静态属性已经走 {@code getGolemModifiers}，
+     * 但 {@code collectEquipmentChanges} 看不到同一个 ItemStack 的 NBT 变化，
+     * 所以这里按新 NBT 把对应的 UUID 修饰符重算一次。
      */
-    private static void updateWeaponAttributes(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
+    private static void refreshStaticWeaponAttributes(AbstractGolemEntity<?, ?> golem, ItemStack stack) {
         AttributeInstance attack = golem.getAttribute(Attributes.ATTACK_DAMAGE);
         if (attack == null) {
             return;
         }
-        Attribute explosionAttr = GolemTrackingMechanicalBowItem.explosionAttribute();
-        AttributeInstance explosion = explosionAttr == null ? null : golem.getAttribute(explosionAttr);
         int tech = GolemEnergyTechModifier.levelOf(golem);
         if (stack.getItem() instanceof GolemEnergyKatanaItem katana) {
             if (tech > 0) {
-                setModifier(attack, KATANA_PERCENT_UUID, "golems_arsenal_katana_percent",
-                        katana.getTechAttackPercent(tech));
+                setModifier(attack, GolemEnergyKatanaItem.KATANA_PERCENT_UUID,
+                        "golems_arsenal_katana_percent", katana.getTechAttackPercent(tech));
             } else {
-                attack.removeModifier(KATANA_PERCENT_UUID);
+                attack.removeModifier(GolemEnergyKatanaItem.KATANA_PERCENT_UUID);
             }
         } else {
-            attack.removeModifier(KATANA_PERCENT_UUID);
+            attack.removeModifier(GolemEnergyKatanaItem.KATANA_PERCENT_UUID);
         }
-        // Z 光剑同一套科技加成，但必须用独立 UUID：和武士刀共用会互相覆盖。
         if (stack.getItem() instanceof GolemZeroSwordItem zeroSword) {
             if (tech > 0) {
                 setModifier(attack, GolemZeroSwordItem.TECH_PERCENT_UUID,
@@ -812,17 +874,18 @@ public final class WeaponEventHandler {
         } else {
             attack.removeModifier(GolemZeroSwordItem.TECH_PERCENT_UUID);
         }
-        if (stack.getItem() instanceof GolemTrackingMechanicalBowItem) {
-            if (tech > 0 && explosion != null) {
+        Attribute explosionAttr = GolemTrackingMechanicalBowItem.explosionAttribute();
+        AttributeInstance explosion = explosionAttr == null ? null : golem.getAttribute(explosionAttr);
+        if (explosion != null) {
+            if (stack.getItem() instanceof GolemTrackingMechanicalBowItem && tech > 0) {
                 double factor = (Config.TRACKING_BOW_PROJECTILE_DAMAGE.get()
                         + tech * Config.TECH_PROJECTILE_PER_LEVEL.get())
                         * Config.TRACKING_BOW_EXPLOSION_FACTOR_RATIO.get();
-                setModifier(explosion, BOW_EXPLOSION_UUID, "golems_arsenal_bow_explosion", factor);
-            } else if (explosion != null) {
-                explosion.removeModifier(BOW_EXPLOSION_UUID);
+                setModifier(explosion, GolemTrackingMechanicalBowItem.BOW_EXPLOSION_UUID,
+                        "golems_arsenal_bow_explosion", factor);
+            } else {
+                explosion.removeModifier(GolemTrackingMechanicalBowItem.BOW_EXPLOSION_UUID);
             }
-        } else if (explosion != null) {
-            explosion.removeModifier(BOW_EXPLOSION_UUID);
         }
     }
 
@@ -1220,26 +1283,34 @@ public final class WeaponEventHandler {
         golem.getCapability(GolemEnergyProvider.CAPABILITY).ifPresent(source -> {
             GolemEnergyStorage energy = (GolemEnergyStorage) source;
             if (energy.getEnergyStored() <= 0) return;
-            // 合金能源链同时抬高**带宽**：容量涨 29 倍而不动这条管子的话，8.7M 的电池
-            // 也没法在合理时间内喂满一把 1M 缓冲的武器（只涨容量等于没涨）。
-            // GolemEnergyModifier.alloyBonus 与容量共用同一个步长，见该类注释。
-            int budgetPerItem = (int) Math.min(Integer.MAX_VALUE,
-                    (long) Config.GOLEM_ENERGY_TRANSFER_RATE.get()
-                            * (1L + GolemEnergyModifier.alloyBonus(GolemEnergyModifier.totalLevel(golem))));
-            chargeStack(stack, energy, budgetPerItem);
+            // The tier's transfer rate is a TOTAL FE/t, not a per-item budget: one shared pool is
+            // spent across the main hand and all armor slots, so a full weapon cannot starve the
+            // rest and an empty slot cannot waste the pass.
+            GolemEnergyTier tier = GolemEnergyTiers.forLevel(GolemEnergyModifier.totalLevel(golem));
+            long perPass = (long) tier.transferFePerTick() * ENERGY_CHARGE_INTERVAL;
+            int remaining = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, perPass));
+            if (remaining <= 0) return;
+            remaining -= chargeStack(stack, energy, remaining);
             for (ItemStack armor : golem.getArmorSlots()) {
-                chargeStack(armor, energy, budgetPerItem);
+                if (remaining <= 0) break;
+                remaining -= chargeStack(armor, energy, remaining);
             }
         });
     }
 
-    private static void chargeStack(ItemStack stack, GolemEnergyStorage source, int budgetPerItem) {
-        if (stack.isEmpty() || source.getEnergyStored() <= 0) return;
+    /** Moves up to {@code budget} FE into one stack; returns the amount actually accepted. */
+    private static int chargeStack(ItemStack stack, GolemEnergyStorage source, int budget) {
+        if (stack.isEmpty() || source.getEnergyStored() <= 0 || budget <= 0) return 0;
+        final int[] accepted = {0};
         stack.getCapability(ForgeCapabilities.ENERGY).ifPresent(target -> {
             if (!target.canReceive()) return;
-            int budget = Math.min(budgetPerItem, source.getEnergyStored());
-            int accepted = target.receiveEnergy(budget, false);
-            if (accepted > 0) source.extractEnergy(accepted, false);
+            int cap = Math.min(budget, source.getEnergyStored());
+            int moved = target.receiveEnergy(cap, false);
+            if (moved > 0) {
+                source.extractEnergy(moved, false);
+                accepted[0] = moved;
+            }
         });
+        return accepted[0];
     }
 }

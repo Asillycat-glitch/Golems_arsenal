@@ -103,6 +103,19 @@ public class OrbitalPlatforms extends SavedData {
         return out;
     }
 
+    /** 按 id 找一条平台记录；找不到返回 {@code null}。 */
+    public Platform byId(UUID id) {
+        if (id == null) {
+            return null;
+        }
+        for (Platform p : this.platforms) {
+            if (p.id().equals(id)) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     /** 世界里有没有任何一颗在轨卫星（引导升级决定"要不要开火"时会问这个）。 */
     public boolean isEmpty() {
         return this.platforms.isEmpty();

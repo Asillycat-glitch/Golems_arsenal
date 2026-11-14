@@ -180,13 +180,14 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                 cb = 1.00F;
             }
             float alpha = 0.62F * (1.0F - t) * (1.0F - t) * brightness;
+            float scale = ShaderEffects.colorScale();
 
             // 用两片交叉细面近似一根短亮线（不做 billboard，省事且够看）
             sparkQuad(vc, m, bx, yBack, bz, x, y, z,
                     SPARK_HALF * (0.55F + 0.75F * r1),
-                    ShaderEffects.tintR(cr),
-                    ShaderEffects.tintG(cg),
-                    ShaderEffects.tintB(cb), alpha);
+                    ShaderEffects.tintR(cr) * scale,
+                    ShaderEffects.tintG(cg) * scale,
+                    ShaderEffects.tintB(cb) * scale, alpha);
         }
     }
 
@@ -234,12 +235,13 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
                                       float lead, float trail, float alpha) {
         float outer = radius + lead * 0.5F;
         float inner = Math.max(0.01F, radius - trail);
-        float rOuter = ShaderEffects.tintR(0.55F);
-        float gOuter = ShaderEffects.tintG(0.80F);
-        float bOuter = ShaderEffects.tintB(1.00F);
-        float rInner = ShaderEffects.tintR(0.20F);
-        float gInner = ShaderEffects.tintG(0.45F);
-        float bInner = ShaderEffects.tintB(1.00F);
+        float scale = ShaderEffects.colorScale();
+        float rOuter = ShaderEffects.tintR(0.55F) * scale;
+        float gOuter = ShaderEffects.tintG(0.80F) * scale;
+        float bOuter = ShaderEffects.tintB(1.00F) * scale;
+        float rInner = ShaderEffects.tintR(0.20F) * scale;
+        float gInner = ShaderEffects.tintG(0.45F) * scale;
+        float bInner = ShaderEffects.tintB(1.00F) * scale;
         for (int i = 0; i < RING_SEGS; i++) {
             float a0 = (float) (i * Math.PI * 2.0 / RING_SEGS);
             float a1 = (float) ((i + 1) * Math.PI * 2.0 / RING_SEGS);
@@ -273,12 +275,13 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
         if (alpha <= 0.002F) {
             return;
         }
-        float r = ShaderEffects.tintR(0.55F);
-        float g = ShaderEffects.tintG(0.80F);
-        float b = ShaderEffects.tintB(1.00F);
-        float topR = ShaderEffects.tintR(0.20F);
-        float topG = ShaderEffects.tintG(0.42F);
-        float topB = ShaderEffects.tintB(1.00F);
+        float scale = ShaderEffects.colorScale();
+        float r = ShaderEffects.tintR(0.55F) * scale;
+        float g = ShaderEffects.tintG(0.80F) * scale;
+        float b = ShaderEffects.tintB(1.00F) * scale;
+        float topR = ShaderEffects.tintR(0.20F) * scale;
+        float topG = ShaderEffects.tintG(0.42F) * scale;
+        float topB = ShaderEffects.tintB(1.00F) * scale;
 
         for (int plane = 0; plane < 4; plane++) {
             float angle = (float) (plane * Math.PI / 4.0D);
@@ -327,6 +330,13 @@ public class OrbitalImpactRenderer extends EntityRenderer<OrbitalImpactEntity> {
     private static void domeLayer(Matrix4f m, VertexConsumer vc, float radius, float alpha,
                                   float baseR, float baseG, float baseB,
                                   float topR, float topG, float topB) {
+        float scale = ShaderEffects.colorScale();
+        baseR *= scale;
+        baseG *= scale;
+        baseB *= scale;
+        topR *= scale;
+        topG *= scale;
+        topB *= scale;
         final int lat = 8;
         final int lon = 24;
         for (int i = 0; i < lat; i++) {

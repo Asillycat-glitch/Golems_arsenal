@@ -1,21 +1,33 @@
 {
-  "type": "minecraft:crafting_shapeless",
+  "type": "minecraft:crafting_shaped",
   "category": "misc",
+  "pattern": [
+    "TUT",
+    "DED",
+    "TUT"
+  ],
+  "key": {
+    "T": {
+      "item": "mekanism:alloy_atomic"
+    },
+    "U": {
+      "item": "mekanism:ultimate_control_circuit"
+    },
+    "D": {
+      "item": "minecraft:diamond"
+    },
+    "E": {
+      "item": "golems_arsenal:elite_alloy_energy_upgrade"
+    }
+  },
+  "result": {
+    "item": "golems_arsenal:ultimate_alloy_energy_upgrade"
+  },
+  "show_notification": true,
   "conditions": [
     {
       "type": "forge:mod_loaded",
       "modid": "mekanism"
     }
-  ],
-  "ingredients": [
-    {
-      "item": "mekanism:alloy_atomic"
-    },
-    {
-      "item": "modulargolems:empty_upgrade"
-    }
-  ],
-  "result": {
-    "item": "golems_arsenal:ultimate_alloy_energy_upgrade"
-  }
+  ]
 }

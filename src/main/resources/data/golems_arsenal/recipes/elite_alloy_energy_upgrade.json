@@ -1,21 +1,33 @@
 {
-  "type": "minecraft:crafting_shapeless",
+  "type": "minecraft:crafting_shaped",
   "category": "misc",
+  "pattern": [
+    "RER",
+    "GIG",
+    "RER"
+  ],
+  "key": {
+    "R": {
+      "item": "mekanism:alloy_reinforced"
+    },
+    "E": {
+      "item": "mekanism:elite_control_circuit"
+    },
+    "G": {
+      "item": "minecraft:gold_ingot"
+    },
+    "I": {
+      "item": "golems_arsenal:infused_alloy_energy_upgrade"
+    }
+  },
+  "result": {
+    "item": "golems_arsenal:elite_alloy_energy_upgrade"
+  },
+  "show_notification": true,
   "conditions": [
     {
       "type": "forge:mod_loaded",
       "modid": "mekanism"
     }
-  ],
-  "ingredients": [
-    {
-      "item": "mekanism:alloy_reinforced"
-    },
-    {
-      "item": "modulargolems:empty_upgrade"
-    }
-  ],
-  "result": {
-    "item": "golems_arsenal:elite_alloy_energy_upgrade"
-  }
+  ]
 }

@@ -1,21 +1,33 @@
 {
-  "type": "minecraft:crafting_shapeless",
+  "type": "minecraft:crafting_shaped",
   "category": "misc",
+  "pattern": [
+    "IAI",
+    "OBO",
+    "IAI"
+  ],
+  "key": {
+    "I": {
+      "item": "mekanism:alloy_infused"
+    },
+    "A": {
+      "item": "mekanism:advanced_control_circuit"
+    },
+    "O": {
+      "item": "mekanism:ingot_osmium"
+    },
+    "B": {
+      "item": "golems_arsenal:golem_energy_upgrade"
+    }
+  },
+  "result": {
+    "item": "golems_arsenal:infused_alloy_energy_upgrade"
+  },
+  "show_notification": true,
   "conditions": [
     {
       "type": "forge:mod_loaded",
       "modid": "mekanism"
     }
-  ],
-  "ingredients": [
-    {
-      "item": "mekanism:alloy_infused"
-    },
-    {
-      "item": "modulargolems:empty_upgrade"
-    }
-  ],
-  "result": {
-    "item": "golems_arsenal:infused_alloy_energy_upgrade"
-  }
+  ]
 }

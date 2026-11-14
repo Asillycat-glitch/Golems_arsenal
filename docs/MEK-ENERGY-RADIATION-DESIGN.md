@@ -28,15 +28,17 @@
 | 类型 | 文件 | 说明 |
 |---|---|---|
 | 修饰符 | `base/upgrade/GolemUpgrades.java` | 新增 `radiation_generator` / `radiation_shielding` 两个注册；`golem_energy` 沿用 |
-| | `tech/upgrade/GolemEnergyModifier.java` | `MAX_LEVEL` 5→15、步长乘数、`totalLevel` / `levelOfUpgrades` / `capacityForLevel` |
+| | `tech/upgrade/GolemEnergyModifier.java` | `MAX_LEVEL` 5→15、`totalLevel` / `levelOfUpgrades` / `capacityForLevel`（转调 `GolemEnergyTiers`） |
+| | `tech/energy/GolemEnergyTiers.java` | 等级 → `GolemEnergyTier` 的解析入口；无 MEK 时走 fallback |
+| | `compat/mekanism/MekanismEnergyTiers.java` | 把 `EnergyCubeTier` 映射成傀儡 tier（容量 ÷2、输出全额） |
 | | `tech/radiation/GolemRadiationGeneratorModifier.java` | 辐射发电（只读环境剂量） |
 | | `tech/radiation/GolemRadiationShieldingModifier.java` | 辐射屏蔽（占 1 槽） |
 | 物品 | `tech/upgrade/AlloyEnergyUpgradeItem.java` | 合金链物品：不占槽 + 前置校验 + 同档去重 |
 | | `compat/mekanism/MekanismCompat.java` | 5 件物品的条件注册（3 合金 + 3 发电 + 3 屏蔽，共 9 件） |
 | 能力 | `tech/radiation/GolemRadiationAttachHandler.java` | 用 `AttachCapabilitiesEvent` 给傀儡挂 `IRadiationEntity` |
 | | `tech/radiation/RadiationEntityProvider.java` | 该能力的 Provider（复用 Mekanism 的 `DefaultRadiationEntity`） |
-| 改造 | `base/event/WeaponEventHandler.java` | 带宽随合金档位缩放；容量同步走统一入口 |
-| | `tech/energy/GolemEnergyItemProvider.java` | 收纳态容量走同一公式 |
+| 改造 | `base/event/WeaponEventHandler.java` | 带宽取 tier 的总 FE/t，主手 + 护甲共享预算 |
+| | `tech/energy/GolemEnergyItemProvider.java` | 收纳态容量走同一个 `capacityForLevel` |
 | | `base/recipe/GolemRepeatableSmithAddSlotRecipe.java` | 锻造台路径的前置校验 |
 | | `mixin/GolemUpgradeHandlerMixin.java` | 升级界面路径的前置校验 + 同档去重 |
 | 数据 | 2 个标签、9 个配方、9 个模型、2 个语言文件 | 见 §7 |
@@ -46,12 +48,12 @@
 
 ## 1. 结论摘要（一屏）
 
-| 升级 | 槽位 | 等级 | 加成公式 | 材料 | 作用域 |
+| 升级 | 槽位 | 等级 | 容量 / 带宽 | 材料 | 作用域 |
 |---|---|---|---|---|---|
-| 基础电量 | **占 1**（链的根） | max 1 | 基础容量 `base_capacity` | 基础件 | 全局 |
-| 灌注合金能源 | 不占（附属） | +2 级 | `+ 1×step` | `mekanism:alloy_infused` | 全局 |
-| 精英合金能源 | 不占（附属） | +4 级 | `+ 2×step` | `mekanism:alloy_reinforced` | 全局 |
-| 终极合金能源 | 不占（附属） | +8 级 | `+ 4×step` | `mekanism:alloy_atomic` | 全局 |
+| 基础电量 | **占 1**（链的根） | max 1 | `EnergyCubeTier.BASIC`（容量 ÷2，输出全额） | 基础件 | 全局 |
+| 灌注合金能源 | 不占（附属） | +2 级 | `EnergyCubeTier.ADVANCED`（容量 ÷2，输出全额） | `mekanism:alloy_infused` | 全局 |
+| 精英合金能源 | 不占（附属） | +4 级 | `EnergyCubeTier.ELITE`（容量 ÷2，输出全额） | `mekanism:alloy_reinforced` | 全局 |
+| 终极合金能源 | 不占（附属） | +8 级 | `EnergyCubeTier.ULTIMATE`（容量 ÷2，输出全额） | `mekanism:alloy_atomic` | 全局 |
 | 辐射发电 | **占 1** | +1/+2/+4 级 | `1 + n×step_rad` | 钋球 | 只在辐射区 |
 | 辐射屏蔽 | 待定 | +1/+2/+4 级 | `1 + n×step_rad` | 钋球 + 铅 | 只在辐射区 |
 
@@ -59,28 +61,28 @@
 
 ---
 
-## 2. 步长制的数学：改一个数就整体缩放
+## 2. 数值来源：能量立方映射 + 辐射步长
 
-**问题**：如果每档写一个独立配置键（`infused_bonus=2`、`elite_bonus=4`…），配置数会膨胀，
-而且玩家改数值时容易把档次关系改反（比如精英加成改得比终极还大）。
-
-**解法**：每档的加成不是独立数字，而是 `档位系数 × 步长`，其中**档位系数是 2 的幂次常量**（写死在代码里），
-**步长是唯一的配置项**。
+**电量链不再有 step。** 基础档与三件合金直接映射到 Mekanism 的四个能量立方档位；
+容量取立方存储的**一半**，带宽取立方的**完整输出**（解释为“全部装备合计的 FE/t”）。
+这样 MEK 那边的 `EnergyCubeTier` 配置一改，傀儡这边自动跟随；我们只保留无 MEK 时的 fallback。
 
 ```
-灌注合金：+[1（档位系数）× step（步长）]   →  step=2 时 +2
-精英合金：+[2 × step]                      →  step=2 时 +4
-终极合金：+[4 × step]                      →  step=2 时 +8
+基础       → BASIC       4,000,000 J → 容量 800,000 FE，带宽 1,600 FE/t
++灌注      → ADVANCED   16,000,000 J → 容量 3,200,000 FE，带宽 6,400 FE/t
++精英      → ELITE      64,000,000 J → 容量 12,800,000 FE，带宽 25,600 FE/t
++终极      → ULTIMATE  256,000,000 J → 容量 51,200,000 FE，带宽 102,400 FE/t
 ```
 
-**为什么这样改不坏**：设第 k 档的系数为 `2^k`（k=0,1,2…），则任意两档的差
-`2^(k+1)·step − 2^k·step = 2^k·step > 0` **与 step 无关**。所以无论步长调成 1 还是 8，
-"终极 > 精英 > 灌注 > 基础"这个大小关系**恒成立**，玩家不可能改出倒挂。
+J→FE 按 Mekanism 的默认 1 FE = 2.5 J 换算；`EnergyCubeTier.getMaxEnergy()` / `getOutput()`
+本身就是 config-backed 的，所以不需要在傀儡的配置里重复写容量与带宽。
 
-**配置键总数**：**4 个新键**（`step`、`fe_per_severity`、`step_rad`、`max_severity`）+ 2 个改值
-（`base_capacity`、`equipment_transfer_rate`）。全套系统只有**两个步长**：
-`step` 同时缩放**容量与带宽**两条曲线，`step_rad` 同时缩放**发电与屏蔽**两条曲线——
-这是"压缩配置数"的关键。
+**辐射发电 / 屏蔽仍然是步长制**：档位系数是常量（发电 1/2/4，屏蔽 1/3/7），
+`step_rad` 是唯一旋钮。两条系统互不依赖。
+
+**配置键总数**：电量链只剩 2 个无 MEK fallback（`fallback_capacity`、`fallback_transfer`）；
+辐射保留 `fe_per_severity`、`step`、`shield_denominator`、`min_dose`、`max_severity`。
+原先的 `step`、`base_capacity`、`capacity_per_level`、`equipment_transfer_rate` 全部删除。
 
 ---
 
@@ -105,76 +107,52 @@ new GolemWeaponUpgradeItem(props, 8, GolemUpgrades::modifier)  // 终极合金  
 
 ```
 总等级 L = 1（基础） + 2（灌注） + 4（精英） + 8（终极）      满配 L = 15
-合金加成档数 n = max(0, L − 1)                             满配 n = 14
+档位     = 1 → BASIC，3 → ADVANCED，7 → ELITE，15 → ULTIMATE
 ```
 
-### 3.2 容量公式（改动点：`GolemEnergyModifier.capacityForLevel`）
+### 3.2 容量（`GolemEnergyTiers.forLevel`）
 
 ```java
-/** 合金能源的加法式乘数：0 = 只有基础电量。 */
-static int alloyBonus(int totalLevel) {
-    return MAX_LEVEL <= 1 ? 0 : Math.max(0, totalLevel - 1) * Config.ENERGY_ALLOY_STEP.get();
-}
-
-/** 单次升级给的基础容量（= GOLEM_ENERGY_PER_LEVEL，历史键名保留）。 */
-static long baseCapacity() {
-    return Config.GOLEM_ENERGY_BASE_CAPACITY.get() + Config.GOLEM_ENERGY_PER_LEVEL.get();
-}
-
 public static int capacityForLevel(int totalLevel) {
-    if (totalLevel <= 0) return 0;                       // 没有基础电量 → 容量 0（现状行为不变）
-    long capacity = baseCapacity() * (1L + alloyBonus(totalLevel));
-    return (int) Math.min(capacity, Integer.MAX_VALUE);  // 饱和，永不溢出
+    return GolemEnergyTiers.forLevel(totalLevel).capacityFe();
 }
 ```
 
-| 组合 | L | n | 乘数 `1+n·step` | 容量（step=2） |
+| 组合 | L | MEK tier | cube max（J） | 容量（÷2 → FE） |
 |---|---|---|---|---|
-| 只有基础电量 | 1 | 0 | ×1 | 300,000 |
-| +灌注合金 | 3 | 2 | ×5 | 1,500,000 |
-| +精英合金 | 7 | 6 | ×13 | 3,900,000 |
-| +终极合金（满） | 15 | 14 | **×29** | **8,700,000** |
+| 只有基础电量 | 1 | `BASIC` | 4,000,000 | 800,000 |
+| +灌注合金 | 3 | `ADVANCED` | 16,000,000 | 3,200,000 |
+| +精英合金 | 7 | `ELITE` | 64,000,000 | 12,800,000 |
+| +终极合金（满） | 15 | `ULTIMATE` | 256,000,000 | **51,200,000** |
 
-> 对比：只装基础合金档（灌注）就是 ×5；三档全打是 ×29。这个跨度和 MEK 自己的量级
-> （聚变 200M / 反物质球 600M）相比仍然很小——它买的是"傀儡离家作战的续航"，不是替代电站。
+> 容量是“半个能量立方”。这比旧的 300k / 1.5M / 3.9M / 8.7M 大约 2.7×–5.9×，
+> 但充满时间从 6 秒变成 25 秒：**更大的油箱，更慢的加油**，这是刻意换的手感。
 
-### 3.3 带宽公式（改动点：`WeaponEventHandler.chargeStack`）
+### 3.3 带宽（`WeaponEventHandler.chargeEquipment`）
 
-**这是本次设计的关键修正**：容量翻 29 倍而不动带宽，会得到 8.7M 电池配 500 FE/t 管子的荒谬状态
-（充满一把武士刀要 **33 分钟**——电池再大也喂不进武器）。所以带宽的合金部分**用同一个 `alloyBonus`**——
-这也是 MEK 自己的做法：它的 Energy 升级同时给 buffer ×10 与 charge rate。
+带宽同样来自 `EnergyCubeTier.getOutput()`，但**不再按“每件装备”解释**：它是**全部装备合计**的
+FE/t。`chargeEquipment` 每 5 tick 取一次总预算，按主手 → 护甲的先后顺序花，某个目标满了就把
+剩余预算留给下一个，因此空槽/满槽都不会浪费。
 
 ```java
-// chargeEquipment 里算一次，传给 chargeStack（后者目前只收 GolemEnergyStorage）
-int budgetPerItem = Config.GOLEM_ENERGY_TRANSFER_RATE.get()
-        * (1 + GolemEnergyModifier.alloyBonus(totalLevel));
+GolemEnergyTier tier = GolemEnergyTiers.forLevel(GolemEnergyModifier.totalLevel(golem));
+long perPass = (long) tier.transferFePerTick() * ENERGY_CHARGE_INTERVAL; // 5 tick
+int remaining = ...; // 主手 + 护甲共享
 ```
 
-| 组合 | 带宽 (`equipment_transfer_rate`) | 充满一把 1M 武士刀 |
-|---|---|---|
-| 只有基础电量 | 2,500 / 5t = 500 FE/t | 2,000 tick ≈ 100 秒 |
-| +灌注 | 12,500 / 5t | 400 tick ≈ 20 秒 |
-| +精英 | 32,500 / 5t | 154 tick ≈ 7.7 秒 |
-| +终极（满） | **72,500 / 5t** | **69 tick ≈ 3.4 秒** |
+| 组合 | MEK tier | cube output（J/t） | 总带宽（FE/t） | 充满整个池 |
+|---|---|---|---|---|
+| 只有基础电量 | `BASIC` | 4,000 | 1,600 | 500 tick = 25 秒 |
+| +灌注 | `ADVANCED` | 16,000 | 6,400 | 500 tick = 25 秒 |
+| +精英 | `ELITE` | 64,000 | 25,600 | 500 tick = 25 秒 |
+| +终极（满） | `ULTIMATE` | 256,000 | 102,400 | 500 tick = 25 秒 |
 
-**但要说清楚一件事：即使满配，战斗中"边打边充"仍然是亏的。** 算一下就知道：
+> 对比旧值：容量 300k / 1.5M / 3.9M / 8.7M，总带宽 2.5k / 12.5k / 32.5k / 72.5k，全部 6 秒充满。
+> 新曲线的基础/中档带宽更低、终极更高，但所有档位的“容量 ÷ 带宽”统一为 25 秒——
+> 这是把“对折存储 + 原样输出”直接落到能量立方曲线上的结果。
 
-```
-满配每 5 tick 预算 = 72,500 FE（四件共享）  → 每件 18,125 / 5t ≈ 3,625 FE/t
-单把武器的实战消耗 ≈ 每秒一击 × 2,000 FE   → 单件就吃 10,000 / 5t
-```
-
-也就是说**每 5 tick 只补得回约 1/3 的消耗**。**这是刻意的**——如果带宽高到能边打边满，
-武器就永远不需要充能站，你的 `W 罐`、外部 MEK 线缆、"回家补电"这套循环全部失效。
-所以这条线的定位是：
-
-- **满配带宽的意义 = 脱离充能站后能连续作战的时间**（8.7M 电池 + 100 秒充满一把），
-  而不是"战斗中无限续航"；
-- 真要做到"一个 5 tick 窗口回满一把武器"，需要 `equipment_transfer_rate ≈ 200,000`（步长约 7），
-  那等于取消充能站设计，**不建议**。
-
-> **要不要拆成两个步长？** 当前设计容量与带宽共用一个 `step`。若实测觉得"一起涨太肥"，
-> 加一个 `rate_step` 即可，公式不变（`1 + n × rate_step`）。这是唯一可能需要拆分的点。
+**无 MEK 时**：只有基础档，走 `fallback_capacity` / `fallback_transfer`（默认 300,000 FE /
+2,500 FE/t 总带宽），行为和旧版基础档一致。
 
 ### 3.4 前置校验：基础电量必须先装
 
@@ -385,22 +363,16 @@ severity = clamp((log10(dose) + 6) / 7, 0, 1)        dose 单位 Sv/h
 
 ---
 
-## 6. Config 键清单（步长制，共 4 个新键 + 3 个改值）
+## 6. Config 键清单（电量链接 MEK；辐射仍为步长制）
 
 ```toml
 [golem_energy_upgrade]
-    # 基础电量升级的容量（= base_capacity + capacity_per_level）
-    base_capacity = 300000
-    # LEGACY：旧版 5 级电量升级的每级容量。现在基础档只有 1 级、缩放交给合金链，
-    # 所以这里是 0；保留键名只为让旧配置文件还能加载
-    capacity_per_level = 0
-    # 傀儡 → 每个充能物品 每 5 tick 的次数（合金倍率会乘上去）
-    equipment_transfer_rate = 2500
-
-[energy_alloy_upgrade]
-    # 【步长】合金能源每档的加成 = 档位系数(1/2/4，代码常量) × step
-    # 容量与带宽共用这一个步长
-    step = 2
+    # 仅在没装 Mekanism 时使用：基础档的容量与总带宽。
+    # 装了 Mekanism 时，基础/灌注/精英/终极分别镜像 BASIC/ADVANCED/ELITE/ULTIMATE，
+    # 容量取立方存储的一半，带宽取立方输出的全额（全部装备合计）。
+    fallback_capacity = 300000
+    fallback_transfer = 2500
+    lightning_charge = 50000
 
 [radiation]
     # severity = 1.0（熔毁现场级）时，基础档（非最高档）的发电量：
@@ -421,13 +393,7 @@ severity = clamp((log10(dose) + 6) / 7, 0, 1)        dose 单位 Sv/h
 > 没有做成配置键：`GolemModifier` 的 `maxLevel` 必须在 `super()` 之前确定，而静态初始化阶段读
 > `Config` 会踩到"配置规格还没构建"的时序。开一个改不动的键只会误导人。
 
-**预设对照**（改一个键的后果一目了然）：
-
-| `step` | 满配容量乘数 | 满配容量 | 满配带宽 |
-|---|---|---|---|
-| 1 | ×15 | 4,500,000 | 37,500 / 5t |
-| **2（默认）** | **×29** | **8,700,000** | **72,500 / 5t** |
-| 4 | ×57 | 17,100,000 | 142,500 / 5t |
+**辐射预设对照**（电量链已无 step，不在此表）：
 
 | `step_rad` | 屏蔽 I/II/III | 发电倍率 I/II/III |
 |---|---|---|
@@ -442,7 +408,7 @@ severity = clamp((log10(dose) + 6) / 7, 0, 1)        dose 单位 Sv/h
 |---|---|---|
 | 物品注册 | `init/ModItems.java` | 4 件（基础电量改名沿用 / 三合金 / 辐射发电） |
 | 物品标签 | `data/golems_arsenal/tags/items/*` | 新增 `energy_alloy_upgrades`（合金链，供前置校验与 JEI 归类）；**不要**塞进 `tech_upgrades` |
-| 配方 | `data/golems_arsenal/recipes/*.json` | 3 个合金件（`alloy_infused` / `alloy_reinforced` / `alloy_atomic`）+ 辐射件（钋球） |
+| 配方 | `data/golems_arsenal/recipes/*.json` | 基础电量：无 MEK（红石×4 + 铜锭×4） / 有 MEK（红石×4 + 基础控制电路×2 + 铁锭×2）；合金三档：灌注合金×4+高级电路×2+锇锭×2、强化合金×4+精英电路×2+金锭×2、原子合金×4+终极电路×2+钻石×2；另有辐射件（钋球） |
 | 模型 | `assets/golems_arsenal/models/item/*.json` | 4 个（可复用现有贴图，如 `minecraft:item/redstone`） |
 | 语言 | `lang/zh_cn.json`、`en_us.json` | 每件 3 条：`item.` / `upgrade.` / `upgrade.<id>.desc`（最后一条强制，`GolemModifier.getDetail` 默认查它） |
 | 创造栏 | `init/ModItems.java` displayItems | 4 条 |
@@ -458,8 +424,9 @@ severity = clamp((log10(dose) + 6) / 7, 0, 1)        dose 单位 Sv/h
 | # | 事项 | 说明 |
 |---|---|---|
 | 1 | `GolemEnergyModifier.MAX_LEVEL` 5 → **15** | 等于 `1+2+4+8`。改小了合金装不上（`collectModifiers` 会封顶） |
-| 2 | `GolemEnergyModifier.capacityForLevel` | 换成 §3.2 的公式；`syncGolemCapacity`（`WeaponEventHandler:955-966`）与收纳态 `GolemEnergyItemProvider.capacityOf` **两处都要跟着改**，否则放回物品栏后容量显示不一致 |
-| 3 | `chargeStack` 签名 | 目前只收 `GolemEnergyStorage`，需要把带宽预算从 `chargeEquipment` 传进来（改动很小） |
+| 2 | `GolemEnergyModifier.capacityForLevel` | 改成 `GolemEnergyTiers.forLevel(...).capacityFe()`；收纳态 `GolemEnergyItemProvider.capacityOf` 自动跟随，不需要另写公式 |
+| 3 | `chargeEquipment` / `chargeStack` | 带宽是**总 FE/t**：每 5 tick 取 `transferFePerTick × 5`，主手 → 护甲共享，`chargeStack` 返回实际接受的量，剩余预算继续往下传 |
+| 3b | `MekanismEnergyTiers` 的加载门控 | 放在 `compat/mekanism`，只由 `MekanismCompat.register` 设置进 `GolemEnergyTiers`；无 MEK 时不能把 `EnergyCubeTier` 放进任何 always-loaded 类的常量池 |
 | 4 | `consumesSlot() = false` | 三件合金都要覆写；用 `GolemWeaponUpgradeItem` 的子类或 `RepeatableExpansionItem` 的写法 |
 | 5 | 前置校验 | §3.4。三条路径中**只有本家的 `golem_add_slot` 配方改不到**（不是我们的类），但那条路径本来也不用于本模组的合金件 |
 | 6 | refmap | 本次**不需要**新增条目——注入的是 mod 类（`GolemUpgradeItemHandler`）。**若将来注入 vanilla 成员，必须手工补 `golems_arsenal.refmap.json`**（见 `docs/DEPENDENCIES.md` 的告警） |
@@ -476,9 +443,9 @@ severity = clamp((log10(dose) + 6) / 7, 0, 1)        dose 单位 Sv/h
 |---|---|
 | 用盖革计数器实测三处辐射读数，反推 `fe_per_severity` | **上线前必做**（§4.5） |
 | 辐射屏蔽升级要不要做、占不占槽 | 待定（公式已和发电链共用步长） |
-| 容量与带宽是否拆两个步长（`step` / `rate_step`） | 实测后决定（§3.3） |
+| 电量链映射到 MEK 立方后，51.2M + 102.4k FE/t（25 秒充满）是否过肥 | 打完 jar 进整合包实测 |
+| 无 MEK 的 fallback（300k + 2,500 FE/t）是否还要保留可配置 | 实测后决定；当前保留两个键 |
 | 辐射源档 | **不做**（§4.6 留档） |
-| 电力/带宽的实测：8.7M + 72,500/5t 是否过肥 | 打完 jar 进整合包实测 |
 
 ---
 

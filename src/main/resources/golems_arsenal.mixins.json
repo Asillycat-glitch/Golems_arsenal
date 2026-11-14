@@ -6,7 +6,37 @@
   "refmap": "golems_arsenal.refmap.json",
   "mixins": [
     "AbstractGolemEnergyMixin",
-    "GolemUpgradeHandlerMixin"
+    "GolemUpgradeHandlerMixin",
+    "LivingEntityHealthAdmissionMixin",
+    "ActuallyHurtGuardMixin",
+    "GuardedEntityActuallyHurtGuardMixin",
+    "GuardedEntitySetHealthGuardMixin",
+    "GuardedEntityKillGuardMixin",
+    "LivingEntityKillGuardMixin",
+    "DropLootGuardMixin",
+    "SynchedEntityDataHealthAdmissionMixin",
+    "LivingEntityHurtScopeMixin",
+    "LivingEntityEquipmentNbtRefreshMixin",
+    "LivingEntityAliveReadMixin",
+    "EntityLoadScopeMixin",
+    "GuardedEntityDeathScopeMixin",
+    "GuardedEntityHealthReadMixin",
+    
+    "EntityRemovalGuardMixin",
+    "EntityIsRemovedGuardMixin",
+    "EntityOnRemovedGuardMixin",
+    "EntityLevelCallbackGuardMixin",
+    "EntitySetPosGuardMixin",
+    "EntityInteractAtGuardMixin",
+    "MobInteractGuardMixin",
+    "LivingEntityTickFreezeMixin",
+    "HealthDataItemSealMixin",
+    "WitherzillaRemoverGuardMixin",
+    "AttributeInstanceGuardMixin",
+    "AttributeValueFloorMixin",
+    "ClassInstanceMultiMapGuardMixin",
+    "EntityLookupGuardMixin",
+    "EntityTickListGuardMixin"
   ],
   "client": [
     "AbstractGolemRendererFlipMixin"

@@ -220,18 +220,25 @@ public final class KeySwordEventHandler {
         if (golem.level().isClientSide) {
             return;
         }
+        Vec3 from = golem.position();
+        // 上一次动作可能把傀儡留在方块里：先挪到最近的空位，再按这个起点算前冲。
+        if (!GolemMotionHelper.fits(golem, from)) {
+            from = GolemMotionHelper.unstick(golem, from);
+            golem.setPos(from.x, from.y, from.z);
+        }
+        // 前冲距离先按碰撞箱扫一遍：撞墙就停在墙前，别把落点定在墙后。
+        double safeAdvance = GolemMotionHelper.clearDistance(golem, from, dirX, dirZ, advance, from.y);
         ModNetwork.CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> golem),
                 new ClientboundFlipPacket(golem.getId()));
         int air = lionSlashAirTicks(golem);
-        double apex = LION_SLASH_HEIGHT_FACTOR * Math.max(1.0, golem.getBbHeight());
         CompoundTag tag = golem.getPersistentData();
         tag.putLong(LION_FLIP_START_KEY, golem.level().getGameTime());
-        tag.putDouble(LION_FLIP_BASE_KEY, golem.getY());
-        tag.putDouble(LION_FLIP_FROM_X_KEY, golem.getX());
-        tag.putDouble(LION_FLIP_FROM_Z_KEY, golem.getZ());
+        tag.putDouble(LION_FLIP_BASE_KEY, from.y);
+        tag.putDouble(LION_FLIP_FROM_X_KEY, from.x);
+        tag.putDouble(LION_FLIP_FROM_Z_KEY, from.z);
         tag.putDouble(LION_FLIP_DIR_X_KEY, dirX);
         tag.putDouble(LION_FLIP_DIR_Z_KEY, dirZ);
-        tag.putDouble(LION_FLIP_ADVANCE_KEY, advance);
+        tag.putDouble(LION_FLIP_ADVANCE_KEY, safeAdvance);
         golem.setNoGravity(true);
         golem.setDeltaMovement(Vec3.ZERO);
     }
@@ -273,6 +280,10 @@ public final class KeySwordEventHandler {
             tag.remove(LION_FLIP_DIR_Z_KEY);
             tag.remove(LION_FLIP_ADVANCE_KEY);
             golem.setNoGravity(false);
+            if (golem.isAlive() && !GolemMotionHelper.fits(golem, golem.position())) {
+                Vec3 free = GolemMotionHelper.unstick(golem, golem.position());
+                golem.setPos(free.x, free.y, free.z);
+            }
             return;
         }
         if (progress < 1.0) {
@@ -283,8 +294,11 @@ public final class KeySwordEventHandler {
             double ease = 0.5 * (1.0 - Math.cos(Math.PI * Math.max(0.0, progress)));
             double targetX = fromX + dirX * advance * ease;
             double targetZ = fromZ + dirZ * advance * ease;
+            // 逐 tick 也只走"碰撞箱放得下"的那一段：低天花板/半路伸出的墙不会把傀儡顶进去。
+            Vec3 safe = GolemMotionHelper.clamp(golem, golem.position(),
+                    new Vec3(targetX, baseY + disp, targetZ));
             golem.setNoGravity(progress < 0.5);
-            golem.setPos(targetX, baseY + disp, targetZ);
+            golem.setPos(safe.x, safe.y, safe.z);
             golem.setDeltaMovement(Vec3.ZERO);
             return;
         }
@@ -296,8 +310,10 @@ public final class KeySwordEventHandler {
         tag.remove(LION_FLIP_DIR_X_KEY);
         tag.remove(LION_FLIP_DIR_Z_KEY);
         tag.remove(LION_FLIP_ADVANCE_KEY);
+        Vec3 safe = GolemMotionHelper.clamp(golem, golem.position(),
+                new Vec3(fromX + dirX * advance, baseY, fromZ + dirZ * advance));
         golem.setNoGravity(false);
-        golem.setPos(fromX + dirX * advance, baseY, fromZ + dirZ * advance);
+        golem.setPos(safe.x, safe.y, safe.z);
         golem.setDeltaMovement(Vec3.ZERO);
         golem.fallDistance = 0;
         lionSlashLand(golem);

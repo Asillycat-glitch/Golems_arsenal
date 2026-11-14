@@ -5,7 +5,9 @@ import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyCapability;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyStorage;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.Multimap;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.entity.metalgolem.MetalGolemEntity;
 import dev.xkmc.modulargolems.content.item.ranged.MetalGolemMechaBowItem;
@@ -15,6 +17,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
@@ -24,6 +28,7 @@ import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -35,6 +40,8 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
             new ResourceLocation(Golems_arsenal.MODID, "tracking");
     public static final ResourceLocation ENERGY_CAPACITY_UNIT =
             new ResourceLocation(Golems_arsenal.MODID, "energy_capacity");
+    public static final UUID BOW_EXPLOSION_UUID = UUID.nameUUIDFromBytes(
+            "golems_arsenal:bow_explosion".getBytes(StandardCharsets.UTF_8));
 
 
     private static Attribute explosionAttributeCache;
@@ -69,6 +76,28 @@ public class GolemTrackingMechanicalBowItem extends MetalGolemMechaBowItem {
     /** Explosive arrows are a tech-upgrade skill; they unlock when the tech upgrade is installed. */
     public static boolean canExplode(AbstractGolemEntity<?, ?> golem) {
         return GolemEnergyTechModifier.hasTechUpgrade(golem);
+    }
+
+    /** Bow explosion factor is static per tech level; tick no longer rewrites it. */
+    @Override
+    public Multimap<Attribute, AttributeModifier> getGolemModifiers(ItemStack stack, Entity entity,
+                                                                    EquipmentSlot slot) {
+        Multimap<Attribute, AttributeModifier> map =
+                HashMultimap.create(super.getGolemModifiers(stack, entity, slot));
+        if (slot != getSlot() || !(entity instanceof AbstractGolemEntity<?, ?> golem)) {
+            return map;
+        }
+        Attribute explosion = explosionAttribute();
+        int tech = GolemEnergyTechModifier.levelOf(golem);
+        if (explosion != null && tech > 0) {
+            double factor = (Config.TRACKING_BOW_PROJECTILE_DAMAGE.get()
+                    + tech * Config.TECH_PROJECTILE_PER_LEVEL.get())
+                    * Config.TRACKING_BOW_EXPLOSION_FACTOR_RATIO.get();
+            map.put(explosion, new AttributeModifier(
+                    BOW_EXPLOSION_UUID, "golems_arsenal_bow_explosion",
+                    factor, AttributeModifier.Operation.MULTIPLY_BASE));
+        }
+        return map;
     }
 
     /**

@@ -129,10 +129,11 @@ public final class GolemPhoenixHandler {
 
     /** 上升高度 = 体高 × 该系数。 */
     private static final double RISE_HEIGHT_FACTOR = 1.6;
-    /** 上升时向后（远离敌人方向）移动的距离。 */
+    /** 上升时向后（远离敌人方向）移动的最大距离；贴墙时由 {@code clearDistance} 收缩。 */
     private static final double RISE_BACKWARD = 2.5;
     /** 下坠落点 = 原点 + 方向 × (到敌人距离 × 该系数)，即敌人在路径的 2/3 处。 */
     private static final double DIVE_DISTANCE_FACTOR = 1.5;
+    /** 下坠落点的期望最小距离；实际落点会被 {@code freeLanding} 收到墙前，可以比它更近。 */
     private static final double DIVE_MIN_DISTANCE = 5.0;
     private static final double DIVE_MAX_DISTANCE = 16.0;
     private static final double HIT_PADDING = 1.0;
@@ -185,6 +186,8 @@ public final class GolemPhoenixHandler {
     private static final String TICKS_KEY = "GolemsArsenalPhoenixTicks";
     private static final String BASE_Y_KEY = "GolemsArsenalPhoenixBaseY";
     private static final String APEX_Y_KEY = "GolemsArsenalPhoenixApexY";
+    /** 实际后撤距离：撞墙/贴墙时会比 {@link #RISE_BACKWARD} 小。 */
+    private static final String BACK_KEY = "GolemsArsenalPhoenixBack";
     private static final String ORIGIN_X_KEY = "GolemsArsenalPhoenixOriginX";
     private static final String ORIGIN_Z_KEY = "GolemsArsenalPhoenixOriginZ";
     private static final String DIR_X_KEY = "GolemsArsenalPhoenixDirX";
@@ -280,6 +283,12 @@ public final class GolemPhoenixHandler {
 
     private static void start(AbstractGolemEntity<?, ?> golem, CompoundTag tag, LivingEntity victim) {
         Vec3 from = golem.position();
+        // 上一次动作可能把傀儡留在了方块里（旧版本没有这段保护）：先把起点挪到最近的空位，
+        // 否则后面所有"从当前位置出发"的判定都会以卡住状态为基准，越算越歪。
+        if (!GolemMotionHelper.fits(golem, from)) {
+            from = GolemMotionHelper.unstick(golem, from);
+            golem.setPos(from.x, from.y, from.z);
+        }
         double dx = victim.getX() - from.x;
         double dz = victim.getZ() - from.z;
         double distance = Math.sqrt(dx * dx + dz * dz);
@@ -292,11 +301,18 @@ public final class GolemPhoenixHandler {
         double landY = Math.abs(victim.getY() - from.y) <= 2.0 ? victim.getY() : from.y;
         Vec3 wanted = new Vec3(from.x + nx * travel, landY, from.z + nz * travel);
         Vec3 land = freeLanding(golem, from, wanted);
+        // 后撤与上升高度都先按实际空间收一次：贴着墙/低天花板时，宁可原地起跳，
+        // 也不要把傀儡按进墙里（每 tick 的 pin 还有一道 clamp 兜底）。
+        double back = GolemMotionHelper.clearDistance(golem, from, -nx, -nz, RISE_BACKWARD, from.y);
+        double wantedApex = from.y + golem.getBbHeight() * RISE_HEIGHT_FACTOR;
+        double apex = GolemMotionHelper.clearHeight(golem,
+                from.x - nx * back, from.z - nz * back, from.y, wantedApex);
 
         tag.putDouble(ORIGIN_X_KEY, from.x);
         tag.putDouble(ORIGIN_Z_KEY, from.z);
         tag.putDouble(BASE_Y_KEY, from.y);
-        tag.putDouble(APEX_Y_KEY, from.y + golem.getBbHeight() * RISE_HEIGHT_FACTOR);
+        tag.putDouble(APEX_Y_KEY, apex);
+        tag.putDouble(BACK_KEY, back);
         tag.putDouble(DIR_X_KEY, nx);
         tag.putDouble(DIR_Z_KEY, nz);
         tag.putDouble(LAND_X_KEY, land.x);
@@ -354,6 +370,8 @@ public final class GolemPhoenixHandler {
         double originZ = tag.getDouble(ORIGIN_Z_KEY);
         double nx = tag.getDouble(DIR_X_KEY);
         double nz = tag.getDouble(DIR_Z_KEY);
+        // 旧存档里可能没有 BACK_KEY（表演中途升级）：退回常量，别让轨迹突然缩成原地起跳。
+        double back = tag.contains(BACK_KEY) ? tag.getDouble(BACK_KEY) : RISE_BACKWARD;
         Vec3 land = new Vec3(tag.getDouble(LAND_X_KEY), tag.getDouble(LAND_Y_KEY),
                 tag.getDouble(LAND_Z_KEY));
 
@@ -361,8 +379,8 @@ public final class GolemPhoenixHandler {
             case PHASE_RISE -> {
                 // 上升慢、向右后方退：ease-out 的竖直 + 水平的后退位移。
                 double ease = easeOut(progress);
-                double x = originX - nx * RISE_BACKWARD * ease;
-                double z = originZ - nz * RISE_BACKWARD * ease;
+                double x = originX - nx * back * ease;
+                double z = originZ - nz * back * ease;
                 double y = baseY + (apexY - baseY) * ease;
                 pin(golem, x, y, z);
                 faceTowards(golem, new Vec3(nx, 0, nz));
@@ -378,8 +396,8 @@ public final class GolemPhoenixHandler {
             case PHASE_HANG -> {
                 // 顶点悬停：只做一点上下浮动，同时保持火焰环绕。
                 double floatUp = Math.sin(Math.PI * progress) * 0.2;
-                pin(golem, originX - nx * RISE_BACKWARD, apexY + floatUp,
-                        originZ - nz * RISE_BACKWARD);
+                pin(golem, originX - nx * back, apexY + floatUp,
+                        originZ - nz * back);
                 if (golem.level() instanceof ServerLevel server) {
                     flameTrail(server, golem, 6);
                 }
@@ -394,8 +412,8 @@ public final class GolemPhoenixHandler {
             case PHASE_DIVE -> {
                 // 下坠快、不旋转：ease-in 冲向落点。
                 double ease = progress * progress;
-                Vec3 from = new Vec3(originX - nx * RISE_BACKWARD, apexY,
-                        originZ - nz * RISE_BACKWARD);
+                Vec3 from = new Vec3(originX - nx * back, apexY,
+                        originZ - nz * back);
                 Vec3 pos = from.lerp(land, ease);
                 pin(golem, pos.x, pos.y, pos.z);
                 faceTowards(golem, new Vec3(land.x - pos.x, 0, land.z - pos.z));
@@ -406,8 +424,8 @@ public final class GolemPhoenixHandler {
                             now % 2 == 0 ? 0.0 : Math.PI / DIVE_RING_SEGMENTS);
                 }
                 if (progress >= 1.0) {
-                    impact(golem, tag, new Vec3(originX - nx * RISE_BACKWARD, apexY,
-                            originZ - nz * RISE_BACKWARD), land);
+                    impact(golem, tag, new Vec3(originX - nx * back, apexY,
+                            originZ - nz * back), land);
                     enterPhase(golem, tag, PHASE_LAND, LAND_TICKS);
                 }
                 return;
@@ -643,9 +661,17 @@ public final class GolemPhoenixHandler {
         }
     }
 
+    /**
+     * 把傀儡钉到目标点，但只走"碰撞箱放得下"的那一段。
+     * <p>
+     * 以前这里直接 {@code setPos}：上升段往后撤 2.5 格、俯冲段冲向落点、追冲段贴地前冲，
+     * 只要路径上有墙/天花板，傀儡就被按进方块里出不来。现在统一由
+     * {@link GolemMotionHelper#clamp} 收口：撞到东西就停在最后一个合法点，下一 tick 继续尝试。
+     */
     private static void pin(AbstractGolemEntity<?, ?> golem, double x, double y, double z) {
+        Vec3 safe = GolemMotionHelper.clamp(golem, golem.position(), new Vec3(x, y, z));
         golem.setNoGravity(true);
-        golem.setPos(x, y, z);
+        golem.setPos(safe.x, safe.y, safe.z);
         golem.setDeltaMovement(Vec3.ZERO);
         golem.fallDistance = 0;
     }
@@ -691,21 +717,30 @@ public final class GolemPhoenixHandler {
         return new double[]{0.0, 1.0};
     }
 
+    /**
+     * 把落点收到"从当前位置沿水平方向能安全到达"的范围内。
+     * <p>
+     * 旧实现从终点往回退，且最低只退到 {@link #DIVE_MIN_DISTANCE}（5 格）——
+     * 墙比 5 格近时它会把落点留在墙里，这正是"凤凰天驱卡墙"的直接来源。
+     * 现在从起点往外扫：撞墙就停在墙前，并允许一直收到脚下。
+     */
     private static Vec3 freeLanding(AbstractGolemEntity<?, ?> golem, Vec3 from, Vec3 wanted) {
         Vec3 delta = wanted.subtract(from);
         double length = delta.horizontalDistance();
         if (length <= 1.0E-4) {
             return wanted;
         }
-        Vec3 dir = new Vec3(delta.x, 0, delta.z).scale(1.0 / length);
-        double allowed = length;
-        Vec3 cursor = new Vec3(from.x + dir.x * allowed, wanted.y, from.z + dir.z * allowed);
-        while (allowed > DIVE_MIN_DISTANCE
-                && !golem.level().noCollision(golem, golem.getBoundingBox().move(cursor.subtract(from)))) {
-            allowed = Math.max(DIVE_MIN_DISTANCE, allowed - 0.25);
-            cursor = new Vec3(from.x + dir.x * allowed, wanted.y, from.z + dir.z * allowed);
+        double dirX = delta.x / length;
+        double dirZ = delta.z / length;
+        // 敌人贴在半砖/墙缝里时 victim.getY() 可能正好落在方块内：先退回自己的高度。
+        double y = GolemMotionHelper.fits(golem, new Vec3(from.x, wanted.y, from.z))
+                ? wanted.y : from.y;
+        double allowed = GolemMotionHelper.clearDistance(golem, from, dirX, dirZ, length, y);
+        if (allowed <= 1.0E-4) {
+            // 水平方向完全被挡住：落点拉回脚下，至少保证傀儡本身是合法的。
+            return new Vec3(from.x, y, from.z);
         }
-        return cursor;
+        return new Vec3(from.x + dirX * allowed, y, from.z + dirZ * allowed);
     }
 
     private static void enterPhase(AbstractGolemEntity<?, ?> golem, CompoundTag tag,
@@ -721,6 +756,7 @@ public final class GolemPhoenixHandler {
         tag.remove(TICKS_KEY);
         tag.remove(BASE_Y_KEY);
         tag.remove(APEX_Y_KEY);
+        tag.remove(BACK_KEY);
         tag.remove(ORIGIN_X_KEY);
         tag.remove(ORIGIN_Z_KEY);
         tag.remove(DIR_X_KEY);
@@ -740,6 +776,12 @@ public final class GolemPhoenixHandler {
         golem.setNoGravity(false);
         golem.setDeltaMovement(Vec3.ZERO);
         golem.fallDistance = 0;
+        // 收尾兜底：如果演出结束时傀儡仍和方块相交（旧存档、外部推挤），就近挤出来。
+        // 不加这一道的话，玩家看到的就是"技能放完，傀儡站在墙里不动"。
+        if (golem.isAlive() && !GolemMotionHelper.fits(golem, golem.position())) {
+            Vec3 free = GolemMotionHelper.unstick(golem, golem.position());
+            golem.setPos(free.x, free.y, free.z);
+        }
     }
 
     private static double easeOut(double t) {
@@ -806,7 +848,9 @@ public final class GolemPhoenixHandler {
         }
         boolean first = !tag.getBoolean(MYSTIC_PAID_KEY);
         if (first) {
-            golem.setHealth(Math.max(1.0F, golem.getHealth() - MYSTIC_FIRST_COST));
+            // 这是"授权"的代价，不是伤害：显式声明成内部写，否则会被写入口当成直写拒绝。
+            a_silly_cat.golems_arsenal.guard.sanctuary.SanctuaryScopes.runInternal(
+                    () -> golem.setHealth(Math.max(1.0F, golem.getHealth() - MYSTIC_FIRST_COST)));
             tag.putBoolean(MYSTIC_PAID_KEY, true);
         }
         tag.putBoolean(MYSTIC_ARMED_KEY, true);

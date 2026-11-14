@@ -46,6 +46,10 @@ public final class ModClient {
         // 火箭界面。用 enqueueWork 是因为 MenuScreens.register 要在客户端初始化完成后做。
         event.enqueueWork(() -> MenuScreens.register(
                 a_silly_cat.golems_arsenal.tech.orbit.ModMenus.ROCKET.get(), RocketScreen::new));
+        // 激光发射台的配置界面。
+        event.enqueueWork(() -> MenuScreens.register(
+                a_silly_cat.golems_arsenal.tech.orbit.ModMenus.LASER_CONSOLE.get(),
+                LaserConsoleScreen::new));
         // Z 光剑：没电时用"只有把手"的模型，有电时才是完整剑刃。
         // 物品属性值只能是浮点，所以这里用 0（空） / 1（有电）两档，配合模型里的 overrides。
         event.enqueueWork(() -> ItemProperties.register(ModItems.ZERO_ENERGY_SWORD.get(),

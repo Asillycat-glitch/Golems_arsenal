@@ -4,11 +4,32 @@
 > 结论先行：
 > 1. **不需要真正的升空阶段**。火箭只在可视高度内播一段短特效，入轨状态是一条 `SavedData` 记录，
 >    不加载区块、不持久化实体。
-> 2. **伤害用 Mekanism 的激光伤害类型，但必须自己构造 `DamageSource` 补上攻击者**，
->    否则天基炮的击杀无归属（无经验、掉落不归功）。
+> 2. **伤害用自建的 `orbital_strike` 伤害类型**（不是 MEK 的激光类型），
+>    这样 `DamageSource` 才能带上引导者、击杀有归属；穿甲语义由伤害类型标签提供。
+>    （早期版本借过 MEK 的激光类型，代价是无归属，2026-10-21 已改掉。）
 > 3. **主光束自建渲染，不用 MEK 粒子**——MEK 的 `LaserParticle` 构造器是 private，颜色/透明度/粗细都改不了。
 >    MEK 的粒子只用在落点冲击，保证"这就是 MEK 的激光"的观感。
 > 4. **清污即发电**（详见另一份文档的辐射章）：本设计只依赖"傀儡身上有辐射剂量"这一个读数。
+
+---
+
+## 0. 2026-10-21 接手后的定稿（以此节为准）
+
+1. **引导升级改成单目标、单发激光炮**，调用 `tech/orbit/OrbitalStrike#cast`，和 `/ga full` 共用
+   “六束瞄准 → 弹体 → 落点冲击 + 不可见伤害光束”的完整时序。等级只影响单发伤害/FE，不再增加锁定数。
+2. **激光发射台已实现**（`LaserConsoleBlock` / `LaserConsoleBlockEntity` / `LaserConsoleMenu` /
+   `LaserConsoleScreen`），模型由 `激光.bbmodel` 转成方块模型。它是**必需的地面控制端**：
+   同一维度里至少有一台「启用 + 已绑定在轨平台」的发射台，傀儡的引导升级才会开火。
+3. 发射台自动绑定放置者的第一颗在轨平台；先放发射台、后发射火箭也会在 2 秒内自动接上。
+   全局记录存在 `golems_arsenal_laser_consoles.dat`，区块卸载后仍然生效。
+4. GUI：总开关、友军保护、安全区（0/8/16/32，默认 **8**）、能量档（经济/标准/超载）、
+   冷却档（快速/标准/蓄能）、平台切换。落在安全区内时给傀儡主人发 action bar 提示。
+5. FE 仍从傀儡自己的池里扣；发射台只定档、不储电。同一维度里最近的启用+已绑定发射台决定档位。
+6. 配置键、档位倍率与实机验证步骤见 §8/§9；`impact_damage` 默认 40，满 14 级 +21；
+   `cost_base` 20k + 14×5k = 90k FE 每发。
+7. **地底/室内目标不再白扣 FE**：`OrbitalImpact.canHitFromOrbit` 比较目标包围盒顶面与落点高度；
+   目标整体在落点（头顶遮挡物的顶面）之下时判为不可标定，既不标定也不扣 FE；若目标是在标定后
+   才躲进去的，会清目标并给主人发 action bar 提示（`orbital_covered`，10 秒最多一条）。
 
 ---
 
@@ -128,31 +149,40 @@ OrbitalPlatformData extends SavedData          // 世界级，dimension 无关�
 | **傀儡** | 引导升级（合金链，见 §5） | **傀儡自己的 FE 池**（与合金能源链咬合） |
 | 玩家 | 目标指示器物品 | 未实现（第 3 刀之后再评估） |
 
-### 三条游戏约束（都已在代码里生效）
+### 四条游戏约束（都已在代码里生效）
 
-| 约束 | 配置键 | 为什么 |
+| 约束 | 配置键 / 判定 | 为什么 |
 |---|---|---|
 | **贴身目标引导不了** | `orbital_guidance.min_range`（默认 5 格） | 防"变成额外近战伤害"；同时给了对手一个明确的反制手段——贴脸 |
 | **被方块挡住就打不到** | 固定行为（`canSee` 做 `ClipContext` 视线检测） | 掩体有意义，也避免穿墙击杀的观感问题 |
-| **每段扣傀儡的 FE** | `cost_base` + `cost_per_level` | 让合金能源链决定你打得了几轮；打不起就**静默停火**（代价是"打得起"，不是冷却） |
+| **头顶有遮挡也打不到** | 固定行为（`OrbitalImpact.canHitFromOrbit`） | 地底/室内目标不再被标定、不扣 FE；光柱只从落点往上打，不会隔天花板命中 |
+| **每发扣傀儡的 FE** | `cost_base` + `cost_per_level` | 让合金能源链决定你打得起几发；打不起就**静默停火**（代价是"打得起"，不是冷却） |
 
-### 目标选择与段数分配
+### 目标选择（2026-10-21 改为单目标）
 
 ```
-可同时引导数 N = 1 + (合金档位之和) × step        // step 默认 1；只装灌注 = 1 个目标
-实际同时打击   = min(N, 当前可见敌人数 T)
-段数分配       = 首目标吃满 N 段，其余每个各 1 段   // T = 1 时 N 段全砸在它头上，单挑最猛
+可同时标定数 N = 1                                  // 「增强升级」未做，不再随等级增长
+实际打击       = 1 发完整激光炮
+优先级         = 傀儡当前目标（合法时）→ 最近的合法威胁
 ```
 
-标定每 `scan_interval`（默认 20 tick）刷新一次；每次刷新**把傀儡当前正在打的目标排在最前**，
-让平台配合它的攻击节奏。待打列表以 UUID 存 `persistentData`，读档后继续。
+标定每 `scan_interval`（默认 20 tick）刷新一次；目标以单个 UUID 存 `persistentData`，读档后继续。
+开火前会再校验一次：活着、不是自己人、距离在 `[min_range, range]`、线视没有被方块挡住、**头顶没有被遮挡**。
+只有 `Enemy`、已经锁定傀儡/主人的 `Mob`，或傀儡自己的当前目标才会被标定。
 
 ### 命中判定（实际实现）
 
-1. 落点由 `OrbitalImpact.impactPoint` 求出（目标脚下的地表）；
-2. 光束实体在落点生成；
-3. 对**柱体沿途**（水平半径 `hit_radius`，竖直从下端到顶端）的敌人逐 tick 施加伤害；
-4. 友军判定走 `GolemFriendlyFire`，与引导选敌**共用同一套规则**。
+1. 落点由 `OrbitalImpact.impactPoint` 求出（目标 x/z 这一列最高的 `MOTION_BLOCKING` 方块上方）；
+2. `OrbitalStrike.cast` 先放六束瞄准，约 2 秒后发射弹体，弹体落地生成 `OrbitalImpactEntity`；
+3. 同一时刻生成**不可见的** `OrbitalBeamEntity`：落地首 tick 结算一次半径内冲击伤害，
+   之后按 `residual_damage` 每 tick 结算余热；
+4. 友军判定走 `GolemFriendlyFire`，与引导选敌**共用同一套规则**；发射台的「友军保护」关闭时跳过该判定；
+5. 发射台的安全区内的落点直接放弃，不扣 FE，并给主人发 action bar 提示。
+
+> **“头顶有遮挡”怎么判**：光柱的伤害范围是从落点**往上**的柱体，不往下延伸。
+> 地底/山洞/室内的目标，`getHeight(MOTION_BLOCKING)` 返回的是它**头顶遮挡物**的顶面，
+> 目标包围盒整体在这个平面之下，`canHitFromOrbit` 就返回 false——既不标定也不扣 FE。
+> 如果目标正上方有直通天空的竖井，落点会落到竖井底部，目标在落点之上，仍可命中。
 
 #### 落点：取地表，**不需要射线**
 
@@ -358,37 +388,39 @@ MEK 的 `LaserParticle` 构造器是 **private**，`LaserParticleData` 只有
 
 ---
 
-## 8. Config 键清单（实际实现）
+## 8. Config 键清单（2026-10-21 实际实现）
 
 ```toml
 [orbital_beam]
     altitude = 320                  # 光束视觉上的来源高度（1.20.1 建筑上限）
-    damage = 2.0                    # 每 tick 对柱体内每个敌人的伤害
-    hit_radius = 1.5                # 伤害柱体半径（渲染宽度与它无关）
-    life = 20                       # 光束持续 tick（调短：打击而非持续区域）
-    width = 0.6                     # 渲染外柱宽度
-    # ---- 破坏方块：我们自己挖 ----
-    break_blocks = true             # 是否挖掘方块
-    max_block_hardness = 2.0        # 硬度上限：吃土/木，啃不动石头
-    block_hardness_cost = 8.0       # 每点硬度的挖掘难度（草瞬间、土 2 tick、木 8 tick）
-    drop_blocks = false             # 挖掉的方块是否掉落（默认不掉，避免变成采石场）
+    residual_damage = 0.5           # 光束存续期间每 tick 的余热（不衰减）
+    life = 20                       # 伤害光束存续 tick（20 = 1 秒）
+    width = 0.6                     # 渲染外柱宽度（纯视觉）
+    shader_effect_brightness = 0.35 # 光影包下的亮度倍率
+    # ---- 破坏方块：预留键（当前只结算伤害，不挖方块） ----
+    break_blocks = true
+    max_block_hardness = 2.0
+    block_hardness_cost = 40.0
+    drop_blocks = false
 
 [orbital_guidance]
-    step = 1                        # 目标数 / 段数的唯一旋钮
     range = 32.0                    # 标定距离
     min_range = 5.0                 # 此距离内无法标定（防贴身输出）
     scan_interval = 20              # 标定刷新间隔
-    cooldown = 120                  # 打击间隔（调长：呼叫打击而非循环炮台）
-    damage_per_level = 1.0          # 每级额外伤害
-    cost_base = 20000               # 单段基础 FE（扣傀儡的池）
-    cost_per_level = 5000           # 每级额外 FE
+    cooldown = 120                  # 基础打击间隔；实际再乘发射台冷却档
+    impact_damage = 40.0            # 单发冲击基础伤害（再乘发射台能量档）
+    impact_damage_per_level = 1.5   # 每级额外冲击伤害（单件满 14 级 → +21）
+    strike_radius = 6.0             # 瞄准圈/落点冲击视觉半径（伤害半径 ×1.15）
+    cost_base = 20000               # 单发基础 FE（从傀儡自己的池扣）
+    cost_per_level = 5000           # 每级额外 FE（满 14 级 → 90000）
     # ---- 只在战斗时引导 ----
     combat_only = true
     combat_memory = 200             # 脱离战斗后仍算"在战斗"的 tick 数
 ```
 
-> 早期设计里还有 `countdown` / `splash_radius` / `max_range` / `beam_color` 等键——
-> 前三个随第 3 刀（发射台）一起做，颜色等外观参数目前是 `OrbitalBeamRenderer` 里的常量。
+**发射台档位（代码常量）**：能量档 经济 ×0.60 成本 / ×0.75 伤害，标准 ×1.0，超载 ×1.60 / ×1.40；
+冷却档 快速 ×0.70、标准 ×1.00、蓄能 ×1.50。安全区 0/8/16/32 格，默认 **8**；
+落在安全区内时给傀儡主人发 action bar 提示（每 5 秒最多一条）。
 
 ---
 
@@ -396,17 +428,23 @@ MEK 的 `LaserParticle` 构造器是 **private**，`LaserParticleData` 只有
 
 | 刀 | 内容 | 状态 |
 |---|---|---|
-| **第 1 刀** | `OrbitalBeamEntity` + `OrbitalBeamRenderer`（内外双层光柱）+ MEK 激光伤害源 + `/golems_arsenal orbital <target> [伤害]` 调试命令 | ✅ **已完成**，已实机验证外观与伤害 |
-| **第 2 刀** | 引导升级（合金链 **3 件**，逐级前置）+ 目标标定 + 段数分配 + FE 消耗 | ✅ **已完成**（玩家侧"目标指示器"未做） |
-| **第 3 刀** | 发射台方块 + 载荷 + `SavedData` 在轨记录 + 锚点物品 + 倒计时 + 升空短特效 | ⏳ 未开始 |
+| **第 1 刀** | `OrbitalBeamEntity` + `OrbitalBeamRenderer` + 伤害 + `/ga full` 调试命令 | ✅ 已完成 |
+| **第 2 刀** | 引导升级（合金链收敛为 **1 件**，+14 级）+ 目标标定 + FE 消耗 | ✅ 已完成 |
+| **第 3 刀** | 火箭 + `OrbitalPlatforms` 在轨记录 + 倒计时 + 升空 + 入轨 | ✅ 已完成 |
+| **第 4 刀** | 激光发射台（方块/方块实体/菜单/GUI/平台绑定/安全区/能量冷却档） | ✅ 2026-10-21 完成 |
+| **收尾** | 引导升级改用 `OrbitalStrike` 全流程（单目标、单发） | ✅ 2026-10-21 完成 |
 
-**第 1 刀刻意不依赖任何在轨状态**——调试命令直接指定目标即可验证渲染与伤害。
-这两件事是本设计里最容易做错的部分（几何、贴图、混合方式），先隔离验证，再叠玩法。
-调试验证命令（伤害填 0 = 纯看渲染）：
+调试验证命令（不依赖发射台/平台）：
 
 ```
-/golems_arsenal orbital @s 0
+/ga full 14          # 完整激光炮
+/ga shot 14          # 只发射弹
+/ga guide 14         # 只看六束瞄准
 ```
+
+引导升级的端到端验证：火箭入轨 → 放发射台（自动绑定）→ 装
+`infused_alloy_guidance_upgrade` + 能量升级 → 让傀儡进入战斗。
+**注意**：发射台默认安全区 8 格；如果目标在安全区内会被取消，并给主人发 action bar 提示。
 
 ---
 
@@ -414,12 +452,13 @@ MEK 的 `LaserParticle` 构造器是 **private**，`LaserParticleData` 只有
 
 | 项 | 状态 |
 |---|---|
-| 能源升级贴图改名（`lite_`→`elite_`、基础↔终极内容对调） | 等用户操作，贴图目录写入被系统权限拒绝 |
-| `orbital_laser.png` 改名（贴图现名 `镭射.png`） | 等用户操作，非 ASCII 资源路径无先例、有风险 |
-| 引导链数值实测（满配 14 级 → 15 目标 / 15 段 / 17 伤害每段） | 待实测，可能偏猛；`damage_per_level` 与 `cost_per_level` 可调 |
-| 引导链与辐射链的专属贴图 | 现复用能源合金贴图 + 原版 `spectral_arrow` 占位 |
-| 玩家侧"目标指示器"物品 | 未做（第 2 刀只做了傀儡引导） |
-| 落点改用 MEK 的 `LaserParticleData` 粒子 | 可选增强，不涉及对方客户端类 |
-| 作废文件清理 | `AlloyEnergyUpgradeItem`、`RadiationDamageable`（已清空为注释）、`models/item/orbital_guidance_upgrade.json`、`recipes/orbital_guidance_upgrade.json`、`tags/items/guidance_base_upgrades.json`（已置空） |
-| 落点区块的临时加载与释放 | 第 3 刀时处理，务必打击结束即释放 |
+| 引导链数值实测（满 14 级 → 61 基础伤害 × 能量档；90000 FE × 能量档） | 待实测；`impact_damage` / `cost_base` 可调 |
+| 发射台 GUI 实机观感 | 自绘深色面板，无贴图；待看文字/按钮对齐 |
+| 平台绑定多人服边界 | 全局覆盖 + 同维度最近发射台；同一玩家多平台可手动切换；跨维度不生效 |
+| 发射台配方 | 已加 `laser_console.json`（MEK 材料，`forge:mod_loaded` 门控） |
+| 方块破坏（`break_blocks` 等键） | 配置键在，当前只做伤害、不挖方块——**未实现，不是 bug** |
+| 玩家侧"目标指示器"物品 | 未做（目前只有傀儡引导） |
+| 落点改用 MEK 的 `LaserParticleData` 粒子 | 可选增强 |
+| 作废文件清理 | `MekanismLaserDamage`（已无调用方，保留作参考）等 |
+| 落点区块的临时加载与释放 | 未做；目标区块本来就加载，暂未处理 |
 

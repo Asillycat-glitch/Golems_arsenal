@@ -83,6 +83,32 @@ public final class ShaderEffects {
         return DEFAULT_BRIGHTNESS;
     }
 
+    /**
+     * 光影下的**颜色**倍率：alpha 之外再压 RGB，避免 shaderpack 忽略 alpha
+     * 或直接按 HDR 亮度抓 bloom。无光影时 1.0。
+     */
+    public static float colorScale() {
+        if (!shaderPackActive()) {
+            return 1.0F;
+        }
+        return Math.max(0.05F, brightness() * 0.65F);
+    }
+
+    /** 给 0xRRGGBB 的整数颜色套 colorScale，用于 AuraMesh 这类 int 颜色接口。 */
+    public static int dimRgb(int rgb) {
+        float scale = colorScale();
+        if (scale >= 0.999F) {
+            return rgb;
+        }
+        int r = (rgb >> 16) & 0xFF;
+        int g = (rgb >> 8) & 0xFF;
+        int b = rgb & 0xFF;
+        r = Math.max(0, Math.min(255, Math.round(r * scale)));
+        g = Math.max(0, Math.min(255, Math.round(g * scale)));
+        b = Math.max(0, Math.min(255, Math.round(b * scale)));
+        return (r << 16) | (g << 8) | b;
+    }
+
     /** 0 = 保留原色，1 = 完全拉到暖金。 */
     public static float warmth() {
         return shaderPackActive() ? 1.0F : 0.0F;

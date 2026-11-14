@@ -5,6 +5,8 @@ import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyCapability;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyStorage;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.item.equipments.MetalGolemWeaponItem;
 import net.minecraft.ChatFormatting;
@@ -12,6 +14,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
@@ -19,9 +26,13 @@ import net.minecraftforge.common.capabilities.ICapabilityProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
+    /** Tech-upgrade attack percent, same id as the old tick-maintained modifier. */
+    public static final java.util.UUID KATANA_PERCENT_UUID = java.util.UUID.nameUUIDFromBytes(
+            "golems_arsenal:katana_percent".getBytes(StandardCharsets.UTF_8));
     public static final int BASE_ENERGY_CAPACITY = 1_000_000;
     /** 镜像 Config 的 attack_cost 默认值；实际消耗请读 {@link #getEnergyPerAttack(ItemStack)}。 */
     public static final int ENERGY_PER_ATTACK = 2_000;
@@ -67,6 +78,27 @@ public class GolemEnergyKatanaItem extends MetalGolemWeaponItem {
     /** ATTACK_DAMAGE attribute bonus: +5% per tech upgrade level while held. */
     public float getTechAttackPercent(int techLevel) {
         return (float) (techLevel * Config.TECH_DAMAGE_PER_LEVEL.get());
+    }
+
+    /**
+     * 科技等级加成走原版装备属性，不再由 WeaponEventHandler 每 tick 重写。
+     * 这是静态值（只随 modifiers 变）；装备 NBT 变化由 detectEquipmentUpdates 补刷。
+     */
+    @Override
+    public Multimap<Attribute, AttributeModifier> getGolemModifiers(ItemStack stack, Entity entity,
+                                                                    EquipmentSlot slot) {
+        Multimap<Attribute, AttributeModifier> map =
+                HashMultimap.create(super.getGolemModifiers(stack, entity, slot));
+        if (slot != getSlot() || !(entity instanceof AbstractGolemEntity<?, ?> golem)) {
+            return map;
+        }
+        int tech = GolemEnergyTechModifier.levelOf(golem);
+        if (tech > 0) {
+            map.put(Attributes.ATTACK_DAMAGE, new AttributeModifier(
+                    KATANA_PERCENT_UUID, "golems_arsenal_katana_percent",
+                    getTechAttackPercent(tech), AttributeModifier.Operation.MULTIPLY_BASE));
+        }
+        return map;
     }
 
     /** Extra FE consumed on top of the powered-hit cost when the lightning chain triggers. */

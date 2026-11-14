@@ -4,6 +4,7 @@ import a_silly_cat.golems_arsenal.Golems_arsenal;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 
 public final class ModTags {
@@ -56,6 +57,23 @@ public final class ModTags {
      */
     public static final TagKey<Item> GUIDANCE_ALLOY_UPGRADES =
             TagKey.create(Registries.ITEM, new ResourceLocation(Golems_arsenal.MODID, "guidance_alloy_upgrades"));
+
+    /**
+     * MekaSuit armor pieces that the minion compatibility treats as a suit.
+     *
+     * <p>Defaults to the four Mekanism pieces; datapacks can append addon armor. This tag gates
+     * the <b>effects</b> (charge distribution / energy shield), not the ability to equip the
+     * armor: Modular Golems already accepts any {@link net.minecraft.world.item.ArmorItem}.</p>
+     */
+    public static final TagKey<Item> MINION_MEKA_SUIT =
+            TagKey.create(Registries.ITEM, new ResourceLocation(Golems_arsenal.MODID, "minion_meka_suit"));
+
+    /**
+     * Entity types that the MekaSuit compatibility runs on. Defaults to the humanoid golem;
+     * datapacks can add other armor-capable minions.
+     */
+    public static final TagKey<EntityType<?>> MEKA_SUIT_MINIONS =
+            TagKey.create(Registries.ENTITY_TYPE, new ResourceLocation(Golems_arsenal.MODID, "meka_suit_minions"));
 
     /**
      * Weapon trigger tags live in the {@code modulargolems} namespace (mirroring Modular Golems'

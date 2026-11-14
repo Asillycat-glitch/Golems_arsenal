@@ -9,6 +9,7 @@ import a_silly_cat.golems_arsenal.tech.item.GolemEnergyKatanaItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemEnergyHammerItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemZeroSwordItem;
 import a_silly_cat.golems_arsenal.tech.item.GolemTrackingMechanicalBowItem;
+import a_silly_cat.golems_arsenal.tech.energy.MinionChargeLinkItem;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponUpgradeItem;
 import a_silly_cat.golems_arsenal.base.upgrade.RepeatableExpansionItem;
@@ -228,6 +229,23 @@ public final class ModItems {
             "tech_expansion_template",
             () -> new RepeatableExpansionItem(new Item.Properties().stacksTo(64), GolemUpgrades::techExpansionModifier));
 
+    /**
+     * 激光发射台的方块物品。方块本身无条件下沉（它不引用任何 MEK 类），
+     * 但创造栏里只在 MEK 在场时显示——没有 MEK 就没有火箭平台，它只是一台不能开火的终端。
+     */
+    public static final RegistryObject<Item> LASER_CONSOLE = ITEMS.register(
+            "laser_console",
+            () -> new a_silly_cat.golems_arsenal.tech.orbit.LaserConsoleItem(
+                    ModBlocks.LASER_CONSOLE.get(), new Item.Properties()));
+
+    /**
+     * 仆从充能链接：玩家背包里的 FE 中转卡。被 Powah / 通量网络 / MEK 充电台充电后，
+     * 自动把 FE 转发给附近属于自己的仆从（模块化傀儡、MEK 机器人等）。
+     */
+    public static final RegistryObject<MinionChargeLinkItem> MINION_CHARGE_LINK = ITEMS.register(
+            "minion_charge_link",
+            () -> new MinionChargeLinkItem(new Item.Properties()));
+
     public static final RegistryObject<CreativeModeTab> TAB = CREATIVE_TABS.register(
             "golems_arsenal",
             () -> CreativeModeTab.builder()
@@ -243,6 +261,7 @@ public final class ModItems {
                         output.accept(KEY_SWORD.get());
                         output.accept(GOLEM_ENERGY_UPGRADE.get());
                         output.accept(GOLEM_ENERGY_TECH_UPGRADE.get());
+                        output.accept(MINION_CHARGE_LINK.get());
                         output.accept(COMMAND_UPGRADE_1.get());
                         output.accept(COMMAND_UPGRADE_2.get());
                         output.accept(COMMAND_UPGRADE_3.get());
@@ -274,6 +293,7 @@ public final class ModItems {
                             output.accept(GolemMagickaCompat.SCROLL_UPGRADE.get());
                         }
                         if (ModList.get().isLoaded("mekanism")) {
+                            output.accept(LASER_CONSOLE.get());
                             acceptMekanismEntries(output);
                         }
                     })
@@ -298,13 +318,18 @@ public final class ModItems {
                     "ELITE_ALLOY_ENERGY_UPGRADE",
                     "ULTIMATE_ALLOY_ENERGY_UPGRADE",
                     "INFUSED_ALLOY_GUIDANCE_UPGRADE",
-                    "ELITE_ALLOY_GUIDANCE_UPGRADE",
-                    "ULTIMATE_ALLOY_GUIDANCE_UPGRADE",
                     "RADIATION_GENERATOR_UPGRADE_1",
                     "RADIATION_GENERATOR_UPGRADE_2",
                     "RADIATION_GENERATOR_UPGRADE_3",
                     "ROCKET"}) {
-                Object entry = compat.getField(field).get(null);
+                Object entry;
+                try {
+                    entry = compat.getField(field).get(null);
+                } catch (NoSuchFieldException missing) {
+                    // 某个条目被移除时不要静默拖垮整批（2026-10-20：删两档引导后，
+                    // 该异常导致辐射三档和火箭全都没进创造栏）
+                    continue;
+                }
                 if (entry instanceof RegistryObject<?> reg && reg.get() instanceof Item item) {
                     output.accept(item);
                 }

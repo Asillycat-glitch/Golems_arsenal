@@ -3,9 +3,11 @@ package a_silly_cat.golems_arsenal.compat.mekanism;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemUpgrades;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemWeaponUpgradeItem;
+import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyTiers;
 import a_silly_cat.golems_arsenal.tech.orbit.RocketItem;
 import a_silly_cat.golems_arsenal.tech.upgrade.AlloyChains;
 import net.minecraft.world.item.Item;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -104,6 +106,17 @@ public final class MekanismCompat {
     }
 
     public static void register(IEventBus bus) {
+        // The golem FE pool mirrors Mekanism's energy cube tiers when Mekanism is present.
+        // This class is only loaded behind the ModList gate in CompatDispatch, so the
+        // mekanism.* references in MekanismEnergyTiers never reach a no-MEK environment.
+        GolemEnergyTiers.setMekProvider(MekanismEnergyTiers::forLevel);
+        MinecraftForge.EVENT_BUS.register(MinionMekaSuitHandler.class);
+        // Robit 没有 Forge 能量能力，只暴露 IEnergyContainer；给充能链接装上适配器。
+        try {
+            MekanismMinionEnergy.install();
+        } catch (Throwable t) {
+            Golems_arsenal.LOGGER.warn("Mekanism Robit charge adapter not installed: {}", t.toString());
+        }
         ModRecipeSerializers.register(bus);
         ITEMS.register(bus);
     }

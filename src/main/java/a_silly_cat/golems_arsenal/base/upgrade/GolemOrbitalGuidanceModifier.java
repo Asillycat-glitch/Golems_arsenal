@@ -1,9 +1,9 @@
 package a_silly_cat.golems_arsenal.base.upgrade;
 
 import a_silly_cat.golems_arsenal.Config;
-import a_silly_cat.golems_arsenal.base.entity.OrbitalBeamEntity;
-import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
 import a_silly_cat.golems_arsenal.tech.mekanism.OrbitalImpact;
+import a_silly_cat.golems_arsenal.tech.orbit.LaserConsoleNetwork;
+import a_silly_cat.golems_arsenal.tech.orbit.OrbitalStrike;
 import dev.xkmc.modulargolems.content.core.StatFilterType;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.modifier.base.GolemModifier;
@@ -14,38 +14,35 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * 天基激光**引导升级**（合金链）。
  *
- * <p>傀儡不再自己开火，而是当"前沿观察员"：它把自己看到的敌人**标定**给在轨的天基平台，
- * 由平台从天上打下来。所以：
+ * <p>傀儡不再自己开火，而是当"前沿观察员"：它标定**一个**敌人，由在轨平台打下一发
+ * 完整的激光炮（六束瞄准 → 弹体 → 落点冲击，见 {@link OrbitalStrike}）。
  *
+ * <p><b>为什么是单目标。</b>2026-10-21 用户定稿：原先"等级越高可同时标定越多目标、目标少时
+ * 段数全砸首目标"的多段锁定是留给未来「增强升级」的；现在没有增加锁定数的需求，
+ * 所以这一档就是**一发**——等级只负责单发伤害与 FE 消耗，不再堆目标数。
+ *
+ * <p>三条游戏约束（都已在代码里生效）：
  * <ul>
- *   <li><b>引导不了近身目标</b>：太近的敌人来不及标定（{@link Config#ORBITAL_BEAM_MIN_RANGE}），
- *       这条同时限制了它在贴身混战里的强度，并给了"贴脸"一个反制手段。</li>
- *   <li><b>被挡住就失效</b>：目标被方块遮挡时打不到（{@link #canSee}），掩体因此有意义。</li>
- *   <li><b>不吃护甲</b>：伤害走 MEK 的激光伤害类型（见 {@code OrbitalBeamEntity}），
- *       是"定点清除"而不是"额外的一段输出"。</li>
+ *   <li><b>贴身目标引导不了</b>：{@link Config#ORBITAL_BEAM_MIN_RANGE}，防"变成额外近战伤害"；</li>
+ *   <li><b>被方块挡住就打不到</b>：{@link #canSee} 做视线检测，掩体有意义；</li>
+ *   <li><b>每发扣傀儡的 FE</b>：由合金能源链决定打得起几发，打不起就静默停火。</li>
  * </ul>
  *
- * <p><b>等级即倍率</b>（与合金能源链同一套步长制）：
- * <pre>
- *   总等级 L = 2（灌注）+ 4（精英）+ 8（终极）   满配 14（这条链没有核心件）
- *   可同时引导数  = 1 + (L/2 − 1) × step    ← 只装灌注就是 1 个目标
- *   单次打击段数  = 同上（目标少 → 段数全砸在首目标上，单挑最猛）
- *   单次伤害      = damage_base + level × damage_per_level
- *   单次 FE 消耗  = cost_base   + level × cost_per_level     ← 从傀儡自己的池里扣
- * </pre>
- * 伤害或 FE 任一项不满足就不开火——**代价是"打得起"**，不是冷却。
+ * <p><b>发射台是必需的地面控制端</b>：傀儡所在维度里必须有一个已启用、且已绑定在轨平台的
+ * {@link LaserConsoleBlockEntity}。发射台决定能量档 / 冷却档 / 友军保护 / 安全区；
+ * 没有发射台或平台未入轨时，这一发不会打出去。
  */
 public class GolemOrbitalGuidanceModifier extends GolemModifier {
 
@@ -54,15 +51,18 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
 
     public static final String ID = "golems_arsenal:orbital_guidance";
 
-    /** 各档的"档位系数 − 1"：只装灌注（等级 2）→ 1，再装精英（6）→ 3，三件齐（14）→ 7。 */
-    private static final int[] WEIGHTED_BONUS = {0, 1, 3, 7};
-
-    /** 待打击的目标列表（UUID）。存 NBT，读档后继续。 */
-    private static final String TAG_TARGETS = "GolemsArsenalGuidanceTargets";
+    /** 当前标定的目标（单个 UUID）。存 NBT，读档后继续。 */
+    private static final String TAG_TARGET = "GolemsArsenalGuidanceTarget";
     /** 当前标记的批次（时间戳），用于调试观察"标定是否在刷新"。 */
     private static final String TAG_STAMP = "GolemsArsenalGuidanceStamp";
     /** 最近一次"处于战斗"的游戏时间（tick）。0 = 从未。 */
     private static final String TAG_COMBAT = "GolemsArsenalGuidanceCombat";
+    /** 最近一次成功开火的游戏时间（tick）。0 = 从未。 */
+    private static final String TAG_LAST_SHOT = "GolemsArsenalGuidanceLastShot";
+    /** 最近一次提示"目标在安全区内"的游戏时间，避免每 tick 刷屏。 */
+    private static final String TAG_SAFE_WARN = "GolemsArsenalGuidanceSafeWarn";
+    /** 最近一次提示"目标上方有遮挡"的游戏时间。 */
+    private static final String TAG_COVERED_WARN = "GolemsArsenalGuidanceCoveredWarn";
 
     public GolemOrbitalGuidanceModifier() {
         super(StatFilterType.ATTACK, MAX_LEVEL);
@@ -78,39 +78,30 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
     }
 
     /**
-     * "合金加成"的等价量 = 总等级 ÷ 入口档的等级系数。
+     * 单发基础伤害（不含发射台的能量档倍率）。
      *
-     * <p><b>这条链没有核心件</b>（是 MEK 附属联动），所以最低档就是灌注（贡献 2 级）。
-     * 于是：只装灌注 → 1，加精英 → 1+2=3，再加终极 → 1+2+4=7，三件齐 → 15。
-     * 这个形状与能源链的 {@code alloyBonus} 一致（那里是 0/2/6/14，因为多一个 +1 的核心档），
-     * 差别只在这条链的起点是 2 而不是 1。
+     * <p>2026-10-21 起从"每 tick 光柱伤害"改成"一发炮的冲击伤害"：默认值比旧的光柱
+     * 高得多，因为现在一轮只有一发，而不是最多 15 段。
      */
-    public static int alloyBonus(int level) {
-        return Math.max(0, level) / 2;
-    }
-
-    /** 可同时标定的目标数。0 级 = 没装 = 0 个。 */
-    public static int maxTargets(int level) {
-        if (level <= 0) {
-            return 0;
-        }
-        return 1 + alloyBonus(level) * Config.ORBITAL_BEAM_GUIDANCE_STEP.get();
-    }
-
-    /** 单次打击的段数：目标少时火力集中（单目标最猛）。 */
-    public static int volleys(int level) {
-        return maxTargets(level);
-    }
-
-    /** 单段伤害。 */
     public static float damageOf(int level) {
-        return (float) (Config.ORBITAL_BEAM_DAMAGE.get() + level * Config.ORBITAL_BEAM_DAMAGE_PER_LEVEL.get());
+        return (float) (Config.ORBITAL_GUIDANCE_IMPACT_DAMAGE.get()
+                + level * Config.ORBITAL_GUIDANCE_IMPACT_DAMAGE_PER_LEVEL.get());
     }
 
-    /** 单段 FE 消耗。 */
+    /** 单发基础 FE 消耗（不含发射台的能量档倍率）。 */
     public static int costOf(int level) {
         return (int) Math.min(Integer.MAX_VALUE,
                 Config.ORBITAL_BEAM_COST_BASE.get() + (long) level * Config.ORBITAL_BEAM_COST_PER_LEVEL.get());
+    }
+
+    /** 发射台的能量档把基础伤害/消耗乘上倍率。 */
+    public static int costFor(int level, LaserConsoleNetwork.Console console) {
+        return (int) Math.min(Integer.MAX_VALUE,
+                Math.round(costOf(level) * console.energyCostMultiplier()));
+    }
+
+    public static float damageFor(int level, LaserConsoleNetwork.Console console) {
+        return (float) (damageOf(level) * console.energyDamageMultiplier());
     }
 
     // ------------------------------------------------------------------
@@ -127,24 +118,19 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
             return;
         }
         // 记忆"最近是否处于战斗"：只要它自己挨打/打人/被某只怪盯上，就记一笔时间戳。
-        // 这个判定必须在开火之前做——它同时决定"要不要点火"和"冷却能不能推进"。
         boolean inCombat = trackCombat(golem);
 
-        // 不在战斗中就不引导：既避免它对着路过的野兔放天基炮，也让光束不会一直在同一片
-        // 地形上犁（破坏是累积的，停火就等于停止破坏）。
+        // 不在战斗中就不引导：避免它对着路过的野兔放天基炮。
         if (Config.ORBITAL_BEAM_COMBAT_ONLY.get() && !inCombat) {
-            // 停火时把冷却一并冻结：这样"重新进入战斗"不会立刻白送一发。
             return;
         }
 
-        // 标定节拍：每 scan_interval tick 重新挑一批目标
+        // 标定节拍：每 scan_interval tick 重新挑一个目标
         if (golem.tickCount % Math.max(1, Config.ORBITAL_BEAM_SCAN_INTERVAL.get()) == 0) {
-            identify(golem, lv);
+            identify(golem);
         }
-        // 打击节拍：每 cooldown tick 打一轮
-        if (golem.tickCount % Math.max(1, Config.ORBITAL_BEAM_COOLDOWN.get()) == 0) {
-            fire(golem, lv);
-        }
+        // 打击节拍：真正的间隔由发射台的冷却档决定，这里每 tick 只做一次廉价检查。
+        tryFire(golem, lv);
     }
 
     /**
@@ -154,11 +140,8 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
      * <ol>
      *   <li>傀儡自己有攻击目标（{@code getTarget()}）；</li>
      *   <li>它最近打过人或挨过打（{@code getLastHurtMob()} / {@code getLastHurtByMob()}）；</li>
-     *   <li>附近有怪**正盯着它或它的主人**（这是"前沿观察员"该有的嗅觉，
-     *       也是唯一能在"还没开打"时就成立的条件）。</li>
+     *   <li>附近有怪**正盯着它或它的主人**。</li>
      * </ol>
-     *
-     * <p>时间戳存 {@code persistentData}，读档后仍然有效（存档里战斗记忆不该丢）。
      */
     private static boolean trackCombat(AbstractGolemEntity<?, ?> golem) {
         CompoundTag data = golem.getPersistentData();
@@ -196,104 +179,151 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
         return false;
     }
 
-    /** 标定：把自己看到的敌意目标记进待打列表（最多 {@link #maxTargets} 个，就近优先）。 */
-    private static void identify(AbstractGolemEntity<?, ?> golem, int lv) {
-        double range = Config.ORBITAL_BEAM_GUIDANCE_RANGE.get();
-        double minRange = Config.ORBITAL_BEAM_MIN_RANGE.get();
-        AABB box = golem.getBoundingBox().inflate(range);
+    /**
+     * 标定：挑**一个**目标（傀儡当前目标优先，否则最近的合法威胁）。
+     *
+     * <p>合法性 = 活着、不是自己人、距离在 {@code [min_range, range]} 内、视线没有被方块挡住。
+     * 另外只认"真有敌意"的目标：{@link Enemy}，或已经锁定傀儡/主人的 {@link Mob}；
+     * 这样不会把路过的牛羊当成敌人（当前目标例外——傀儡自己已经决定打它）。
+     */
+    private static void identify(AbstractGolemEntity<?, ?> golem) {
+        LivingEntity best = null;
 
-        UUID master = golem.getOwnerUUID();
-        List<LivingEntity> candidates = new ArrayList<>();
-        for (LivingEntity target : golem.level().getEntitiesOfClass(LivingEntity.class, box)) {
-            if (!target.isAlive() || target == golem) {
-                continue;
-            }
-            if (GolemFriendlyFire.isFriendly(golem, target, golem.getUUID(), master)) {
-                continue;
-            }
-            double d = golem.distanceTo(target);
-            if (d < minRange || d > range) {
-                continue;
-            }
-            // 被方块挡住的打不到：掩体有意义，也避免"穿墙击杀"的观感问题
-            if (!canSee(golem, target)) {
-                continue;
-            }
-            candidates.add(target);
+        // 傀儡当前正在打的目标优先（让平台配合它的攻击节奏）
+        LivingEntity current = golem.getTarget();
+        if (current != null && golem.level() instanceof ServerLevel server
+                && !OrbitalImpact.canHitFromOrbit(golem.level(), current)) {
+            // 地底/室内的目标：能看见、也能打近战，但天基光柱够不到。提示一次，不标定。
+            warnCovered(golem, server);
         }
-        if (candidates.isEmpty()) {
-            return;
+        if (current != null && isValidTarget(golem, current)) {
+            best = current;
         }
-        candidates.sort((a, b) -> Double.compare(golem.distanceTo(a), golem.distanceTo(b)));
 
-        List<UUID> picked = new ArrayList<>();
-        for (LivingEntity target : candidates) {
-            // 傀儡当前正在打的目标优先（让平台配合它的攻击节奏）
-            if (target == golem.getTarget()) {
-                picked.add(target.getUUID());
-            }
-        }
-        for (LivingEntity target : candidates) {
-            if (picked.size() >= maxTargets(lv)) {
-                break;
-            }
-            if (!picked.contains(target.getUUID())) {
-                picked.add(target.getUUID());
+        if (best == null) {
+            double range = Config.ORBITAL_BEAM_GUIDANCE_RANGE.get();
+            AABB box = golem.getBoundingBox().inflate(range);
+            double bestDist = Double.MAX_VALUE;
+            for (LivingEntity candidate : golem.level().getEntitiesOfClass(LivingEntity.class, box)) {
+                if (!isValidTarget(golem, candidate)) {
+                    continue;
+                }
+                double dist = golem.distanceToSqr(candidate);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = candidate;
+                }
             }
         }
 
         CompoundTag data = golem.getPersistentData();
         data.putLong(TAG_STAMP, golem.level().getGameTime());
-        // 只存完整 UUID：int 摘要还原不出实体，没有意义。
-        CompoundTag full = new CompoundTag();
-        full.putInt("n", picked.size());
-        for (int i = 0; i < picked.size(); i++) {
-            full.putUUID("t" + i, picked.get(i));
+        if (best == null) {
+            data.remove(TAG_TARGET);
+        } else {
+            data.putUUID(TAG_TARGET, best.getUUID());
         }
-        data.put(TAG_TARGETS, full);
     }
 
-    /** 开火：对当前标定的目标各打一段（目标少于上限时，差额转成对首目标的额外段数）。 */
-    private static void fire(AbstractGolemEntity<?, ?> golem, int lv) {
+    /** 开火：对当前标定的唯一目标打一发；间隔、伤害、能耗由发射台的档位决定。 */
+    private static void tryFire(AbstractGolemEntity<?, ?> golem, int lv) {
         if (!(golem.level() instanceof ServerLevel level)) {
             return;
         }
-        List<LivingEntity> targets = readTargets(golem);
-        if (targets.isEmpty()) {
+        CompoundTag data = golem.getPersistentData();
+        long now = level.getGameTime();
+
+        LaserConsoleNetwork.Console console = LaserConsoleNetwork.findBest(level, golem.position());
+        if (console == null) {
             return;
         }
-        int volleyCount = volleys(lv);
-        int perTargetVolleys = Math.max(1, volleyCount - (targets.size() - 1));
-        float damage = damageOf(lv);
-        int cost = costOf(lv);
+        long last = data.getLong(TAG_LAST_SHOT);
+        if (last != 0L && now - last < console.effectiveCooldownTicks()) {
+            return;
+        }
 
-        for (LivingEntity target : targets) {
-            if (!target.isAlive()) {
-                continue;
-            }
-            int strikes = target == targets.get(0) ? volleyCount : perTargetVolleys;
-            for (int i = 0; i < strikes; i++) {
-                if (!payCost(golem, cost)) {
-                    // 打不起了：直接停火（下一轮冷却后若充上电会继续）
-                    return;
-                }
-                fireOne(level, golem, target, damage);
-            }
+        LivingEntity target = readTarget(golem);
+        // 目标可能是在标定之后才躲进地底的：先单独判一次，给出明确提示，再清目标。
+        if (target != null && !OrbitalImpact.canHitFromOrbit(level, target)) {
+            warnCovered(golem, level);
+            data.remove(TAG_TARGET);
+            return;
+        }
+        if (target == null || !isValidTarget(golem, target)) {
+            data.remove(TAG_TARGET);
+            return;
+        }
+
+        Vec3 impact = OrbitalImpact.impactPoint(level, target);
+        // 发射台周围是安全区：不往自己家门口落炮。
+        if (LaserConsoleNetwork.isInSafeZone(level, impact)) {
+            warnSafeZone(golem, level);
+            return;
+        }
+
+        int cost = costFor(lv, console);
+        if (!payCost(golem, cost)) {
+            return;
+        }
+
+        OrbitalStrike.cast(level, impact,
+                Config.ORBITAL_GUIDANCE_STRIKE_RADIUS.get().floatValue(),
+                damageFor(lv, console),
+                Config.ORBITAL_BEAM_RESIDUAL_DAMAGE.get().floatValue(),
+                Config.ORBITAL_BEAM_WIDTH.get().floatValue(),
+                golem,
+                Config.ORBITAL_BEAM_ALTITUDE.get().floatValue(),
+                console.friendlyProtection());
+        data.putLong(TAG_LAST_SHOT, now);
+    }
+
+    /**
+     * 目标落在发射台安全区里时提示主人。
+     *
+     * <p>这条以前是**完全静默**的：玩家只看到傀儡不发射，看不出是安全区挡的。
+     * 现在每 5 秒最多发一条 action bar（不刷聊天栏）。
+     */
+    private static void warnSafeZone(AbstractGolemEntity<?, ?> golem, ServerLevel level) {
+        CompoundTag data = golem.getPersistentData();
+        long now = level.getGameTime();
+        if (now - data.getLong(TAG_SAFE_WARN) < 100L) {
+            return;
+        }
+        data.putLong(TAG_SAFE_WARN, now);
+        UUID ownerId = golem.getOwnerUUID();
+        if (ownerId == null) {
+            return;
+        }
+        if (level.getPlayerByUUID(ownerId) instanceof net.minecraft.server.level.ServerPlayer player) {
+            player.displayClientMessage(Component.translatable(
+                    "message.golems_arsenal.orbital_safe_zone")
+                    .withStyle(ChatFormatting.RED), true);
         }
     }
 
-    private static void fireOne(ServerLevel level, AbstractGolemEntity<?, ?> golem,
-                                LivingEntity target, float damage) {
-        // 落点走 OrbitalImpact：目标脚下的地表。
-        Vec3 impact = OrbitalImpact.impactPoint(level, target);
-        // 基础伤害 = 20 + 傀儡攻击力；灼烧固定 1 秒（20 tick）
-        float base = 20.0F + (float) golem.getAttributeValue(
-                net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
-        OrbitalBeamEntity.fire(level, impact, base,
-                Config.ORBITAL_BEAM_RESIDUAL_DAMAGE.get().floatValue(),
-                Config.ORBITAL_BEAM_HIT_RADIUS.get(), 20,
-                Config.ORBITAL_BEAM_WIDTH.get().floatValue(),
-                golem, Config.ORBITAL_BEAM_ALTITUDE.get().floatValue());
+    /**
+     * 目标头顶有遮挡、光柱够不到时提示主人。
+     *
+     * <p>这是"地底作战一直召唤、却打不到"的主要反馈：地底/室内的目标会被
+     * {@link OrbitalImpact#canHitFromOrbit} 判为不可标定，既不标定也不扣 FE；
+     * 如果目标是标定后才躲进去的，这里会提示一次并立刻清掉目标。
+     */
+    private static void warnCovered(AbstractGolemEntity<?, ?> golem, ServerLevel level) {
+        CompoundTag data = golem.getPersistentData();
+        long now = level.getGameTime();
+        if (now - data.getLong(TAG_COVERED_WARN) < 200L) {
+            return;
+        }
+        data.putLong(TAG_COVERED_WARN, now);
+        UUID ownerId = golem.getOwnerUUID();
+        if (ownerId == null) {
+            return;
+        }
+        if (level.getPlayerByUUID(ownerId) instanceof net.minecraft.server.level.ServerPlayer player) {
+            player.displayClientMessage(Component.translatable(
+                    "message.golems_arsenal.orbital_covered")
+                    .withStyle(ChatFormatting.RED), true);
+        }
     }
 
     /** 从傀儡自己的 FE 池扣费；不够就返回 false。 */
@@ -301,38 +331,63 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
         if (cost <= 0) {
             return true;
         }
-        return golem.getCapability(GolemEnergyProvider.CAPABILITY).map(storage -> {
-            if (storage.getEnergyStored() < cost) {
-                return false;
-            }
-            return storage.extractEnergy(cost, false) >= cost;
-        }).orElse(false);
+        return golem.getCapability(a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider.CAPABILITY)
+                .map(storage -> {
+                    if (storage.getEnergyStored() < cost) {
+                        return false;
+                    }
+                    return storage.extractEnergy(cost, false) >= cost;
+                }).orElse(false);
     }
 
-    /** 把标定列表读回来（丢弃已死/已消失的目标）。 */
-    private static List<LivingEntity> readTargets(AbstractGolemEntity<?, ?> golem) {
+    /** 把标定的目标读回来（已死/已消失就返回 null）。 */
+    private static LivingEntity readTarget(AbstractGolemEntity<?, ?> golem) {
         CompoundTag data = golem.getPersistentData();
-        if (!data.contains(TAG_TARGETS, CompoundTag.TAG_COMPOUND)) {
-            return List.of();
+        if (!data.hasUUID(TAG_TARGET)) {
+            return null;
         }
-        CompoundTag full = data.getCompound(TAG_TARGETS);
-        int n = full.getInt("n");
-        if (n <= 0) {
-            return List.of();
+        if (!(golem.level() instanceof ServerLevel server)) {
+            return null;
         }
-        List<LivingEntity> out = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            if (!full.hasUUID("t" + i)) {
-                continue;
-            }
-            UUID uuid = full.getUUID("t" + i);
-            if (golem.level() instanceof ServerLevel server
-                    && server.getEntity(uuid) instanceof LivingEntity living
-                    && living.isAlive()) {
-                out.add(living);
-            }
+        UUID uuid = data.getUUID(TAG_TARGET);
+        return server.getEntity(uuid) instanceof LivingEntity living && living.isAlive()
+                ? living : null;
+    }
+
+    /** 目标是否合法：活着、不是自己人、距离合适、视线没被挡住、并且确实有敌意。 */
+    private static boolean isValidTarget(AbstractGolemEntity<?, ?> golem, LivingEntity target) {
+        if (target == golem || !target.isAlive()) {
+            return false;
         }
-        return out;
+        UUID master = golem.getOwnerUUID();
+        if (GolemFriendlyFire.isFriendly(golem, target, golem.getUUID(), master)) {
+            return false;
+        }
+        double dist = golem.distanceTo(target);
+        double range = Config.ORBITAL_BEAM_GUIDANCE_RANGE.get();
+        if (dist < Config.ORBITAL_BEAM_MIN_RANGE.get() || dist > range) {
+            return false;
+        }
+        if (!canSee(golem, target)) {
+            return false;
+        }
+        // 地底/室内目标：头顶有遮挡时落点会跑到遮挡物顶面，光柱从落点往上打，够不到目标。
+        // 直接判为不可标定，避免傀儡反复召唤、白扣 FE。
+        if (!OrbitalImpact.canHitFromOrbit(golem.level(), target)) {
+            return false;
+        }
+        if (target == golem.getTarget()) {
+            return true;
+        }
+        if (target instanceof Enemy) {
+            return true;
+        }
+        if (target instanceof Mob mob) {
+            LivingEntity mobTarget = mob.getTarget();
+            return mobTarget == golem
+                    || (master != null && mobTarget != null && master.equals(mobTarget.getUUID()));
+        }
+        return false;
     }
 
     /**
@@ -362,9 +417,9 @@ public class GolemOrbitalGuidanceModifier extends GolemModifier {
         int lv = levelOf2Detail(level);
         return List.of(
                 Component.translatable("upgrade.golems_arsenal.orbital_guidance.desc",
-                        maxTargets(lv), damageOf(lv), costOf(lv)).withStyle(ChatFormatting.GREEN),
-                Component.translatable("upgrade.golems_arsenal.orbital_guidance.volley",
-                        volleys(lv)).withStyle(ChatFormatting.GREEN),
+                        damageOf(lv), costOf(lv)).withStyle(ChatFormatting.GREEN),
+                Component.translatable("upgrade.golems_arsenal.orbital_guidance.pad")
+                        .withStyle(ChatFormatting.AQUA),
                 Component.translatable("upgrade.golems_arsenal.orbital_guidance.note")
                         .withStyle(ChatFormatting.DARK_AQUA));
     }

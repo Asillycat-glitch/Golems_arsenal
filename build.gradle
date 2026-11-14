@@ -31,6 +31,11 @@ java {
 // =====================================================================================
 def testbenchEnabled = project.hasProperty('testbench')
 
+// 正式构建只有主 mixin 配置；-Ptestbench 才把测试台的 mixin 配置追加进 mods.toml。
+// 测试台的 mixin 类与配置都在 testbench/ 源集里，普通 jar 里一行都不会有。
+def mixinConfigs = "${mod_id}.mixins.json,${mod_id}.golemmagicka.mixins.json,${mod_id}.tinkers.mixins.json" +
+        (testbenchEnabled ? ",${mod_id}.testbench.mixins.json" : "")
+
 sourceSets {
     testbench {
         java.srcDir 'testbench/java'
@@ -78,6 +83,7 @@ minecraft {
 
 repositories {
     mavenLocal() // 重要：供本地发布测试使用
+    mavenCentral()
     maven { url 'https://maven.minecraftforge.net' }
     maven { url 'https://maven.tterrag.com/' }
     maven { url 'https://maven.blamejared.com' }
@@ -116,6 +122,36 @@ dependencies {
     compileOnly fg.deobf(files("libs/l2artifacts-2.4.28.jar"))
     compileOnly fg.deobf(files("libs/jei-1.20.1-forge-15.20.0.130.jar"))
     compileOnly fg.deobf(files("libs/Jade-1.20.1-Forge-11.13.2.jar"))
+    // fantasy_ending 的 CatchActuallyHurt0Event（true damage 入口）。只在装了 fantasy 时加载；
+    // 这个 jar 只用于编译，不打包。
+    compileOnly fg.deobf(files("libs/fantasy_ending-1.20.1-2.7.20-all.jar"))
+
+    // Week 1/2: pure value/runtime tests (TimeWindow, GuardRuntime) run without a game.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
+}
+
+test {
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = files(sourceSets.test.output, sourceSets.main.output) + configurations.testRuntimeClasspath
+    // Gradle's Test worker writes its classpath into an @argfile; on this Windows
+    // checkout the project path contains non-ASCII characters and the worker decodes
+    // it as the platform charset, so the test class itself becomes ClassNotFound.
+    // unitTest below runs the same classes through JavaExec with a direct classpath.
+    enabled = false
+}
+
+tasks.register('unitTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = files(sourceSets.test.output, sourceSets.main.output) + configurations.testRuntimeClasspath
+    mainClass = 'org.junit.platform.console.ConsoleLauncher'
+    args '--scan-class-path', sourceSets.test.output.classesDirs.singleFile.absolutePath
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('unitTest')
 }
 
 // -------------------------------------------------------------------------------------
@@ -188,7 +224,8 @@ tasks.named('processResources', ProcessResources).configure {
             mod_license: mod_license,
             mod_version: mod_version,
             mod_authors: mod_authors,
-            mod_description: mod_description
+            mod_description: mod_description,
+            mixin_configs: mixinConfigs
     ]
     inputs.properties replaceProperties
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
@@ -219,7 +256,7 @@ tasks.named('jar', Jar).configure {
                 "Implementation-Version"  : project.jar.archiveVersion,
                 "Implementation-Vendor"   : mod_authors,
                 "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-                "MixinConfigs"            : "${mod_id}.mixins.json,${mod_id}.golemmagicka.mixins.json"
+                "MixinConfigs"            : mixinConfigs
         ])
     }
     finalizedBy 'reobfJar'

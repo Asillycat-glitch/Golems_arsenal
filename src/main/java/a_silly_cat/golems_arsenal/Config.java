@@ -28,18 +28,19 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue TRACKING_BOW_EXPLOSION_RADIUS;
     public static final ForgeConfigSpec.DoubleValue TRACKING_BOW_EXPLOSION_DAMAGE_RATIO;
     public static final ForgeConfigSpec.DoubleValue TRACKING_BOW_EXPLOSION_FACTOR_RATIO;
-    public static final ForgeConfigSpec.IntValue GOLEM_ENERGY_BASE_CAPACITY;
-    public static final ForgeConfigSpec.IntValue GOLEM_ENERGY_PER_LEVEL;
+    public static final ForgeConfigSpec.IntValue GOLEM_ENERGY_FALLBACK_CAPACITY;
+    public static final ForgeConfigSpec.IntValue GOLEM_ENERGY_FALLBACK_TRANSFER;
     public static final ForgeConfigSpec.IntValue GOLEM_ENERGY_LIGHTNING;
-    public static final ForgeConfigSpec.IntValue GOLEM_ENERGY_TRANSFER_RATE;
+    // ===== 仆从充能链接（玩家物品充电 → 附近己方仆从） =====
+    public static final ForgeConfigSpec.IntValue MINION_CHARGE_LINK_BUFFER;
+    public static final ForgeConfigSpec.IntValue MINION_CHARGE_LINK_BANDWIDTH;
+    public static final ForgeConfigSpec.DoubleValue MINION_CHARGE_LINK_RANGE;
     public static final ForgeConfigSpec.IntValue TECH_ARMOR;
     public static final ForgeConfigSpec.IntValue TECH_TOUGHNESS;
     public static final ForgeConfigSpec.DoubleValue TECH_HP_REGEN;
     public static final ForgeConfigSpec.DoubleValue TECH_DAMAGE_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue TECH_PROJECTILE_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue TECH_CHARGE_PIERCE_PER_LEVEL;
-    // ===== 合金能源链（步长制）=====
-    public static final ForgeConfigSpec.IntValue ENERGY_ALLOY_STEP;
     // ===== 辐射发电 / 屏蔽（步长制）=====
     public static final ForgeConfigSpec.IntValue RADIATION_FE_PER_SEVERITY;
     public static final ForgeConfigSpec.IntValue RADIATION_STEP;
@@ -102,9 +103,7 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue GRAZE_SCAN_INTERVAL;
     // ===== 天基激光（第 1 刀：光束本体）=====
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_ALTITUDE;
-    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_DAMAGE;
     public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_RESIDUAL_DAMAGE;
-    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_HIT_RADIUS;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_LIFE;
     public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_WIDTH;
     /**
@@ -130,12 +129,13 @@ public final class Config {
     /** 只在战斗时引导 + 只引导真实威胁。 */
     public static final ForgeConfigSpec.BooleanValue ORBITAL_BEAM_COMBAT_ONLY;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COMBAT_MEMORY;
-    public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_GUIDANCE_STEP;
     public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_GUIDANCE_RANGE;
     public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_MIN_RANGE;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_SCAN_INTERVAL;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COOLDOWN;
-    public static final ForgeConfigSpec.DoubleValue ORBITAL_BEAM_DAMAGE_PER_LEVEL;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_GUIDANCE_IMPACT_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_GUIDANCE_IMPACT_DAMAGE_PER_LEVEL;
+    public static final ForgeConfigSpec.DoubleValue ORBITAL_GUIDANCE_STRIKE_RADIUS;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COST_BASE;
     public static final ForgeConfigSpec.IntValue ORBITAL_BEAM_COST_PER_LEVEL;
     public static final ForgeConfigSpec.DoubleValue GRAZE_MOVE_SPEED;
@@ -200,6 +200,78 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue DAMAGE_PROBE_SUMMARY_EVERY;
     public static final ForgeConfigSpec.IntValue DAMAGE_PROBE_INTERVAL;
     public static final ForgeConfigSpec.IntValue DAMAGE_PROBE_MAX_HEARTBEATS;
+    /**
+     * 黑名单 mod 命中时自动启用 guard（innate，不占升级槽）。
+     * 只进入 SHADOW；ENFORCE 必须另外手动开。
+     */
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> GUARD_BLACKLIST_MODS;
+    public static final ForgeConfigSpec.BooleanValue GUARD_AUTO_ENABLE;
+    /** 只读审计：HealthLedger + TickAudit；不写血、不拦截。 */
+    public static final ForgeConfigSpec.BooleanValue GUARD_AUDIT_ENABLED;
+    /**
+     * Golem Sanctuary：目标侧伤害裁决（按“谁打的”判，不按 item/mod id）。
+     * OFF 不判定、SHADOW 只记录、ENFORCE 取消事件。
+     */
+    public static final ForgeConfigSpec.EnumValue<a_silly_cat.golems_arsenal.guard.sanctuary.SanctuaryMode> SANCTUARY_MODE;
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_DENY_OWNER;
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_DENY_ALLY;
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_DENY_UNATTRIBUTED;
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_ALLOW_ENVIRONMENT;
+    /** 操作级伤害（{@code bypasses_invulnerability}）是否拒绝；默认 true，且不看攻击者是谁。 */
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_DENY_OPERATION;
+    /**
+     * 账本兜底：受保护傀儡的 raw 血量低于账本、差距超过最大生命 20% 时，把 raw 写回账本值。
+     * 只向上修、只在服务端 tick 外、只对活着且在受保护名单里的傀儡生效。
+     */
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_REPAIR_TAMPER;
+    /** {@code kill()} / {@code /kill}（generic_kill）是否算环境伤害；默认 false。 */
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_ALLOW_GENERIC_KILL;
+    /** 移除守卫：只对“活体被 KILLED 移除”生效；DISCARDED/卸载一律放行。 */
+    public static final ForgeConfigSpec.EnumValue<a_silly_cat.golems_arsenal.guard.sanctuary.SanctuaryMode> SANCTUARY_REMOVAL;
+    /** 玩家右键回收手杖后，允许多少 tick 内的 DISCARDED 移除（回收手杖的 toItem 就是 discard）。 */
+    public static final ForgeConfigSpec.IntValue SANCTUARY_RECOVERY_TICKS;
+    /**
+     * 是否启用自带的 sanctuary-agent（自 attach 的 Java agent，用来在 clear 方法的第一行拦截）。
+     * 2026-11-07 默认关闭：agent 引入过两次服务端崩溃，先让 mod 层稳定跑。
+     */
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_AGENT;
+    /**
+     * 硬锁层（{@code guard.sanctuary.Aegis}）：每 tick 把“受保护傀儡还活着”当成不变量强制成立。
+     *
+     * <p>它不看攻击来源，只比“账本应得值”和“实体实际值”：guardedData / DATA_HEALTH /
+     * removalReason / dead / deathTime 只要被拉到账本以下或标成已死，就拉回来。
+     * 这是对“直写 DataItem 字段 / setRemoved / 反射写字段”这类没有方法边界可挂钩的攻击的唯一通用答案。</p>
+     */
+    public static final ForgeConfigSpec.BooleanValue SANCTUARY_HARD_LOCK;
+    /** 硬锁层的检查间隔（tick）。1 = 每 tick；提高它可以省 CPU，代价是“空血显示”多停留几 tick。 */
+    public static final ForgeConfigSpec.IntValue SANCTUARY_LOCK_INTERVAL;
+    /**
+     * 哑投影模式：SEALED = 测试态（伤害/交互全拒、无敌、noAi），NORMAL = 正常游玩（不封）。
+     *
+     * <p>这是"封死"和"护栏"之间唯一该动的开关。切到 NORMAL 之后 Anchor / 写门 / 移除守卫 /
+     * 账本仍然照常跑，只是不再把傀儡压成哑投影。</p>
+     */
+    public static final ForgeConfigSpec.EnumValue<a_silly_cat.golems_arsenal.guard.sanctuary.ProjectionMode> SANCTUARY_PROJECTION;
+    /**
+     * fantasy_ending 的 EntityActuallyHurt 会把真实血量写到 DATA_HEALTH_ID，但 Modular Golems
+     * 的 guardedData 仍停在旧值；开启后，玩家傀儡的 guardedData 会在持续不一致时向下同步到
+     * 真实血量，避免 getHealth()/heal() 以为满血。
+     */
+    public static final ForgeConfigSpec.BooleanValue FANTASY_TRUE_HEALTH_SYNC;
+    /**
+     * 伤害准入层：普通 Forge 伤害始终放行；绕过伤害管线的来源必须在 handled_* 白名单里
+     * （默认 fantasy_ending 有适配器），否则默认拒绝。
+     */
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_ADMISSION_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_ADMISSION_OWNED_ONLY;
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_ADMISSION_DEFAULT_DENY;
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_ADMISSION_STRICT_WRITES;
+    public static final ForgeConfigSpec.BooleanValue DAMAGE_ADMISSION_WINDOW_ENFORCE;
+    public static final ForgeConfigSpec.EnumValue<a_silly_cat.golems_arsenal.guard.combat.CombatMode> DAMAGE_ADMISSION_COMBAT_MODE;
+    public static final ForgeConfigSpec.IntValue DAMAGE_ADMISSION_COMBAT_RADIUS;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DAMAGE_ADMISSION_HANDLED_MODS;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DAMAGE_ADMISSION_HANDLED_DAMAGE_TYPES;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DAMAGE_ADMISSION_HANDLED_ITEMS;
     public static final ForgeConfigSpec SPEC;
 
     static {
@@ -252,14 +324,31 @@ public final class Config {
         BUILDER.pop();
 
         BUILDER.push("golem_energy_upgrade");
-        GOLEM_ENERGY_BASE_CAPACITY = BUILDER.comment("Base FE capacity of the golem energy pool (the base tier of the alloy chain). The alloy tier multiplier is applied on top of this by energy_alloy_upgrade.step")
-                .defineInRange("base_capacity", 300_000, 0, Integer.MAX_VALUE);
-        GOLEM_ENERGY_PER_LEVEL = BUILDER.comment("LEGACY: extra FE capacity per level of the old 5-level energy upgrade. The base upgrade is level 1 now and the alloy chain carries the scaling, so this is 0 by default and only exists so old config files keep loading. Base capacity is base_capacity + this")
-                .defineInRange("capacity_per_level", 0, 0, Integer.MAX_VALUE);
+        GOLEM_ENERGY_FALLBACK_CAPACITY = BUILDER.comment("Fallback FE capacity of the golem energy pool, used ONLY when Mekanism is not installed. With Mekanism the base tier mirrors EnergyCubeTier.BASIC with half of its stored energy, and the three alloy tiers mirror ADVANCED / ELITE / ULTIMATE")
+                .defineInRange("fallback_capacity", 300_000, 0, Integer.MAX_VALUE);
+        GOLEM_ENERGY_FALLBACK_TRANSFER = BUILDER.comment("Fallback total FE per tick the golem can push into all equipped targets, used ONLY when Mekanism is not installed. With Mekanism this comes from the matching EnergyCubeTier output. One charge pass happens every 5 ticks")
+                .defineInRange("fallback_transfer", 2_500, 0, Integer.MAX_VALUE);
         GOLEM_ENERGY_LIGHTNING = BUILDER.comment("FE restored when a golem is struck by lightning")
                 .defineInRange("lightning_charge", 50_000, 0, Integer.MAX_VALUE);
-        GOLEM_ENERGY_TRANSFER_RATE = BUILDER.comment("FE transferred per charge pass from a golem to each powered item (one pass every 5 ticks). The alloy energy chain multiplies this together with the capacity, so raising the alloy step raises both")
-                .defineInRange("equipment_transfer_rate", 2_500, 0, Integer.MAX_VALUE);
+        BUILDER.pop();
+
+        // ============================================================================
+        // 仆从充能链接。
+        //
+        // 这是一张放在玩家背包里的“中转卡”：Powah / 通量网络 / MEK 充电台给玩家身上的
+        // 物品充电时，会通过 Forge ENERGY 能力给这张卡充电；卡每 10 tick 把 FE 转发给
+        // 附近属于玩家的、拥有能量能力的仆从（模块化傀儡、MEK 机器人、其它 OwnableEntity）。
+        // 它不依赖这些模组的代码——只要对方的充电器调用 IEnergyStorage.receiveEnergy 即可。
+        // ============================================================================
+        BUILDER.push("minion_charge_link");
+        // 2026-10-24: 旧的 capacity/transfer 键已废弃（只够测试，实战反馈“宽带和缓存都不够”）。
+        // 新键 buffer/bandwidth 使用更大的默认值；旧配置里的旧键会被 Forge 忽略，不会覆盖新键。
+        MINION_CHARGE_LINK_BUFFER = BUILDER.comment("Internal FE buffer of one Minion Charge Link card. The card is charged by external player-item chargers and relays the FE to nearby owned minions. This is a buffer, not a generator: the input rate is still limited by the Powah/Flux/MEK charger")
+                .defineInRange("buffer", 128_000_000, 0, Integer.MAX_VALUE);
+        MINION_CHARGE_LINK_BANDWIDTH = BUILDER.comment("FE per tick the card can push into nearby minions (the card settles once every 10 ticks, so one pulse moves up to this x10). Split between all eligible minions. Default 20M/t = 200M per pulse, enough to dump the whole buffer; lower it if you want a slower trickle")
+                .defineInRange("bandwidth", 20_000_000, 0, Integer.MAX_VALUE);
+        MINION_CHARGE_LINK_RANGE = BUILDER.comment("Radius (blocks) around the player in which the card looks for owned minions to charge. The player and the minion must be in the same dimension")
+                .defineInRange("range", 16.0, 1.0, 128.0);
         BUILDER.pop();
 
         BUILDER.push("golem_energy_tech_upgrade");
@@ -275,28 +364,6 @@ public final class Config {
                 .defineInRange("projectile_per_level", 0.10, 0.0, 10.0);
         TECH_CHARGE_PIERCE_PER_LEVEL = BUILDER.comment("Chance per charge amplifier level for the charge effect to pierce protection and resistance on an attack")
                 .defineInRange("charge_pierce_per_level", 0.2, 0.0, 1.0);
-        BUILDER.pop();
-
-        // ============================================================================
-        // 合金能源链（步长制）。
-        //
-        // 设计：基础电量升级（max 1 级）是链的根，占一个槽；三件合金能源升级是它的附属，
-        // **不占额外槽位**（consumesSlot()=false），各自往同一个 golem_energy 修饰符上
-        // 加 2/4/8 点等级。等级累加由 Modular Golems 的 GolemMaterial.collectModifiers 完成，
-        // 所以"装了几档"完全由一个整数表达：
-        //
-        //     总等级 L = 1 + 2(灌注) + 4(精英) + 8(终极)     满配 L = 15
-        //     合金加成 = max(0, L − 1) × step                 满配 = 14 × step
-        //     乘数     = 1 + 合金加成                          step=2 时 = 29
-        //
-        // 步长制的意义：这里**只有 step 一个旋钮**，容量与带宽共用它。
-        // 各档的"档位系数"是 2 的幂次常量（写在代码里），所以任意两档之差
-        // = step × 2^k > 0 与 step 无关 —— 无论玩家把 step 调成几，
-        // "终极 > 精英 > 灌注 > 基础"都不会倒挂。详见 docs/MEK-ENERGY-RADIATION-DESIGN.md §2。
-        // ============================================================================
-        BUILDER.push("energy_alloy_upgrade");
-        ENERGY_ALLOY_STEP = BUILDER.comment("Step size of the alloy energy chain: each installed alloy tier adds (tier coefficient x step), where the tier coefficients are the constants 1 / 2 / 4. The same step multiplies BOTH the golem's FE capacity and its charge throughput (equipment_transfer_rate). Default 2 gives x29 at full installation (step=1 -> x15, step=4 -> x57). Raising it keeps the tier ordering intact by construction")
-                .defineInRange("step", 2, 1, 64);
         BUILDER.pop();
 
         // ============================================================================
@@ -615,19 +682,16 @@ public final class Config {
         BUILDER.push("orbital_beam");
         ORBITAL_BEAM_ALTITUDE = BUILDER.comment("Y coordinate the beam visually descends FROM. 1.20.1's overworld build limit is 320, so that is the default; raising it past the world height changes nothing visually")
                 .defineInRange("altitude", 320, 64, 4096);
-        ORBITAL_BEAM_DAMAGE = BUILDER.comment("Damage per tick dealt to each enemy standing in the beam column. 2.0 = one heart per tick, which kills most mobs almost instantly: this is meant to be a costly, deliberate strike, not a sustained aura. Set 0 for a purely visual test")
-                .defineInRange("damage", 2.0, 0.0, 1000.0);
 
-        // 炮的主伤害是落地那一下的冲击波；存活期间的只是固定余热（用户 2026-10-19 定）。
+        // 炮的主伤害是落地那一下的冲击波（见 orbital_guidance.impact_damage）；
+        // 存续期间只是固定余热（用户 2026-10-19 定）。
         ORBITAL_BEAM_RESIDUAL_DAMAGE = BUILDER
                 .comment("Damage per tick while the beam is still burning (RESIDUAL heat, does not decay)",
-                        "This is intentionally small: the real hit is orbital_beam.damage (one-shot impact).")
+                        "This is intentionally small: the real hit is the one-shot impact in orbital_guidance.impact_damage.")
                 .defineInRange("residual_damage", 0.5D, 0.0D, 100.0D);
-        ORBITAL_BEAM_HIT_RADIUS = BUILDER.comment("Radius of the damaging column around the impact point (blocks). The rendered beam is much thinner than this - the visual width is cosmetic")
-                .defineInRange("hit_radius", 1.5, 0.0, 16.0);
-        ORBITAL_BEAM_LIFE = BUILDER.comment("How long the beam stays (ticks). Deliberately SHORT so it reads as a strike rather than a lingering zone. 40 ticks = 2 seconds, which at the default feed_rate is enough to actually mine a couple of blocks - a 20-tick beam cannot, because the Mekanism laser only accumulates energy while it lives")
-                .defineInRange("life", 40, 1, 72000);
-        ORBITAL_BEAM_WIDTH = BUILDER.comment("Rendered beam width (blocks) = the OUTER prism's width. The renderer draws two nested four-sided prisms: a wide translucent outer one at this width, plus a bright inner one at 40% of it. This is purely cosmetic - the damaging column radius is hit_radius")
+        ORBITAL_BEAM_LIFE = BUILDER.comment("How long the (usually invisible) damage beam stays after impact (ticks). 20 ticks = 1 second, enough for the residual heat but short enough to read as a strike rather than a lingering zone")
+                .defineInRange("life", 20, 1, 72000);
+        ORBITAL_BEAM_WIDTH = BUILDER.comment("Rendered beam width (blocks) = the OUTER prism's width. The renderer draws two nested four-sided prisms: a wide translucent outer one at this width, plus a bright inner one at 40% of it. This is purely cosmetic - the damaging radius comes from orbital_guidance.strike_radius")
                 .defineInRange("width", 0.6, 0.05, 8.0);
         SHADER_EFFECT_BRIGHTNESS = BUILDER.comment("Brightness multiplier for the orbital laser and impact VFX when an Iris/Oculus shaderpack is active",
                         "MakeUp-style packs bloom anything with luma(color * exposure) above 0.85; at night exposure can reach 3.6, so near-white emissive geometry blows out.",
@@ -638,33 +702,34 @@ public final class Config {
         // ============================================================================
         // 天基激光（第 2 刀：引导升级）。
         //
-        // 傀儡不自己开火，而是"标定"看得见的敌人，由在轨平台打下来。三条设计约束都落在这里：
+        // 傀儡不自己开火，而是"标定"一个看得见的敌人，由在轨平台打下一发激光炮
+        // （六束瞄准 → 弹体 → 落点冲击）。三条设计约束都落在这里：
         //   ① min_range 之内标定不了  → 贴身混战里不许它输出，且给了"贴脸"这一反制手段
         //   ② 目标被方块挡住就不打     → 掩体有意义（判定见 GolemOrbitalGuidanceModifier#canSee）
-        //   ③ 每段扣傀儡的 FE          → 合金能源链直接决定你能打几轮，两条升级线互为前提
+        //   ③ 每发扣傀儡的 FE          → 合金能源链直接决定你能打几发，两条升级线互为前提
         //
-        // 等级换算与合金能源链同一套步长制，只有 step 一个旋钮（档位系数 1/2/4 是代码常量）：
-        //   可同时引导数 = 1 + 档位之和 × step        满配 15
-        //   单次打击段数 = 同上（目标少 → 段数全砸在首目标上，单挑最猛）
-        //   单段伤害     = damage + 等级 × damage_per_level
-        //   单段 FE      = cost_base + 等级 × cost_per_level
+        // 2026-10-21 改：多目标/多段锁定收敛为**单目标、单发**。等级只影响
+        // impact_damage + level × impact_damage_per_level 与 FE 消耗，不再增加锁定数。
+        // 真正的发射间隔与能耗倍率由「激光发射台」的能量/冷却档位决定。
         // ============================================================================
         BUILDER.push("orbital_guidance");
-        ORBITAL_BEAM_GUIDANCE_STEP = BUILDER.comment("Step size of the guidance alloy chain - the ONLY knob for target count and volley count. Installed alloy tiers contribute coefficients 1/2/4, so the fixed points are 1 (core only), 3, 7, 15. At step=1 full installation means 15 simultaneous targets. Higher tiers keep a larger value than lower ones at any step, by construction")
-                .defineInRange("step", 1, 1, 64);
-        ORBITAL_BEAM_GUIDANCE_RANGE = BUILDER.comment("How far the golem can designate targets (blocks). Also the maximum distance at which the platform will engage - a spotter that cannot see it cannot call it in")
+        ORBITAL_BEAM_GUIDANCE_RANGE = BUILDER.comment("How far the golem can designate a target (blocks). Also the maximum distance at which the platform will engage - a spotter that cannot see it cannot call it in")
                 .defineInRange("range", 32.0, 4.0, 256.0);
         ORBITAL_BEAM_MIN_RANGE = BUILDER.comment("Targets closer than this CANNOT be designated (blocks). This is what keeps the upgrade from being extra melee damage: enemies that hug the golem are simply not engageable. Set to 0 to remove that limitation")
                 .defineInRange("min_range", 5.0, 0.0, 64.0);
         ORBITAL_BEAM_SCAN_INTERVAL = BUILDER.comment("Ticks between two designation scans. 20 = once a second. Raising it makes the golem slower to switch targets")
                 .defineInRange("scan_interval", 20, 1, 1200);
-        ORBITAL_BEAM_COOLDOWN = BUILDER.comment("Ticks between two strike rounds. Every round fires every designated target at once. Deliberately LONG (120 = 6 seconds) so the platform reads as a called-in strike rather than a repeating turret - and so it cannot keep grinding the same patch of terrain")
+        ORBITAL_BEAM_COOLDOWN = BUILDER.comment("BASE ticks between two cannon shots. The laser console's cooldown tier multiplies this (fast / standard / charge). Deliberately LONG (120 = 6 seconds at standard) so the platform reads as a called-in strike rather than a repeating turret")
                 .defineInRange("cooldown", 120, 1, 7200);
-        ORBITAL_BEAM_DAMAGE_PER_LEVEL = BUILDER.comment("Extra damage per guidance level, added to orbital_beam.damage. At max level (15) this is multiplied by 15, so keep it small: 1.0 already means +15 damage per strike")
-                .defineInRange("damage_per_level", 1.0, 0.0, 100.0);
-        ORBITAL_BEAM_COST_BASE = BUILDER.comment("Base FE cost of ONE strike (one volley against one target), charged to the golem's own FE pool. The whole point is that the alloy energy chain decides how many rounds you can afford - if this is 0 the two upgrade lines stop being connected")
+        ORBITAL_GUIDANCE_IMPACT_DAMAGE = BUILDER.comment("Impact damage of ONE cannon shot, before the target's max-health bonus. This is the main hit; residual heat is extra. The laser console's energy tier multiplies it")
+                .defineInRange("impact_damage", 40.0, 0.0, 10000.0);
+        ORBITAL_GUIDANCE_IMPACT_DAMAGE_PER_LEVEL = BUILDER.comment("Extra impact damage per guidance level. The single alloy guidance item grants level 14, so the default adds +21 damage")
+                .defineInRange("impact_damage_per_level", 1.5, 0.0, 1000.0);
+        ORBITAL_GUIDANCE_STRIKE_RADIUS = BUILDER.comment("Visual radius of the aim circle / landing shockwave (blocks). Damage radius is this x 1.15. 6 is a focused single-target strike; raise it for a more spectacular but less precise shot")
+                .defineInRange("strike_radius", 6.0, 1.0, 32.0);
+        ORBITAL_BEAM_COST_BASE = BUILDER.comment("Base FE cost of ONE cannon shot, charged to the golem's own FE pool. The whole point is that the alloy energy chain decides how many shots you can afford - if this is 0 the two upgrade lines stop being connected. The laser console's energy tier multiplies it")
                 .defineInRange("cost_base", 20000, 0, Integer.MAX_VALUE);
-        ORBITAL_BEAM_COST_PER_LEVEL = BUILDER.comment("Extra FE per strike per guidance level. At max level (14) this is multiplied by 14. Note a round costs this PER TARGET, so wide designation drains proportionally faster")
+        ORBITAL_BEAM_COST_PER_LEVEL = BUILDER.comment("Extra FE per shot per guidance level. The single alloy guidance item grants level 14, so the default adds 70000 FE per shot")
                 .defineInRange("cost_per_level", 5000, 0, Integer.MAX_VALUE);
         // ---- 破坏地形：负面代价（我们自己挖） ----
         //
@@ -677,7 +742,7 @@ public final class Config {
                 .define("break_blocks", true);
         ORBITAL_BEAM_MAX_BLOCK_HARDNESS = BUILDER.comment("Highest block hardness the beam can dig through. Reference points: grass/plants/torch 0, dirt/sand/gravel 0.5-0.6, stone 1.5, wood 2.0, obsidian 50. So 2.0 eats soil, plants and wood but stops dead at stone; lower it to 1.0 to also protect stone. Negative-hardness blocks (bedrock and friends) are always immune")
                 .defineInRange("max_block_hardness", 2.0, 0.0, 100.0);
-        ORBITAL_BEAM_BLOCK_HARDNESS_COST = BUILDER.comment("Digging effort per point of block hardness. Progress per tick = damage / (cost x hardness), and a block breaks at progress 1.0. So the ticks needed for one block = cost x hardness / damage. With the defaults (cost 40, damage 2.0): a dirt block (0.5) takes 10 ticks, wood (2.0) takes 40 ticks, and grass (hardness 0) is cleared instantly. The whole beam lives 40 ticks, so one strike digs about 2 blocks of soil or 1 of wood - raise this value for slower digging, lower it to chew faster")
+        ORBITAL_BEAM_BLOCK_HARDNESS_COST = BUILDER.comment("Digging effort per point of block hardness. Progress per tick = damage / (cost x hardness), and a block breaks at progress 1.0. So the ticks needed for one block = cost x hardness / damage. With the defaults (cost 40, impact 40): a dirt block (0.5) takes half a tick, wood (2.0) takes 2 ticks, and grass (hardness 0) is cleared instantly. Raise this value for slower digging, lower it to chew faster")
                 .defineInRange("block_hardness_cost", 40.0, 1.0, 10000.0);
         ORBITAL_BEAM_DROP_BLOCKS = BUILDER.comment("Whether blocks destroyed by the beam drop their items. Default false: the platform is a weapon, not a quarry, so chewing terrain should not pay for itself")
                 .define("drop_blocks", false);
@@ -706,6 +771,85 @@ public final class Config {
                 .define("explosion_fire", true);
         // 火箭模型的垂直落位校准值（实测 +5 格）写在了 RocketRenderer.MODEL_ANCHOR_CALIBRATION，
         // 不作为配置项暴露——配置项之后会做一次统合简化。
+        BUILDER.pop();
+
+        BUILDER.push("guard");
+        GUARD_AUTO_ENABLE = BUILDER.comment("Enable the golem guard policy when any blacklisted mod is loaded. Defaults to SHADOW, never auto-ENFORCE.")
+                .define("auto_enable", true);
+        GUARD_AUDIT_ENABLED = BUILDER.comment("Read-only HealthLedger/TickAudit for player-owned golems. Records unexplained health, removal without death, class changes, and off-thread callbacks; never writes health or blocks.")
+                .define("audit_enabled", true);
+        GUARD_BLACKLIST_MODS = BUILDER.comment("Mod ids that make the golem guard policy active. ArcaneVortex and fantasy_ending are known direct-health/removal sources; the guard can record them but cannot guarantee blocking their lowest-level writes.")
+                .defineList("blacklist_mods",
+                        List.of("arcanevortex", "fantasy_ending"),
+                        o -> o instanceof String);
+        BUILDER.pop();
+
+        // ============================================================================
+        // Golem Sanctuary：目标侧的伤害裁决。
+        // 只回答一个问题：“这一下是谁打的，打的是不是我的傀儡”。
+        // 不按 item id / mod id，不改数值，不碰 tag。
+        // ============================================================================
+        BUILDER.push("sanctuary");
+        SANCTUARY_MODE = BUILDER.comment("Target-side damage verdict: OFF (no judgement), SHADOW (log would_reject only) or ENFORCE (cancel; default). ENFORCE blocks owner / ally / unattributed / operation-grade damage - enemy and environmental damage always go through.")
+                .defineEnum("mode", a_silly_cat.golems_arsenal.guard.sanctuary.SanctuaryMode.ENFORCE);
+        SANCTUARY_DENY_OWNER = BUILDER.comment("Reject damage whose attacker (or owner of the direct projectile) is the golem's owner. This is the 'left-clicked my own golem' case.")
+                .define("deny_owner", true);
+        SANCTUARY_DENY_ALLY = BUILDER.comment("Reject damage from another golem of the same owner (friendly AoE / damage share / thorns).")
+                .define("deny_ally", true);
+        SANCTUARY_DENY_UNATTRIBUTED = BUILDER.comment("Reject damage that has neither an attacker nor an environmental damage type (suspicious true damage / script damage).")
+                .define("deny_unattributed", true);
+        SANCTUARY_ALLOW_ENVIRONMENT = BUILDER.comment("Allow environmental damage (fire / explosion / fall / drowning / freezing / lightning, plus the world-border / bad-respawn admin types). Out-of-world is no longer special-cased; it follows its damage-type tags like any other source.")
+                .define("allow_environment", true);
+        SANCTUARY_DENY_OPERATION = BUILDER.comment("Reject 'operation-grade' damage: any damage type carrying minecraft:bypasses_invulnerability (toaru gungnir, avaritia infinity, jerotes magic_effect, generic_kill, ...). This is judged by tag, not by id, and ignores who the attacker is - a mob casting an execution spell is treated the same as a player. Default false while combat release is being tested; set true to restore the old execution-proof behavior.")
+                .define("deny_operation", false);
+        SANCTUARY_ALLOW_GENERIC_KILL = BUILDER.comment("Treat generic_kill (Entity#kill and /kill) as environmental. Default false: on a protected golem it counts as unattributed, so a 'kill entity' item cannot delete the golem. Set true if you need /kill to work on protected golems.")
+                .define("allow_generic_kill", false);
+        SANCTUARY_REPAIR_TAMPER = BUILDER.comment("Ledger fallback: when a protected golem's raw health is below the ledger by more than 20% of max health, write the raw value back to the ledger value. This is the only generic counter to a direct SynchedEntityData.DataItem write (there is no method to hook). Repairs upward only, outside hurt/death, living owned golems only.")
+                .define("repair_tamper", true);
+        SANCTUARY_REMOVAL = BUILDER.comment("Removal guard mode. OFF ignores removals; SHADOW logs would_reject; ENFORCE (default) cancels hostile setRemoved/reason-field removals on a living protected golem. KILLED is always hostile; DISCARDED is hostile except the player-recovery window below or the host RetrievalWandItem#toItem path; CHANGED_DIMENSION and UNLOADED_WITH_PLAYER are allowed; UNLOADED_TO_CHUNK is allowed only when the chunk is really gone.")
+                .defineEnum("removal_guard", a_silly_cat.golems_arsenal.guard.sanctuary.SanctuaryMode.ENFORCE);
+        SANCTUARY_RECOVERY_TICKS = BUILDER.comment("Ticks after a player right-clicks a protected golem with the Modular Golems retrieval wand during which a DISCARDED removal counts as legitimate player recovery instead of a hostile discard. 0 disables the window (the host toItem stack check still works).")
+                .defineInRange("player_recovery_window", 10, 0, 200);
+        SANCTUARY_AGENT = BUILDER.comment("Enable the bundled self-attaching Java agent (sanctuary-agent.jar). It blocks ArcaneVortex/toaru hard-clear entry points at the first line. Default false: the agent caused two server crashes on 2026-11-07, so the mod layer runs alone until it is re-validated.")
+                .define("agent_enabled", false);
+        SANCTUARY_HARD_LOCK = BUILDER.comment("Hard lock (Aegis): every tick, force the invariant 'a protected golem is alive'. It compares the ledger value against guardedData / DATA_HEALTH / removalReason / dead / deathTime and pulls them back. This is the only generic answer to attacks that write DataItem fields, setRemoved() or the removalReason field directly, where no method boundary can be hooked.")
+                .define("hard_lock", true);
+        SANCTUARY_LOCK_INTERVAL = BUILDER.comment("Hard lock check interval in ticks. 1 = every tick (smallest chance of a client-visible empty-health frame).")
+                .defineInRange("hard_lock_interval", 1, 1, 20);
+        SANCTUARY_PROJECTION = BUILDER.comment("Dumb projection mode. SEALED (default) is the test state: all damage, all interaction and all drops are refused, the golem is invulnerable and has no AI - no back doors, so a blocked hit and an opened hole look different in the log. NORMAL keeps the golem playable; Anchor snapshots, the write gates, the removal guard and the ledger keep running in both modes.")
+                .defineEnum("projection_mode", a_silly_cat.golems_arsenal.guard.sanctuary.ProjectionMode.SEALED);
+        BUILDER.pop();
+
+        BUILDER.push("compat");
+        FANTASY_TRUE_HEALTH_SYNC = BUILDER.comment("fantasy_ending writes true health directly to DATA_HEALTH_ID, leaving Modular Golems guardedData stale. When true, player-owned golems slowly sync guardedData down to the real DATA_HEALTH_ID so healing and getHealth() work again. Disable for P2 guard tests if you need guardedData left untouched.")
+                .define("fantasy_true_health_sync", true);
+        BUILDER.pop();
+
+        BUILDER.push("damage_admission");
+        DAMAGE_ADMISSION_ENABLED = BUILDER.comment("Enable the damage admission layer. Handled bypass sources (handled_* lists) are re-settled through normal resistance; unhandled bypass/direct health writes are rejected by default.")
+                .define("enabled", true);
+        DAMAGE_ADMISSION_OWNED_ONLY = BUILDER.comment("Only protect golems with an owner UUID (player-owned). Set false to protect every Modular Golems golem.")
+                .define("owned_only", true);
+        DAMAGE_ADMISSION_DEFAULT_DENY = BUILDER.comment("Default-deny health decreases that bypass the normal damage pipeline (narrow LivingEntity/SynchedEntityData mixin, protected golems only). Disable for P2 testbench stimuli if needed.")
+                .define("default_deny", true);
+        DAMAGE_ADMISSION_STRICT_WRITES = BUILDER.comment("First enforce pass: reject non-finite health values and health writes that arrive off the server thread. Independent of default_deny; /ga guard strict can toggle it at runtime.")
+                .define("strict_writes", true);
+        DAMAGE_ADMISSION_WINDOW_ENFORCE = BUILDER.comment("Second enforce pass: prevent PillarCd=0 from bypassing the pillar cooldown, and ignore PillarUntil values beyond the normal bloom window. /ga guard window can toggle it at runtime.")
+                .define("window_enforce", true);
+        DAMAGE_ADMISSION_COMBAT_MODE = BUILDER.comment("Source-level capability admission mode: OFF, SHADOW (log only; default) or ENFORCE (cancel). Start at SHADOW to collect false positives before enforcing.")
+                .defineEnum("combat_mode", a_silly_cat.golems_arsenal.guard.combat.CombatMode.SHADOW);
+        DAMAGE_ADMISSION_COMBAT_RADIUS = BUILDER.comment("Radius used to decide whether an unsupported combat item is being used near a protected golem.")
+                .defineInRange("combat_radius", 16, 1, 64);
+        DAMAGE_ADMISSION_HANDLED_MODS = BUILDER.comment("Whitelist of mod namespaces that have an adapter (default fantasy_ending). Sources with this prefix are handled; unhandled bypass sources are rejected.")
+                .defineList("handled_mods", List.of("fantasy_ending"), o -> o instanceof String);
+        DAMAGE_ADMISSION_HANDLED_DAMAGE_TYPES = BUILDER.comment("Exact handled damage source ids (DamageSource.getMsgId()), e.g. fantasy_ending.ds_power. Unhandled bypass sources are rejected.")
+                .defineList("handled_damage_types",
+                        List.of("fantasy_ending.fe_power", "fantasy_ending.ds_power"),
+                        o -> o instanceof String);
+        DAMAGE_ADMISSION_HANDLED_ITEMS = BUILDER.comment("Handled attack item ids, e.g. fantasy_ending:fantasy_ending_sword. Normal Forge damage is always allowed regardless of this list; it is only used to classify bypass sources.")
+                .defineList("handled_items",
+                        List.of("fantasy_ending:fantasy_ending_sword"),
+                        o -> o instanceof String);
         BUILDER.pop();
 
         SPEC = BUILDER.build();

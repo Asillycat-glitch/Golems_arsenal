@@ -3,7 +3,6 @@ package a_silly_cat.golems_arsenal.base.entity;
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.base.upgrade.GolemFriendlyFire;
 import a_silly_cat.golems_arsenal.init.ModEntities;
-import a_silly_cat.golems_arsenal.tech.mekanism.MekanismLaserDamage;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
@@ -32,16 +31,13 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 天基激光光束：从高空竖直灌到落点的一根柱子，对**柱体沿途**的敌人持续造成 MEK 激光伤害。
+ * 天基激光光束：从高空竖直灌到落点的一根柱子，对**柱体沿途**的敌人造成伤害。
  *
- * <p><b>伤害来源直接用 Mekanism 的激光伤害类型</b>（{@code MekanismDamageTypes.LASER.source(level)}），
- * 也就是 MEK 激光放大器打人的那一条。这样"这是 MEK 的激光"在语义上完全成立：护甲/标签行为与
- * MEK 自己的激光一致。
- *
- * <p><b>击杀故意不归属</b>（设计决定，不是漏配）：MEK 的 {@code MekanismDamageType} 只有
- * {@code source(Level)} / {@code source(RegistryAccess)} 两个重载，造出的 {@code DamageSource}
- * 不带攻击者，所以击杀在理论上属于天基武器本身。将来若想改成归功于引导者，
- * 需要用 MEK 的伤害类型 key 自己构造带 {@code causingEntity} 的 {@code DamageSource}。
+ * <p><b>伤害来源是自建的 {@code golems_arsenal:orbital_strike}</b>（不是 MEK 的激光伤害类型）。
+ * 这样 {@code DamageSource} 可以带 <b>directEntity = 本光束</b>、<b>causingEntity = 引导者</b>，
+ * 击杀才会归功于傀儡/玩家；同时数据包标签里登记了
+ * {@code bypasses_armor / bypasses_effects / bypasses_enchantments}，保留“定点清除”的穿甲语义。
+ * 早期版本借过 MEK 的 {@code MekanismDamageTypes.LASER}，代价是击杀无归属，已经改掉。
  *
  * <p>实体自身的位置<b>就在落点</b>（贴地），光束往天上画 —— 这样它天然能被掉落实体、命令、
  * 以及"落点校验"复用，也不用同步 600 那个数。
@@ -101,6 +97,13 @@ public class OrbitalBeamEntity extends Entity {
     private UUID ownerId;
     private UUID ownerPlayerId;
     private LivingEntity ownerCache;
+    /**
+     * 是否保护引导者的友军。
+     *
+     * <p>默认 true。发射台的「友军保护」开关关掉时，这里会被设为 false：
+     * 冲击波与余热会连同自己人一起打——这是玩家自己选的代价。
+     */
+    private boolean protectFriendlies = true;
     /** 顶端高度（格）。默认取世界最高建筑高度，让光束"从天上下来"。 */
     private float altitude = 320F;
 
@@ -145,6 +148,20 @@ public class OrbitalBeamEntity extends Entity {
                                          float damage, float residualDamage,
                                          double hitRadius, int lifeTicks, float width,
                                          LivingEntity owner, float altitude) {
+        return fire(level, impact, damage, residualDamage, hitRadius, lifeTicks, width,
+                owner, altitude, true);
+    }
+
+    /**
+     * 同上，但显式指定是否保护友军。
+     *
+     * @param protectFriendlies false = 冲击波与余热会打到自己人（发射台的「友军保护」关闭）
+     */
+    public static OrbitalBeamEntity fire(ServerLevel level, net.minecraft.world.phys.Vec3 impact,
+                                         float damage, float residualDamage,
+                                         double hitRadius, int lifeTicks, float width,
+                                         LivingEntity owner, float altitude,
+                                         boolean protectFriendlies) {
         OrbitalBeamEntity beam = new OrbitalBeamEntity(ModEntities.ORBITAL_BEAM.get(), level);
         beam.setPos(impact.x, impact.y, impact.z);
         beam.damage = damage;
@@ -152,6 +169,7 @@ public class OrbitalBeamEntity extends Entity {
         beam.radius = hitRadius;
         beam.life = lifeTicks;
         beam.altitude = altitude;
+        beam.protectFriendlies = protectFriendlies;
         beam.entityData.set(DATA_WIDTH, width);
         beam.entityData.set(DATA_HEIGHT, Math.max(1.0F, altitude - (float) impact.y));
         beam.entityData.set(DATA_TOP_Y, altitude);
@@ -315,9 +333,11 @@ public class OrbitalBeamEntity extends Entity {
     // ------------------------------------------------------------------
 
     /**
-     * MEK 激光伤害源。**故意用反射**取 {@code MekanismDamageTypes.LASER}：这个实体是**无条件注册**的，
-     * 常量池里不该出现 {@code mekanism.*}——一旦出现，没装 MEK 的环境里执行到这里就 NoClassDefFoundError。
-     * 解析不到时退回"无攻击者的普通伤害"，激光变成了普通打击而不是报错。
+     * 自建的 {@code orbital_strike} 伤害源，带**引导者**作为 causing entity。
+     *
+     * <p>这个实体是无条件注册的，所以常量池里不能出现 {@code mekanism.*}；伤害类型走
+     * {@code data/golems_arsenal/damage_type/orbital_strike.json} 与
+     * {@code data/minecraft/tags/damage_type/*}，完全不依赖 MEK 的类。
      */
     private DamageSource laserSource() {
         var holder = this.level().registryAccess()
@@ -333,7 +353,8 @@ public class OrbitalBeamEntity extends Entity {
      * 两边各写一套的话，会出现"引导器认为该打、光束却判成友军而拒打"的矛盾。
      */
     private boolean isFriendly(LivingEntity owner, LivingEntity target) {
-        return GolemFriendlyFire.isFriendly(owner, target, this.ownerId, this.ownerPlayerId);
+        return this.protectFriendlies
+                && GolemFriendlyFire.isFriendly(owner, target, this.ownerId, this.ownerPlayerId);
     }
 
     private LivingEntity owner() {
@@ -369,6 +390,9 @@ public class OrbitalBeamEntity extends Entity {
         if (tag.hasUUID(TAG_OWNER_PLAYER)) {
             this.ownerPlayerId = tag.getUUID(TAG_OWNER_PLAYER);
         }
+        // 旧存档没有这个字段时保持默认 true：宁可保护友军，也不要读档后突然误伤。
+        this.protectFriendlies = !tag.contains("OrbitalProtectFriendlies")
+                || tag.getBoolean("OrbitalProtectFriendlies");
     }
 
     @Override
@@ -384,6 +408,7 @@ public class OrbitalBeamEntity extends Entity {
         if (this.ownerPlayerId != null) {
             tag.putUUID(TAG_OWNER_PLAYER, this.ownerPlayerId);
         }
+        tag.putBoolean("OrbitalProtectFriendlies", this.protectFriendlies);
     }
 
     @Override

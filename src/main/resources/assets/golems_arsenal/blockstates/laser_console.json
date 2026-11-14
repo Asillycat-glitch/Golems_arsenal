@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,lit=false": { "model": "golems_arsenal:block/laser_console" },
+    "facing=east,lit=false":  { "model": "golems_arsenal:block/laser_console", "y": 90 },
+    "facing=south,lit=false": { "model": "golems_arsenal:block/laser_console", "y": 180 },
+    "facing=west,lit=false":  { "model": "golems_arsenal:block/laser_console", "y": 270 },
+    "facing=north,lit=true":  { "model": "golems_arsenal:block/laser_console" },
+    "facing=east,lit=true":   { "model": "golems_arsenal:block/laser_console", "y": 90 },
+    "facing=south,lit=true":  { "model": "golems_arsenal:block/laser_console", "y": 180 },
+    "facing=west,lit=true":   { "model": "golems_arsenal:block/laser_console", "y": 270 }
+  }
+}

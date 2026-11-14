@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "a_silly_cat.golems_arsenal.mixin.tinkers",
+  "plugin": "a_silly_cat.golems_arsenal.mixin.TinkersGolemMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "golems_arsenal.refmap.json",
+  "mixins": [
+    "TinkersGolemOverslimeCompatMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

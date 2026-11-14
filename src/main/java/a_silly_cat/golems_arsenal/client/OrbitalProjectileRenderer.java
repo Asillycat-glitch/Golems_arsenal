@@ -214,10 +214,11 @@ public class OrbitalProjectileRenderer extends EntityRenderer<OrbitalProjectileE
         }
         // 末端淡出
         float a = ALPHA * (1.0F - f) * (1.0F - 0.35F * f);
+        float scale = ShaderEffects.colorScale();
         return new float[]{
-                ShaderEffects.tintR(r),
-                ShaderEffects.tintG(g),
-                ShaderEffects.tintB(b),
+                ShaderEffects.tintR(r) * scale,
+                ShaderEffects.tintG(g) * scale,
+                ShaderEffects.tintB(b) * scale,
                 a
         };
     }

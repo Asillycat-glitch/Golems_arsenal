@@ -1,7 +1,7 @@
 package a_silly_cat.golems_arsenal.tech.upgrade;
 
-import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyProvider;
+import a_silly_cat.golems_arsenal.tech.energy.GolemEnergyTiers;
 import dev.xkmc.modulargolems.content.core.StatFilterType;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.item.upgrade.IUpgradeItem;
@@ -28,14 +28,13 @@ import java.util.List;
  *
  * <pre>
  *   总等级 L = 1（基础）+ 2（灌注）+ 4（精英）+ 8（终极）      满配 L = 15
- *   合金加成 = max(0, L − 1) × step                          满配 = 14 × step
- *   乘数     = 1 + 合金加成                                   step=2 时 = 29
+ *   档位     = 1 → BASIC，3 → ADVANCED，7 → ELITE，15 → ULTIMATE
  * </pre>
  *
- * <p><b>步长制</b>：各档的"档位系数"是 2 的幂次常量（写在物品注册里），配置里只有
- * {@link Config#ENERGY_ALLOY_STEP} 一个旋钮。任意两档之差 = {@code step × 2^k > 0} 与 step 无关，
- * 所以玩家无论把步长调成几，"终极 &gt; 精英 &gt; 灌注 &gt; 基础"都不会倒挂。
- * 完整推导见 {@code docs/MEK-ENERGY-RADIATION-DESIGN.md} §2、§3。
+ * <p><b>数值来源</b>：容量与带宽统一由 {@link GolemEnergyTiers} 按总等级解析。装了 Mekanism 时
+ * 镜像对应的能量立方档：容量取立方存储的<b>一半</b>，带宽取立方的<b>完整输出</b>（按“全部装备
+ * 合计的 FE/t”解释）；没有 Mekanism 时只有基础档，退回 config 里的 fallback 值。
+ * 这样 MEK 那边的立方配置改了，傀儡这边自动跟随，不需要再维护一套 step 配置。
  *
  * <p>该修饰符本身**不注册**在 Modular Golems 的 Registrate 注册表里（和合金链同一个做法），
  * 自己提供 tooltip 文本，避免创造栏代码去解析一个不存在的注册 id。
@@ -47,9 +46,6 @@ public class GolemEnergyModifier extends GolemModifier {
      * 改小会让合金装不上（{@code collectModifiers} 会封顶），改大则等于放开重复堆叠。
      */
     public static final int MAX_LEVEL = 15;
-
-    /** 只有基础档（未装任何合金）时的等级。 */
-    private static final int BASE_LEVEL = 1;
 
     public GolemEnergyModifier() {
         super(StatFilterType.HEALTH, MAX_LEVEL);
@@ -120,39 +116,15 @@ public class GolemEnergyModifier extends GolemModifier {
     }
 
     // ------------------------------------------------------------------
-    // 步长制乘数
-    // ------------------------------------------------------------------
-
-    /**
-     * 合金能源的**加法式乘数**（0 = 只有基础档）。容量与带宽共用它——这也是 Mekanism 自己的做法：
-     * 它的 Energy 升级同时给 buffer ×10 与 charge rate，因为只涨容量不涨带宽等于没涨。
-     */
-    public static int alloyBonus(int totalLevel) {
-        if (totalLevel <= BASE_LEVEL) {
-            return 0;
-        }
-        return (totalLevel - BASE_LEVEL) * Config.ENERGY_ALLOY_STEP.get();
-    }
-
-    /** 单件基础升级给的基础容量（历史键名 {@code base_capacity} + {@code capacity_per_level}）。 */
-    public static long baseCapacity() {
-        return (long) Config.GOLEM_ENERGY_BASE_CAPACITY.get() + Config.GOLEM_ENERGY_PER_LEVEL.get();
-    }
-
-    // ------------------------------------------------------------------
     // 容量
     // ------------------------------------------------------------------
 
     /**
-     * 容量公式：{@code 基础容量 × (1 + 合金加成)}，共用同一个乘数（见 {@link #alloyBonus}）。
-     * 未装基础电量升级时等级为 0，容量为 0（保持原有"没升级就没电池"的行为）。
+     * 当前总等级对应的容量（FE）。未装基础电量升级时等级为 0，容量为 0
+     * （保持原有"没升级就没电池"的行为）。
      */
     public static int capacityForLevel(int totalLevel) {
-        if (totalLevel <= 0) {
-            return 0;
-        }
-        long capacity = baseCapacity() * (1L + alloyBonus(totalLevel));
-        return (int) Math.min(capacity, Integer.MAX_VALUE);
+        return GolemEnergyTiers.forLevel(totalLevel).capacityFe();
     }
 
     /** 傀儡的当前容量上限（只读，给 HUD / 调试用）。 */

@@ -2,24 +2,18 @@ package a_silly_cat.golems_arsenal.base.command;
 
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.base.entity.GuidanceBeamEntity;
-import a_silly_cat.golems_arsenal.base.entity.OrbitalBeamEntity;
-import a_silly_cat.golems_arsenal.base.entity.OrbitalProjectileEntity;
-import dev.xkmc.l2library.init.events.GeneralEventHandler;
-import a_silly_cat.golems_arsenal.tech.mekanism.OrbitalImpact;
+import a_silly_cat.golems_arsenal.tech.orbit.OrbitalStrike;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -46,13 +40,8 @@ public final class OrbitalCommand {
      */
     private static final float DEFAULT_STRIKE_RADIUS = 14.0F;
 
-    /** 瞄准圈的缩放：视觉圈比伤害范围**小一点**，避免"圈太大、炸太小"的观感。 */
-    private static final float AIM_VISUAL_SCALE = 0.75F;
-    /** 伤害范围的缩放：实际打击半径比画出来的圈**大一点**。 */
-    private static final float DAMAGE_RADIUS_SCALE = 1.15F;
-
     /** 弹体相对光柱宽度的倍数（用户要求弹体"比瞄准光柱宽，更显眼"）。 */
-    private static final float PROJECTILE_WIDTH_FACTOR = 3.6F;
+    private static final float PROJECTILE_WIDTH_FACTOR = OrbitalStrike.PROJECTILE_WIDTH_FACTOR;
 
     public static final List<String> ALIASES = List.of("golems_arsenal", "ga");
 
@@ -88,16 +77,11 @@ public final class OrbitalCommand {
     /**
      * `/ga full [半径]` —— **全流程**：引导瞄准 → 聚合 → 发射弹体 → 落地冲击。
      *
-     * <p>这是收尾测试用的"一条命令走完整个技能"。时序：
-     * <pre>
-     *   t=0              GuidanceBeamEntity（六条光柱，50 tick ≈ 2.5 秒）
-     *   t=TOTAL_TICKS    弹体从高空射下 + 伤害光束（不可见）
-     *   弹体落地           OrbitalImpactEntity（球 / 环 / 火星 / 热痕）
-     * </pre>
+     * <p>这是收尾测试用的"一条命令走完整个技能"，实现已抽到
+     * {@link OrbitalStrike#cast}，和引导升级共用同一条时序。
      *
-     * <p><b>为什么伤害光束要隐藏</b>：炮的主伤害是落地那一下的冲击波，但结算逻辑仍在
-     * {@link OrbitalBeamEntity}（它负责冲击伤 + 余热）。视觉已经由弹体和落点特效承担，
-     * 所以这里把光束实体设为 invisible——逻辑照跑，画面不重复。
+     * <p>伤害光束会被设为 invisible：炮的主伤害是落点冲击，但结算逻辑仍在
+     * {@code OrbitalBeamEntity} 里；视觉由弹体和落点特效承担，不重复画。
      */
     private static LiteralArgumentBuilder<CommandSourceStack> cmdFull() {
         return Commands.literal("full")
@@ -114,34 +98,16 @@ public final class OrbitalCommand {
         float alt = Config.ORBITAL_BEAM_ALTITUDE.get().floatValue();
         float width = Config.ORBITAL_BEAM_WIDTH.get().floatValue();
 
-        // ① 引导 + 聚合瞄准
-        GuidanceBeamEntity.create(level, pos, radius * AIM_VISUAL_SCALE, alt, width * 0.5F);
-
-        // ② 瞄准结束的下一 tick：发射
-        // 提前 10 tick（0.5 秒）发射：让弹体的下降和瞄准的收束**重叠**，
-        // 而不是"瞄准结束→空白 0.6 秒→弹体出现"。弹体更亮更宽，重叠时能凸显出来。
-        final long due = level.getGameTime() + GuidanceBeamEntity.TOTAL_TICKS - 10;
-        GeneralEventHandler.schedulePersistent(() -> {
-            if (level.getGameTime() < due) {
-                return false;
-            }
-            // 起点压到 140 格：瞄准收束后弹体只下落约 12 tick，
-            // 否则从 300 格落下会有 1 秒多的"空窗期"，衔接不上。
-            OrbitalProjectileEntity.fire(level, pos, Math.min(alt, 140.0F), radius,
-                    width * PROJECTILE_WIDTH_FACTOR);
-            // 基础伤害 = 20 + 攻击者攻击力；灼烧固定 1 秒（20 tick）
-            float attack = 0.0F;
-            if (source.getEntity() instanceof net.minecraft.world.entity.LivingEntity le) {
-                attack = (float) le.getAttributeValue(
-                        net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
-            }
-            OrbitalBeamEntity beam = OrbitalBeamEntity.fire(level, pos,
-                    20.0F + attack,
-                    Config.ORBITAL_BEAM_RESIDUAL_DAMAGE.get().floatValue(),
-                    radius * DAMAGE_RADIUS_SCALE, 20, width, null, alt);
-            beam.setInvisible(true);
-            return true;
-        });
+        // 基础伤害 = 20 + 攻击者攻击力；灼烧固定 1 秒（20 tick）。
+        float attack = 0.0F;
+        if (source.getEntity() instanceof net.minecraft.world.entity.LivingEntity le) {
+            attack = (float) le.getAttributeValue(
+                    net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        }
+        OrbitalStrike.cast(level, pos, radius, 20.0F + attack,
+                Config.ORBITAL_BEAM_RESIDUAL_DAMAGE.get().floatValue(),
+                width, source.getEntity() instanceof net.minecraft.world.entity.LivingEntity le ? le : null,
+                alt, true);
 
         source.sendSuccess(() -> Component.literal(
                 "全流程开始：瞄准 " + (GuidanceBeamEntity.TOTAL_TICKS / 20.0F)

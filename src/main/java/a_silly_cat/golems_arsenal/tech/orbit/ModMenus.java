@@ -27,6 +27,10 @@ public final class ModMenus {
     public static final RegistryObject<MenuType<RocketMenu>> ROCKET =
             MENUS.register("rocket", () -> IForgeMenuType.create(RocketMenu::new));
 
+    /** 激光发射台的配置界面（无物品槽，纯配置终端）。 */
+    public static final RegistryObject<MenuType<LaserConsoleMenu>> LASER_CONSOLE =
+            MENUS.register("laser_console", () -> IForgeMenuType.create(LaserConsoleMenu::new));
+
     private ModMenus() {
     }
 

@@ -3,12 +3,19 @@ package a_silly_cat.golems_arsenal.tech.item;
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyCapability;
 import a_silly_cat.golems_arsenal.tech.energy.ItemEnergyStorage;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.item.equipments.MetalGolemWeaponItem;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
@@ -92,6 +99,24 @@ public class GolemZeroSwordItem extends MetalGolemWeaponItem {
     /** 每级科技升级提供的攻击力百分比（和武士刀同一个配置项）。 */
     public float getTechAttackPercent(int techLevel) {
         return (float) (techLevel * Config.TECH_DAMAGE_PER_LEVEL.get());
+    }
+
+    /** 科技等级加成改为装备属性；tick 不再重写，NBT 变化由 detectEquipmentUpdates 补刷。 */
+    @Override
+    public Multimap<Attribute, AttributeModifier> getGolemModifiers(ItemStack stack, Entity entity,
+                                                                    EquipmentSlot slot) {
+        Multimap<Attribute, AttributeModifier> map =
+                HashMultimap.create(super.getGolemModifiers(stack, entity, slot));
+        if (slot != getSlot() || !(entity instanceof AbstractGolemEntity<?, ?> golem)) {
+            return map;
+        }
+        int tech = a_silly_cat.golems_arsenal.tech.upgrade.GolemEnergyTechModifier.levelOf(golem);
+        if (tech > 0) {
+            map.put(Attributes.ATTACK_DAMAGE, new AttributeModifier(
+                    TECH_PERCENT_UUID, "golems_arsenal_zero_sword_percent",
+                    getTechAttackPercent(tech), AttributeModifier.Operation.MULTIPLY_BASE));
+        }
+        return map;
     }
 
     public int getEnergyCapacity(ItemStack stack) {
