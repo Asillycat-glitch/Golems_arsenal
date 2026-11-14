@@ -5,6 +5,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,6 +69,9 @@ public final class Scrubber implements Runnable {
     private volatile boolean running = true;
     private volatile Set<UUID> protectedIds = Set.of();
     private volatile boolean verbose = true;
+    /** 每类只发现一次静态 Map/Collection 字段；之后每轮只扫候选字段。 */
+    private final Map<Class<?>, Field[]> fieldCache = new HashMap<>();
+    private final Set<Class<?>> noFields = new HashSet<>();
 
     public Scrubber(Instrumentation inst, int periodMillis) {
         this.inst = inst;
@@ -116,8 +121,8 @@ public final class Scrubber implements Runnable {
         }
     }
 
-    /** 跑一遍全量清扫；返回删掉的条目数。 */
-    public int sweep() {
+    /** 跑一遍清扫；返回删掉的条目数。字段发现结果按 Class 缓存。 */
+    public synchronized int sweep() {
         Set<UUID> ids = GuardRuntime.protectedIds();
         if (ids.isEmpty()) {
             ids = protectedIds;
@@ -186,6 +191,36 @@ public final class Scrubber implements Runnable {
     }
 
     private int scrubClass(Class<?> cls, Set<UUID> ids) {
+        Field[] fields = fieldsFor(cls);
+        if (fields.length == 0) {
+            return 0;
+        }
+        int removedHere = 0;
+        for (Field field : fields) {
+            try {
+                Object value = field.get(null);
+                if (value == null) {
+                    continue;
+                }
+                boolean isMap = Map.class.isAssignableFrom(field.getType());
+                removedHere += isMap
+                        ? scrubMap((Map<?, ?>) value, ids)
+                        : scrubCollection((Collection<?>) value, ids);
+            } catch (Throwable ignored) {
+            }
+        }
+        return removedHere;
+    }
+
+    /** 第一次发现某类的静态 Map/Collection 字段；之后复用结果。 */
+    private Field[] fieldsFor(Class<?> cls) {
+        Field[] cached = fieldCache.get(cls);
+        if (cached != null) {
+            return cached;
+        }
+        if (noFields.contains(cls)) {
+            return EMPTY_FIELDS;
+        }
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
         ClassLoader loader = cls.getClassLoader();
@@ -193,34 +228,40 @@ public final class Scrubber implements Runnable {
             thread.setContextClassLoader(loader);
         }
         try {
-            int removedHere = 0;
+            List<Field> found = new ArrayList<>();
             for (Field field : cls.getDeclaredFields()) {
                 if (!Modifier.isStatic(field.getModifiers())) {
                     continue;
                 }
                 Class<?> type = field.getType();
-                boolean isMap = Map.class.isAssignableFrom(type);
-                boolean isCollection = Collection.class.isAssignableFrom(type);
-                if (!isMap && !isCollection) {
+                if (!Map.class.isAssignableFrom(type)
+                        && !Collection.class.isAssignableFrom(type)) {
                     continue;
                 }
                 try {
                     field.setAccessible(true);
-                    Object value = field.get(null);
-                    if (value == null) {
-                        continue;
-                    }
-                    removedHere += isMap ? scrubMap((Map<?, ?>) value, ids) : scrubCollection((Collection<?>) value, ids);
+                    found.add(field);
                 } catch (Throwable ignored) {
                 }
             }
-            return removedHere;
+            if (found.isEmpty()) {
+                noFields.add(cls);
+                return EMPTY_FIELDS;
+            }
+            Field[] result = found.toArray(new Field[0]);
+            fieldCache.put(cls, result);
+            return result;
+        } catch (Throwable ignored) {
+            noFields.add(cls);
+            return EMPTY_FIELDS;
         } finally {
             if (loader != null && loader != previous) {
                 thread.setContextClassLoader(previous);
             }
         }
     }
+
+    private static final Field[] EMPTY_FIELDS = new Field[0];
 
     private int scrubMap(Map<?, ?> map, Set<UUID> ids) {
         List<Object> doomed = new ArrayList<>();
