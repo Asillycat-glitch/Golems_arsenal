@@ -47,7 +47,11 @@ public final class Scrubber implements Runnable {
             "me.jellysquid.mods.sodium.",
             "org.embeddedt.embeddium.",
             "net.irisshaders.",
-            "net.coderbot.iris."
+            "net.coderbot.iris.",
+            // L2 框架 / Modular Golems：宿主与能力系统自身不是墓碑来源；
+            // 跳过它们可以避免在 Scrubber 线程上触发大量能力类的字段加载。
+            "dev.xkmc.l2",
+            "dev.xkmc.modulargolems."
     };
 
     private final Instrumentation inst;
