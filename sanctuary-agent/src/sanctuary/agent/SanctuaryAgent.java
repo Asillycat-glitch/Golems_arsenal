@@ -207,7 +207,7 @@ instrumentation = inst;
             SanctuaryTransformer current = transformer;
             for (Class<?> c : inst.getAllLoadedClasses()) {
                 String name = c.getName().replace('.', '/');
-                if (SanctuaryTransformer.isHostile(name) && inst.isModifiableClass(c)) {
+                if (SanctuaryTransformer.isModClass(c.getProtectionDomain()) && inst.isModifiableClass(c)) {
                     // 先用原始 class bytes 做常量池预筛；不命中就不 retransform。
                     byte[] bytes = readClassBytes(c);
                     if (current != null && !current.isInterested(name, bytes)) {
@@ -220,7 +220,7 @@ instrumentation = inst;
                 inst.retransformClasses(batch.subList(i, Math.min(i + 40, batch.size()))
                         .toArray(new Class<?>[0]));
             }
-            GuardRuntime.log("[SanctuaryAgent] retransformed hostile classes=" + batch.size()
+            GuardRuntime.log("[SanctuaryAgent] retransformed mod classes=" + batch.size()
                     + " modified=" + SanctuaryTransformer.modifiedClassCount());
         } catch (Throwable t) {
             try {

@@ -30,18 +30,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * 调静态方法（消费三个槽），不需要 {@code DUP}/{@code SWAP} 那套栈操作，也不会改变 max stack。
  * 因此字段门这条路径用 {@code ClassWriter(reader, 0)}（不重算帧）——只有方法入口那条需要算帧。</p>
  *
- * <p>只改 {@link #HOSTILE} 里列出的写入方；原版 / 宿主 / 我们自己的写一律不碰。</p>
+ * <p>所有从 mod jar 加载的类都按同一套技术门处理；不再按对手包名白名单选择。</p>
  */
 public final class SanctuaryTransformer implements ClassFileTransformer {
 
     private static final String RUNTIME = "sanctuary/agent/GuardRuntime";
-
-    /** 会被字段门处理的写入方。白名单之外的类不生成字段门。 */
-    private static final String[] HOSTILE = {
-            "com/luoee/arcanevortex/", "com/csdy/jzyy/", "com/csdy/tcondiadema/",
-            "com/mizi/miztinker/", "com/momosensei/momotinker/", "com/wzz/witherzilla/",
-            "plz/lizi/supersteve/", "net/diexv/", "flashfur/omnimobs/", "dev/othinus/toaru/"
-    };
 
     /** key = owner.name，value = GuardRuntime 里对应的方法名。 */
     private static final Map<String, String> FIELD_RULES = new HashMap<>();
@@ -60,14 +53,8 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         FIELD_RULES.put("net/minecraft/world/entity/Entity.canUpdate", "putBoolean");
     }
 
-    /** 方法入口探针：这些类的每个方法进来都打一行（每个 site 只一次）。 */
-    private static final java.util.Set<String> TRACE = new java.util.HashSet<>(java.util.List.of(
-            "com/luoee/arcanevortex/Help/HealthModifyHelp/HealthModify",
-            "com/luoee/arcanevortex/Help/EntityKillerHelp",
-            "com/luoee/arcanevortex/Content/Item/EntityRemover/RemoveHelp/MainRemove",
-            "com/luoee/arcanevortex/Content/Item/VanSh/VanShCrusher",
-            "com/luoee/arcanevortex/Content/Item/VanSh/VanShTool/VanShRadiantSun"
-    ));
+    /** 方法入口探针：C2b 起不再按对手类名开启。 */
+    private static final java.util.Set<String> TRACE = java.util.Set.of();
 
     /**
      * 直接"废掉"的方法（整类）。
@@ -126,58 +113,40 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         // ArcaneVortex 0.7.10 — hard erase / purge family.
         // HardErase.erase/eraseLegacy 返回 Result（对象），必须显式允许 objectReturn；
         // 拦下时返回 null，调用方会失败，但实体不会被清。stripEntity/purgeSections 仍是原规则。
-        rules.put("com/luoee/arcanevortex/Content/Item/EntityRemover/Purge/HardErase",
-                new Rule(false, true, "stripEntity", "purgeSections", "purgeKnownUuids", "erase"));
+        
         // 2026-11-12 修正：HardRemove 实际在 RemoveHelp 包，不在 Purge 包。
-        rules.put("com/luoee/arcanevortex/Content/Item/EntityRemover/RemoveHelp/HardRemove",
-                new Rule(false, "purge"));
+        
         // 2026-11-12 新增：MainRemove 是 AV 的"拆索引/回调"主入口，之前只有字段门。
-        rules.put("com/luoee/arcanevortex/Content/Item/EntityRemover/RemoveHelp/MainRemove",
-                new Rule(false, "remove", "forceRemove", "clearEntity", "chunkMapRemove", "deleteFrom"));
+        
         // 2026-11-14：VanSh Shift+左键走 EntityKillerHelp.tickDeath，不经过普通 hurt 链。
         // 这组方法都直接拿 Entity 当第一参，入口必须挡住。
-        rules.put("com/luoee/arcanevortex/Help/EntityKillerHelp",
-                new Rule(false, "tickDeath", "killEntity", "kill", "remove",
-                        "AsynchronousRemove", "setRemoved", "removeServerLevelEntity",
-                        "deleteEntity", "setEntityPos", "setEntityPosReflection"));
-        rules.put("com/luoee/arcanevortex/NativeAgent/NativeAgentHealthMethod",
-                new Rule(true, "forceSetHealth", "forceSetMaxHealth"));
+        
+        
 
         // toaru — execution / world removal chain.
-        rules.put("dev/othinus/toaru/GungnirExecution",
-                new Rule(false, "execute", "erase", "performExecution", "removeNonPlayer",
-                        "finishRemoval", "finishCollateralRemoval", "settleAndRemove"));
-        rules.put("dev/othinus/toaru/GungnirArcaneCompat",
-                new Rule(false, "finishNativeHealth", "suppressTerminalDefense"));
+        
+        
         // 2026-11-12：`/ga guard toaru` 的 ToaruProbe 直接调 DamageService.strike，
         // 不走 GungnirExecution.execute，所以只补 execute 入口时探针会"又有用"。
         // 实际实现是 GungnirDamageApi$Authority；把 strike 入口也纳入同一套门。
-        rules.put("dev/othinus/toaru/GungnirDamageApi$Authority",
-                new Rule(false, true, "strike"));
+        
 
         // 2026-11-12：OrangeSummer 走的是 VanShCrusher.remove 这一条，不是 execute；
         // 之前只有字段门，没有方法入口，所以 raw 被写成 0、实体被清掉。
-        rules.put("com/luoee/arcanevortex/Content/Item/Sword/OrangeSummer/OrangeSummer",
-                new Rule(false, "remove"));
-        rules.put("com/luoee/arcanevortex/Content/Item/VanSh/VanShCrusher",
-                new Rule(false, "remove", "forceRemove", "chunkMapRemove"));
-        rules.put("com/luoee/arcanevortex/Help/HealthModifyHelp/HealthModify",
-                new Rule(false, "forceModify", "entityDataModify", "tagModify",
-                        "attributeModifier", "setHealth"));
-        rules.put("com/luoee/arcanevortex/Help/DropLootHelp",
-                new Rule(false, "dropLoot"));
+        
+        
+        
+        
 
         // 2026-11-10：实测 VanShRadiantSun 被 AV 反复恢复（5 秒一轮里被重打 64 次），
         // 恢复窗口内它的 remove() 会把 DATA_HEALTH 写成 0.1。字段门只在补丁活着时有效，
         // 所以这里直接堵方法入口：只要目标受保护，remove()/m_5551_() 直接 return。
-        rules.put("com/luoee/arcanevortex/Content/Item/VanSh/VanShTool/VanShRadiantSun",
-                new Rule(false, "remove", "m_5551_", "onLeftClickEntity"));
-        rules.put("com/luoee/arcanevortex/Content/Item/VanSh/VanShTool/VanSh",
-                new Rule(false, "remove", "m_5551_", "onLeftClickEntity", "onEntitySwing"));
+        
+        
     }
 
     /** 这个类是不是要过字段门。 */
-    private static boolean isModClass(java.security.ProtectionDomain domain) {
+    public static boolean isModClass(java.security.ProtectionDomain domain) {
         try {
             if (domain == null || domain.getCodeSource() == null || domain.getCodeSource().getLocation() == null) {
                 return false;
@@ -187,22 +156,6 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         } catch (Throwable t) {
             return false;
         }
-    }
-
-    public static boolean isHostile(String className) {
-        if (className == null) {
-            return false;
-        }
-        // 数据驱动优先：mod 扫 jar 推过来的类。
-        if (GuardRuntime.isTarget(className)) {
-            return true;
-        }
-        for (String prefix : HOSTILE) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** Heartbeat 用：当前规则命中的类（点分名）。 */
@@ -261,7 +214,8 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
         Rule rule = rules.get(className);
         String[] neutralize = NEUTRALIZE.get(className);
         boolean vanillaGate = isVanillaGateClass(className);
-        boolean hostile = isHostile(className) || (isModClass(domain) && !GuardRuntime.isExcludedDotted(className.replace('/', '.')));
+        boolean hostile = isModClass(domain)
+                && !GuardRuntime.isExcludedDotted(className.replace('/', '.'));
         if (rule == null && neutralize == null && !vanillaGate && !hostile) {
             return null;
         }
