@@ -10,6 +10,16 @@
   `onEntitySwing`、是否有自定义 `use`/`inventoryTick`；
 - 不再因为“这个物品来自某个包”而额外标 `CUSTOM_HOOK`。
 
+## 已完成的第二刀（C2a）
+
+`DamageAdmission.isHostModWrite` 不再只看宿主帧的“下一帧”：
+
+- 只要宿主 API 的写栈里出现任何非宿主 / 非 vanilla / 非框架的模组帧，就拒绝；
+- 不检查具体 mod 名，也不检查 AV/toaru 类名；
+- 反射写（`setHealth` 等）也会因为调用栈里有外部 mod 帧而被拒。
+
+这是通用技术条件：**宿主 API 只能由宿主/框架链驱动**。
+
 ## 仍需迁移的针对性部分
 
 | 位置 | 身份依赖 | 目标替代 |
