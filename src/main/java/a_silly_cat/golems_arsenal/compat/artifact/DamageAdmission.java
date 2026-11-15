@@ -251,6 +251,18 @@ public final class DamageAdmission {
      */
     private static boolean isHostModWrite() {
         List<Frame> frames = frames();
+        // 技术条件：宿主 API 的栈里只要出现“非宿主/非 vanilla/非框架”的模组帧，
+        // 就不认作宿主自己的写。这里不按任何具体 mod 名字判断。
+        for (Frame frame : frames) {
+            if (!isTrustedHostCaller(frame.cls)
+                    && !frame.cls.startsWith("a_silly_cat.")
+                    && !frame.cls.startsWith("sanctuary.agent")) {
+                Golems_arsenal.LOGGER.info(
+                        "[DamageAdmission] host_api_foreign caller={}#{} (宿主 API 被外部帧驱动，已拒绝)",
+                        frame.cls, frame.method);
+                return false;
+            }
+        }
         for (int i = 0; i < frames.size(); i++) {
             if (!frames.get(i).cls.startsWith("dev.xkmc.modulargolems.")) {
                 continue;
@@ -259,9 +271,6 @@ public final class DamageAdmission {
             if (caller == null || isTrustedHostCaller(caller.cls)) {
                 return true;
             }
-            Golems_arsenal.LOGGER.info(
-                    "[DamageAdmission] host_api_foreign caller={}#{} (宿主 API 被外部模组驱动，已拒绝)",
-                    caller.cls, caller.method);
             return false;
         }
         return false;
