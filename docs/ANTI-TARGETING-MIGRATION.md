@@ -20,6 +20,33 @@
 
 这是通用技术条件：**宿主 API 只能由宿主/框架链驱动**。
 
+## 已完成的第三刀（C2b）
+
+agent 侧：
+
+- 移除 `HOSTILE` 包名列表；
+- 移除 14 组逐类 `rules.put`；
+- 移除 `NEUTRALIZE` 的 AV 具体类；
+- 移除 `WATCH` / `retransformWatch` / `restoreKiller`；
+- 初始 retransform 改为“所有 `/mods/` 类 + 常量池预筛”；
+- 只保留通用字段门、方法调用门、`MODIFIED_CLASSES` 和预筛缓存。
+
+仍未完成：
+
+- `Scrubber.SCRUB_SCOPE` 仍是身份范围（C3）；
+- `ToaruProbe` 仍是测试命令；
+- Tinkers 兼容 mixin 仍以特定事件类为目标（属于兼容，不是攻击策略）。
+
+## 当前测试包验证点
+
+用当前测试包（不是匠战妖域）：
+
+1. 启动日志出现 `retransformed mod classes=... modified=...`；
+2. 不再出现 `restore killer` / `neutralize retransformed`；
+3. Shift+左键后不再出现 `DamageAdmission allowed setHealth ... scope=host`；
+4. 观察启动耗时和 Scrubber 是否仍有明显卡顿；
+5. Tinkers 大傀儡、AV/toaru 普通战斗不崩。
+
 ## 仍需迁移的针对性部分
 
 | 位置 | 身份依赖 | 目标替代 |
