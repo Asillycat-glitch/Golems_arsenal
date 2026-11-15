@@ -48,14 +48,6 @@ import java.nio.file.StandardCopyOption;
 @Mod.EventBusSubscriber(modid = Golems_arsenal.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class AgentBootstrap {
 
-    private static final String[] TARGETS = {
-            "com.luoee.arcanevortex.Content.Item.EntityRemover.Purge.HardErase",
-            "com.luoee.arcanevortex.Content.Item.EntityRemover.Purge.HardRemove",
-            "com.luoee.arcanevortex.NativeAgent.NativeAgentHealthMethod",
-            "dev.othinus.toaru.GungnirExecution",
-            "dev.othinus.toaru.GungnirArcaneCompat"
-    };
-
     /** attach 成功之后才置 true；失败/关闭都不置，允许后续 config reload 再试。 */
     private static boolean installed;
     private static boolean loggedDefer;
@@ -295,27 +287,8 @@ public final class AgentBootstrap {
         }
     }
 
-    /** 对已经加载的目标类补一次 retransform（agent 晚于它们加载时用）。 */
+    /** C2b：不再按硬编码目标类补 retransform；agent 自己按 mod 类预筛处理。 */
     private static void retransformLoaded() {
-        try {
-            Class<?> agent = Class.forName("sanctuary.agent.SanctuaryAgent", true,
-                    ClassLoader.getSystemClassLoader());
-            Object inst = agent.getMethod("instrumentation").invoke(null);
-            if (!(inst instanceof Instrumentation instrumentation)) {
-                return;
-            }
-            ClassLoader loader = Golems_arsenal.class.getClassLoader();
-            for (String name : TARGETS) {
-                try {
-                    Class<?> cls = Class.forName(name, false, loader);
-                    if (instrumentation.isModifiableClass(cls)) {
-                        instrumentation.retransformClasses(cls);
-                    }
-                } catch (Throwable ignored) {
-                    // 目标 mod 没装或类名变了
-                }
-            }
-        } catch (Throwable ignored) {
-        }
+        // no-op：agent 的 retransformHostile 已经遍历所有 mod 类。
     }
 }
