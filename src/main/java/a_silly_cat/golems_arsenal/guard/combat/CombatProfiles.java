@@ -5,7 +5,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.HoeItem;
@@ -81,11 +80,8 @@ public final class CombatProfiles {
                 ItemStack.class, Level.class, Entity.class, int.class, boolean.class);
 
         // 没有已知武器家族，但自己声明了攻击钩子：也是战斗物品，未知 -> custom。
-        // ArcaneVortex 的非方块物品（VanSh / 实体移除器 / 星璇等）是已确认的复合物品：
-        // 它们的 use/onLeftClickEntity 不走普通攻击家族，统一标成 CUSTOM_HOOK。
-        boolean arcaneVortex = cls.getName().startsWith("com.erchien.arcanevortex.")
-                && !(item instanceof BlockItem);
-        boolean combat = melee || ranged || attackHook || arcaneVortex;
+        // 这里只按行为判定，不按模组包名判定。
+        boolean combat = melee || ranged || attackHook;
         boolean meleeLike = melee || attackHook;
         boolean pureRanged = ranged && !melee;
         // 纯远程的 use/inventoryTick 是弓/弩的正常拉弓/装填行为，不算自定义危险 hook；
@@ -94,7 +90,7 @@ public final class CombatProfiles {
             caps.add(CombatCapability.CONTINUOUS_HOOK);
         }
         if (combat && !vanilla && !pureRanged
-                && (arcaneVortex || attackHook || (melee && (customUse || continuous)))) {
+                && (attackHook || (melee && (customUse || continuous)))) {
             caps.add(CombatCapability.CUSTOM_HOOK);
         }
         return ItemProfile.of(cls.getName(), caps);
