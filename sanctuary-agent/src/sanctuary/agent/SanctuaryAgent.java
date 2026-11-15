@@ -19,15 +19,6 @@ public final class SanctuaryAgent {
     private static volatile boolean started;
     private static volatile Scrubber scrubber;
     private static volatile SanctuaryTransformer transformer;
-    /** 类查找缓存：findLoaded 每 3 秒扫全 JVM 是周期性成本，找到一次就固定。 */
-    private static final java.util.Map<String, Class<?>> CLASS_CACHE =
-            new java.util.concurrent.ConcurrentHashMap<>();
-    private static volatile Class<?> nativeBridgeClass;
-    private static volatile java.lang.reflect.Method nativeClearRestoreCache;
-    private static volatile Class<?> restoreManagerClass;
-    private static volatile java.lang.reflect.Method restoreClear;
-    private static volatile java.lang.reflect.Method restoreClearCache;
-    private static volatile java.lang.reflect.Method restoreCount;
 
     public static Scrubber scrubber() {
         return scrubber;
@@ -91,54 +82,7 @@ instrumentation = inst;
                 + inst.isRetransformClassesSupported() + ", patchObjectReturns=" + patchObjects + ")");
     }
 
-    /**
-     * 需要反复重打的关键类（点分名）。
-     *
-     * <p><b>只放 AV 自己的类</b>：这些类上的 mixin 是 AV 自己的，剥掉是目的。
-     * 绝不能放 {@code Entity}/{@code LivingEntity}/{@code SynchedEntityData$DataItem}——
-     * 重定义会把**所有** mod 在这三个类上的 mixin 一起剥掉（2026-11-09 实测：卡死在
-     * "Mod Loading working"）。</p>
-     */
-    private static final java.util.Set<String> WATCH = java.util.Set.of(
-            "com.luoee.arcanevortex.Help.HealthModifyHelp.HealthModify",
-            "com.luoee.arcanevortex.Help.EntityKillerHelp",
-            "com.luoee.arcanevortex.Content.Item.EntityRemover.RemoveHelp.MainRemove",
-            "com.luoee.arcanevortex.Content.Item.VanSh.VanShCrusher",
-            "com.luoee.arcanevortex.Content.Item.VanSh.VanShTool.VanShRadiantSun",
-            "com.luoee.arcanevortex.Content.Item.VanSh.VanShTool.VanSh"
-    );
-
     private static volatile boolean watchArmed;
-
-    /** 调 AV 自己的 nativeClearRestoreCache（如果它的桥已经加载）。 */
-    private static void wipeRestoreCache(Instrumentation inst) {
-        Class<?> bridge = nativeBridgeClass;
-        if (bridge == null) {
-            for (Class<?> c : inst.getAllLoadedClasses()) {
-                if ("com.luoee.arcanevortex.NativeAgent.NativeAgentBridge".equals(c.getName())) {
-                    bridge = c;
-                    nativeBridgeClass = c;
-                    break;
-                }
-            }
-        }
-        if (bridge == null) {
-            return;
-        }
-        try {
-            java.lang.reflect.Method method = nativeClearRestoreCache;
-            if (method == null) {
-                method = bridge.getMethod("nativeClearRestoreCache");
-                nativeClearRestoreCache = method;
-            }
-            method.invoke(null);
-            GuardRuntime.log("[SanctuaryAgent] AV restore cache cleared");
-        } catch (Throwable t) {
-            nativeBridgeClass = null;
-            nativeClearRestoreCache = null;
-            GuardRuntime.log("[SanctuaryAgent] clear restore cache failed: " + t);
-        }
-    }
 
     /** mod 扫完 jar 推来新目标之后：把已加载的那些立刻 retransform 一遍。 */
     private static void armTargets() {
@@ -157,20 +101,6 @@ instrumentation = inst;
                 inst.retransformClasses(batch.subList(i, Math.min(i + 40, batch.size()))
                         .toArray(new Class<?>[0]));
             }
-            // 废掉 AV 的 native 恢复缓存，并把"注册/重放"那两类也重打一遍。
-            wipeRestoreCache(inst);
-            java.util.Set<String> neutral = SanctuaryTransformer.neutralizeNames();
-            int neutralized = 0;
-            for (Class<?> c : inst.getAllLoadedClasses()) {
-                if (neutral.contains(c.getName().replace('.', '/')) && inst.isModifiableClass(c)) {
-                    try {
-                        inst.retransformClasses(c);
-                        neutralized++;
-                    } catch (Throwable ignored) {
-                    }
-                }
-            }
-            GuardRuntime.log("[SanctuaryAgent] neutralize retransformed=" + neutralized);
             GuardRuntime.log("[SanctuaryAgent] armTargets retransformed=" + batch.size()
                     + " totalTargets=" + GuardRuntime.targetCount());
         } catch (Throwable t) {
@@ -180,115 +110,6 @@ instrumentation = inst;
                 java.nio.file.Files.writeString(java.nio.file.Path.of("sanctuary-agent-fail.txt"), java.time.LocalDateTime.now() + "\n" + sw);
             } catch (Throwable ignored) { }
             GuardRuntime.log("[SanctuaryAgent] armTargets failed: " + t);
-        }
-    }
-
-    /**
-     * 拒绝恢复流程：用 AV 自己的 API 把恢复目标清空。
-     *
-     * <p>为什么不用 NEUTRALIZE：native 方法没有字节码，把 `nativeRetransformRestoreTargets`
-     * 改成 `return` 是无效的；而 `registerClass` 的登记发生在我们的 attach 之前。
-     * 正确的做法是调它自己的 `clear()` / `clearCache()`。</p>
-     */
-    private static void startRestoreKiller() {
-        Thread thread = new Thread(() -> {
-            boolean reported = false;
-            while (true) {
-                try {
-                    Thread.sleep(3000L);
-                } catch (InterruptedException e) {
-                    return;
-                }
-                try {
-                    Class<?> mgr = restoreManagerClass;
-                    if (mgr == null) {
-                        mgr = findLoaded("com.luoee.arcanevortex.NativeAgent.ClassRestoreManager");
-                        if (mgr == null) {
-                            continue;
-                        }
-                        restoreManagerClass = mgr;
-                    }
-                    java.lang.reflect.Method clear = restoreClear;
-                    if (clear == null) {
-                        clear = mgr.getMethod("clear");
-                        restoreClear = clear;
-                    }
-                    java.lang.reflect.Method clearCache = restoreClearCache;
-                    if (clearCache == null) {
-                        clearCache = mgr.getMethod("clearCache");
-                        restoreClearCache = clearCache;
-                    }
-                    java.lang.reflect.Method count = restoreCount;
-                    if (count == null) {
-                        count = mgr.getMethod("getRegisteredClassCount");
-                        restoreCount = count;
-                    }
-                    clear.invoke(null);
-                    clearCache.invoke(null);
-                    int left = (int) count.invoke(null);
-                    if (!reported || left > 0) {
-                        GuardRuntime.log("[SanctuaryAgent] restore targets cleared, remaining=" + left
-                                + " modified=" + SanctuaryTransformer.modifiedClassCount());
-                        reported = true;
-                    }
-                } catch (Throwable t) {
-                    // 类/方法失效时清缓存，下一轮重新查找。
-                    restoreManagerClass = null;
-                    restoreClear = null;
-                    restoreClearCache = null;
-                    restoreCount = null;
-                    if (!reported) {
-                        GuardRuntime.log("[SanctuaryAgent] restore killer failed: " + t);
-                        reported = true;
-                    }
-                }
-            }
-        }, "SanctuaryRestoreKiller");
-        thread.setDaemon(true);
-        thread.start();
-        GuardRuntime.log("[SanctuaryAgent] restore killer armed (3s)");
-    }
-
-    private static Class<?> findLoaded(String dotted) {
-        Class<?> cached = CLASS_CACHE.get(dotted);
-        if (cached != null) {
-            return cached;
-        }
-        Instrumentation inst = instrumentation;
-        if (inst == null) {
-            return null;
-        }
-        for (Class<?> c : inst.getAllLoadedClasses()) {
-            if (c.getName().equals(dotted)) {
-                CLASS_CACHE.put(dotted, c);
-                return c;
-            }
-        }
-        return null;
-    }
-
-    /** 只重转 SanctuaryTransformer 真正改过字节的类。 */
-    private static void retransformModified(Instrumentation inst) {
-        java.util.Set<String> names = SanctuaryTransformer.modifiedClassNames();
-        if (names.isEmpty()) {
-            return;
-        }
-        java.util.List<Class<?>> batch = new java.util.ArrayList<>();
-        for (Class<?> c : inst.getAllLoadedClasses()) {
-            if (!inst.isModifiableClass(c)) {
-                continue;
-            }
-            String internal = c.getName().replace('.', '/');
-            if (names.contains(internal)) {
-                batch.add(c);
-            }
-        }
-        for (int i = 0; i < batch.size(); i += 40) {
-            try {
-                inst.retransformClasses(batch.subList(i,
-                        Math.min(i + 40, batch.size())).toArray(new Class<?>[0]));
-            } catch (Throwable ignored) {
-            }
         }
     }
 
@@ -376,63 +197,8 @@ instrumentation = inst;
 
     /** 由 mod 层在服务端启动完成后调用（反射入口），避免加载期重定义。 */
     public static void armWatch() {
-        if (watchArmed) {
-            return;
-        }
         watchArmed = true;
-        Instrumentation inst = instrumentation;
-        if (inst != null) {
-            // startRetransformWatch(inst);  // 打架：它 150ms 就 burst，我们追不上，先关
-            // startFastRegate(inst);       // 打架：同上
-            // startVanillaRegate(inst);    // 打架：同上
-            // startFastRegate(inst);       // 打架：同上
-            startRestoreKiller();
-        } else {
-            GuardRuntime.log("[SanctuaryAgent] armWatch without instrumentation");
-        }
-    }
-
-    private static void startRetransformWatch(Instrumentation inst) {
-        try {
-            java.util.List<Class<?>> watched = new java.util.ArrayList<>();
-            for (Class<?> c : inst.getAllLoadedClasses()) {
-                if (WATCH.contains(c.getName()) && inst.isModifiableClass(c)) {
-                    watched.add(c);
-                }
-            }
-            GuardRuntime.log("[SanctuaryAgent] retransform watch armed classes=" + watched.size());
-            if (watched.isEmpty()) {
-                return;
-            }
-            Thread thread = new Thread(() -> {
-                while (true) {
-                    try {
-                        Thread.sleep(3000L);
-                    } catch (InterruptedException e) {
-                        return;
-                    }
-                    try {
-                        inst.retransformClasses(watched.toArray(new Class<?>[0]));
-                    } catch (Throwable t) {
-            try {
-                java.io.StringWriter sw = new java.io.StringWriter();
-                t.printStackTrace(new java.io.PrintWriter(sw));
-                java.nio.file.Files.writeString(java.nio.file.Path.of("sanctuary-agent-fail.txt"), java.time.LocalDateTime.now() + "\n" + sw);
-            } catch (Throwable ignored) { }
-                        GuardRuntime.log("[SanctuaryAgent] retransform watch failed: " + t);
-                    }
-                }
-            }, "SanctuaryRetransformWatch");
-            thread.setDaemon(true);
-            thread.start();
-        } catch (Throwable t) {
-            try {
-                java.io.StringWriter sw = new java.io.StringWriter();
-                t.printStackTrace(new java.io.PrintWriter(sw));
-                java.nio.file.Files.writeString(java.nio.file.Path.of("sanctuary-agent-fail.txt"), java.time.LocalDateTime.now() + "\n" + sw);
-            } catch (Throwable ignored) { }
-            GuardRuntime.log("[SanctuaryAgent] retransform watch arming failed: " + t);
-        }
+        GuardRuntime.log("[SanctuaryAgent] armWatch: behavior-based transformer only");
     }
 
     private static void retransformHostile(Instrumentation inst) {

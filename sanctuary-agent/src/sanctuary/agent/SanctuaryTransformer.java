@@ -72,25 +72,10 @@ public final class SanctuaryTransformer implements ClassFileTransformer {
     /**
      * 直接"废掉"的方法（整类）。
      *
-     * <p>2026-11-10 实测：AV 的 `ClassRestoreManager` 把原版字节缓存在 **native** 里
-     * （`NativeAgentBridge.nativeRegisterRestoreClass` / `nativeRetransformRestoreTargets`），
-     * 每 ~0.4 秒把我们的目标类恢复一次（2 分钟里 VanShRadiantSun 被恢复 367 次）。
-     * 在 Java 层重打永远追不上，所以直接把它的"注册/重放"入口做成空方法。</p>
+     * <p>C2b：不再按对手类名 neutralize。这里保留空表，只作为旧接口占位；
+     * 真正的拦截由通用字段/方法调用门和宿主 API 栈守卫完成。</p>
      */
     private static final Map<String, String[]> NEUTRALIZE = new HashMap<>();
-
-    static {
-        NEUTRALIZE.put("com/luoee/arcanevortex/NativeAgent/ClassRestoreManager",
-                new String[]{"register", "retransform", "prime"});
-        NEUTRALIZE.put("com/luoee/arcanevortex/NativeAgent/TailGuard",
-                new String[]{"runLoop", "assertTail", "start", "acquire", "loop", "burst", "kick"});
-        NEUTRALIZE.put("com/luoee/arcanevortex/NativeAgent/MemoryDllLoader",
-                new String[]{"load", "map", "inject", "resolve"});
-        NEUTRALIZE.put("com/luoee/arcanevortex/NativeAgent/OriginalClassProvider",
-                new String[]{"register", "provide", "restore"});
-    }
-
-    
 
     public static java.util.Set<String> neutralizeNames() {
         return NEUTRALIZE.keySet();
