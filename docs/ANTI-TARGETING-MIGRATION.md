@@ -33,9 +33,19 @@ agent 侧：
 
 仍未完成：
 
-- `Scrubber.SCRUB_SCOPE` 仍是身份范围（C3）；
 - `ToaruProbe` 仍是测试命令；
 - Tinkers 兼容 mixin 仍以特定事件类为目标（属于兼容，不是攻击策略）。
+
+## C3：通用墓碑扫描
+
+`Scrubber` 已移除 `SCRUB_SCOPE`：
+
+- 扫描所有 `code source` 位于 `/mods/` 的类；
+- 每轮最多发现 100 个新类，发现阶段分摊到多轮；
+- 已命中类只保留 `Map`/`Collection` 的 `Field[]`，之后每轮只扫这些字段；
+- 仍排除原版/Forge/ASM/渲染栈/宿主/L2 自身，避免把框架类初始化到 Scrubber 线程。
+
+这不是按对手包名限定，而是按“类是否来自 mods、是否有静态集合字段”的技术条件。
 
 ## 当前测试包验证点
 
