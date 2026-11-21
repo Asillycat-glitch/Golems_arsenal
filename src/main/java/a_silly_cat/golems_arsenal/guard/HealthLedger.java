@@ -119,9 +119,25 @@ public final class HealthLedger {
                             + " expected=" + track.expected);
             return;
         }
+        // 只拒绝“数值不合法”，不限制正常大伤害：
+        // 1,000,000 伤害/1,000,000 血量仍然放行；toaru 的 Float.MAX 会被挡。
+        float damageAmount = event.getAmount();
+        float maxHealth = golem.getMaxHealth();
+        float ceiling = Math.max(1_000_000.0F, maxHealth * 100.0F);
+        if (!Float.isFinite(damageAmount) || damageAmount < 0.0F
+                || damageAmount > ceiling) {
+            outsideAdmission++;
+            noteTamper(golem);
+            log(track, "INVALID_DAMAGE",
+                    "amount=" + damageAmount + " ceiling=" + ceiling
+                            + " source=" + event.getSource().getMsgId()
+                            + " expected=" + track.expected);
+            return;
+        }
         track.expected = HealthAuditMath.expectedAfterDamage(track.expected, event.getAmount(), golem.getAbsorptionAmount());
         track.lastEvent = "damage:" + event.getSource().getMsgId();
         track.lastEventTick = eventTick(golem);
+        SoulRegistry.observe(golem, track.expected, golem.getMaxHealth(), false);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -140,6 +156,7 @@ public final class HealthLedger {
         track.expected = HealthAuditMath.expectedAfterHeal(track.expected, golem.getMaxHealth(), healed);
         track.lastEvent = "heal";
         track.lastEventTick = eventTick(golem);
+        SoulRegistry.observe(golem, track.expected, golem.getMaxHealth(), false);
     }
 
     @SubscribeEvent
@@ -161,6 +178,7 @@ public final class HealthLedger {
         if (track != null) {
             track.died = true;
             track.expected = 0.0F;
+            SoulRegistry.observe(golem, 0.0F, golem.getMaxHealth(), true);
         }
     }
 
@@ -317,13 +335,28 @@ public final class HealthLedger {
     }
 
 
+    /** 直接注册（不经过 EntityJoinLevelEvent）后把新投影纳入账本。 */
+    public static void ensureTracked(AbstractGolemEntity<?, ?> golem) {
+        if (golem != null) {
+            try {
+                track(golem);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     /** 这只傀儡是否已经被账本跟踪（有被准入的伤害/治疗历史）。 */
     public static boolean tracked(AbstractGolemEntity<?, ?> golem) {
-        return golem != null && TRACKED.containsKey(golem.getUUID());
+        return golem != null
+                && (SoulRegistry.soulFor(golem) != null || TRACKED.containsKey(golem.getUUID()));
     }
 
     /** 这只傀儡是否真的触发过 {@code LivingDeathEvent}。克制用：不看血量（血量可被篡改）。 */
     public static boolean observedDeath(AbstractGolemEntity<?, ?> golem) {
+        GolemSoul soul = SoulRegistry.soulFor(golem);
+        if (soul != null) {
+            return soul.died;
+        }
         Track track = TRACKED.get(golem.getUUID());
         return track != null && track.died;
     }
@@ -331,10 +364,14 @@ public final class HealthLedger {
     /**
      * 账本认为这只傀儡现在应该有多少血。
      *
-     * <p>没被跟踪过就返回 raw（当作"没发生过任何伤害"）。死亡否决用它判断
-     * "这次死亡是不是伤害管线带来的"：真的被打死时 expected 会先被 LivingDamageEvent 压到 0。</p>
+     * <p>H1：Soul 存在时优先读 Soul；旧 Track 只作为迁移期 fallback。
+     * 没被跟踪过就返回 raw（当作"没发生过任何伤害"）。</p>
      */
     public static float expectedOf(AbstractGolemEntity<?, ?> golem) {
+        GolemSoul soul = SoulRegistry.soulFor(golem);
+        if (soul != null && Float.isFinite(soul.health)) {
+            return soul.health;
+        }
         Track track = TRACKED.get(golem.getUUID());
         if (track != null && Float.isFinite(track.expected)) {
             return track.expected;
@@ -354,7 +391,7 @@ public final class HealthLedger {
     /** 孤儿账本的宽限期（tick）。覆盖 Anchor 的 MISSING_LIMIT 重建窗口，超时才算真没了。 */
     private static final int ORPHAN_TTL = 1200;
     /** 最近被打过的傀儡：每 tick 单独对账，避免"客户端先看到 0 → 播死亡动画"。 */
-    private static final Map<UUID, AbstractGolemEntity<?, ?>> HOT = new HashMap<>();
+    private static final Map<UUID, java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>>> HOT = new HashMap<>();
     /** MAX_HEALTH_TAMPER 的日志节流。 */
     private static final Map<UUID, Long> LAST_MAX_LOG = new HashMap<>();
 
@@ -376,7 +413,7 @@ public final class HealthLedger {
 
     public static void noteTamper(AbstractGolemEntity<?, ?> golem) {
         TAMPER_TICK.put(golem.getUUID(), gameTime(golem));
-        HOT.put(golem.getUUID(), golem);
+        HOT.put(golem.getUUID(), new java.lang.ref.WeakReference<>(golem));
     }
 
     /** 最近 {@code window} tick 内是否发生过血量篡改。 */
@@ -397,7 +434,11 @@ public final class HealthLedger {
         if (event.phase != TickEvent.Phase.END || !isEnabled() || HOT.isEmpty()) {
             return;
         }
-        for (AbstractGolemEntity<?, ?> golem : new ArrayList<>(HOT.values())) {
+        for (java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref : new ArrayList<>(HOT.values())) {
+            AbstractGolemEntity<?, ?> golem = ref == null ? null : ref.get();
+            if (golem == null) {
+                continue;
+            }
             try {
                 if (golem.isRemoved() || !recentTamper(golem, 100)) {
                     HOT.remove(golem.getUUID());
@@ -803,12 +844,12 @@ public final class HealthLedger {
         if (!owned(golem) || !(golem.level() instanceof ServerLevel)) {
             return null;
         }
-        return TRACKED.computeIfAbsent(golem.getUUID(), id -> {
+        Track track = TRACKED.computeIfAbsent(golem.getUUID(), id -> {
             float raw = DamageAdmission.rawHealth(golem);
             if (!Float.isFinite(raw)) {
                 raw = golem.getHealth();
             }
-            Track track = new Track(id, golem.level().dimension(), golem.blockPosition(),
+            Track created = new Track(id, golem.level().dimension(), golem.blockPosition(),
                     golem.getClass().getName(), raw, golem.getHealth());
             MinecraftServer server = golem.getServer();
             if (server != null) {
@@ -817,8 +858,10 @@ public final class HealthLedger {
                     restored++;
                 }
             }
-            return track;
+            return created;
         });
+        SoulRegistry.ensure(golem, track.expected, golem.getMaxHealth());
+        return track;
     }
 
     private static boolean owned(AbstractGolemEntity<?, ?> golem) {
@@ -856,6 +899,7 @@ public final class HealthLedger {
         if (old == null || fresh == null || old.equals(fresh)) {
             return;
         }
+        SoulRegistry.rotateProjection(old, fresh);
         Track oldTrack = TRACKED.remove(old);
         if (oldTrack != null) {
             TRACKED.put(fresh, new Track(oldTrack, fresh));
@@ -882,6 +926,7 @@ public final class HealthLedger {
 
     public static void clear() {
         TRACKED.clear();
+        SoulRegistry.clear();
         TAMPER_TICK.clear();
         ORPHAN_SINCE.clear();
         HOT.clear();

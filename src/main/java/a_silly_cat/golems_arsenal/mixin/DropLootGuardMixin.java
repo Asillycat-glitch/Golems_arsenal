@@ -1,6 +1,8 @@
 package a_silly_cat.golems_arsenal.mixin;
 
+import a_silly_cat.golems_arsenal.guard.SoulRegistry;
 import a_silly_cat.golems_arsenal.guard.sanctuary.Sanctuary;
+import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,6 +21,9 @@ public abstract class DropLootGuardMixin {
 
     @Inject(method = "dropAllDeathLoot", at = @At("HEAD"), cancellable = true)
     private void ga$guardDeathLoot(DamageSource source, CallbackInfo ci) {
+        if ((Object) this instanceof AbstractGolemEntity<?, ?> golem) {
+            SoulRegistry.captureNow(golem);
+        }
         if (Sanctuary.blockExternalClear((LivingEntity) (Object) this, "LivingEntity.dropAllDeathLoot")) {
             ci.cancel();
         }

@@ -2,6 +2,7 @@ package a_silly_cat.golems_arsenal.guard.sanctuary;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.guard.HealthLedger;
+import a_silly_cat.golems_arsenal.guard.ProtectedEntityPolicy;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
@@ -57,6 +58,9 @@ public final class IndexGuard {
     /** {@code ClassInstanceMultiMap#remove(Object)} / {@code EntityLookup#remove(EntityAccess)} HEAD。 */
     public static boolean denyIndexRemoval(Object value, String site) {
         try {
+            if (ProtectedEntityPolicy.inRebuild()) {
+                return false;
+            }
             if (!(value instanceof Entity entity) || !(entity instanceof AbstractGolemEntity<?, ?> golem)) {
                 return false;
             }
@@ -100,6 +104,9 @@ public final class IndexGuard {
     /** {@code EntityTickList#remove} HEAD：把受保护活体从 tick 列表里摘掉 = 软删除。 */
     public static boolean denyTickListRemoval(Entity entity) {
         try {
+            if (ProtectedEntityPolicy.inRebuild()) {
+                return false;
+            }
             if (!(entity instanceof AbstractGolemEntity<?, ?> golem) || !protectedAlive(golem)) {
                 return false;
             }
@@ -148,16 +155,43 @@ public final class IndexGuard {
         }
     }
 
-    /** {@code Entity#setLevelCallback} HEAD：回调被置成 NULL = 世界不再 tick 它。 */
+    /** {@code Entity#setLevelCallback} HEAD：NULL 或非原版 callback 都可能把实体变成"不再 tick 的雕像"。 */
     public static boolean denyLevelCallback(Entity entity, EntityInLevelCallback callback) {
         try {
-            if (callback != EntityInLevelCallback.NULL
-                    || !(entity instanceof AbstractGolemEntity<?, ?> golem)) {
+            if (ProtectedEntityPolicy.inRebuild()) {
+                return false;
+            }
+            if (!(entity instanceof AbstractGolemEntity<?, ?> golem)) {
                 return false;
             }
             if (!protectedAlive(golem)) {
                 return false;
             }
+
+            boolean nullCallback = callback == EntityInLevelCallback.NULL;
+            String callbackClass = callback == null ? "null" : callback.getClass().getName();
+            boolean vanillaCallback = callbackClass.startsWith(
+                    "net.minecraft.world.level.entity.PersistentEntitySectionManager");
+            if (!nullCallback && !vanillaCallback) {
+                // 通用规则：受保护实体的 level callback 只能由原版 section manager 维护。
+                // 任何第三方自定义 callback（死亡回调/幽灵回调/软删除回调）都拒。
+                Entity.RemovalReason reason = RemovalGuard.rawRemovalReason(entity);
+                if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                        || reason == Entity.RemovalReason.CHANGED_DIMENSION
+                        || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER
+                        || reason == Entity.RemovalReason.DISCARDED
+                        && RemovalGuard.isAllowedLifecycle(golem)) {
+                    return false;
+                }
+                callbackBlocked++;
+                log(golem, "FOREIGN-LEVEL-CALLBACK-DENIED callback=" + callbackClass
+                        + " reason=" + reason + " ledger=" + HealthLedger.expectedOf(golem));
+                return true;
+            }
+            if (!nullCallback) {
+                return false;
+            }
+
             Entity.RemovalReason reason = RemovalGuard.rawRemovalReason(entity);
             // 区块卸载/跨维度/玩家搬运的 NULL 回调是正常清理的一部分：
             // 这里不拿 isLoaded 判竞态，直接放行，否则可能在卸载边界把实体留成"还在 tick"。
@@ -184,11 +218,43 @@ public final class IndexGuard {
     }
 
     /**
-     * 把"还在内存里、但索引里没有"的傀儡直接塞回实体索引。
+     * addFreshEntity 失败时的最后注册路径：直接调 PersistentEntitySectionManager.addNewEntity。
+     * 只用于新建投影，不用于旧实体；调用方负责重建作用域与客户端 add 包。
+     */
+    public static boolean forceRegister(Entity entity) {
+        try {
+            if (entity == null || !(entity.level() instanceof ServerLevel level)) {
+                return false;
+            }
+            Object manager = readField(level, "f_143244_", "entityManager");
+            if (manager == null) {
+                return false;
+            }
+            for (java.lang.reflect.Method method : manager.getClass().getMethods()) {
+                if (!method.getName().equals("m_157533_") || method.getParameterCount() != 1) {
+                    continue;
+                }
+                try {
+                    method.setAccessible(true);
+                    method.invoke(manager, entity);
+                    boolean indexed = level.getEntity(entity.getId()) == entity;
+                    Golems_arsenal.LOGGER.warn("[Sanctuary] force_register uuid={} indexed={}",
+                            entity.getUUID(), indexed);
+                    return indexed;
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    /**
+     * 完整重挂：先把旧 lookup/section/tick/knownUuids 摘干净，再走
+     * {@code ServerLevel.addFreshEntity}，让 ChunkMap 真正建立 tracking。
      *
-     * <p>不用 {@code level.addFreshEntity}：它会被 {@code knownUuids} 拒绝，正是历史日志里
-     * {@code reindex_failed} 的来源。这里改走 {@code EntityLookup#add} + section add，
-     * 不触发第二次 EntityJoinLevelEvent，也不改变实体对象。</p>
+     * <p>旧实现直接往 EntityLookup/Section 里塞对象，绕过了 ChunkMap，
+     * 结果就是服务端 section 有、客户端/Jade 没有、watchdog 永动机。</p>
      */
     public static boolean reindex(AbstractGolemEntity<?, ?> golem) {
         try {
@@ -196,51 +262,76 @@ public final class IndexGuard {
                     || !(golem.level() instanceof ServerLevel level)) {
                 return false;
             }
+            unindex(golem);
+            RemovalGuard.clearField(golem);
+            boolean[] added = {false};
+            ProtectedEntityPolicy.runRebuild(() -> added[0] =
+                    a_silly_cat.golems_arsenal.guard.index.WorldIndexGuard.register(level, golem));
+            if (!added[0]) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] REINDEX-ADD-FAILED uuid={} ledger={}",
+                        golem.getUUID(), HealthLedger.expectedOf(golem));
+                return false;
+            }
+            ensureTicking(golem);
+            boolean indexed = level.getEntity(golem.getId()) == golem;
+            reindexed++;
+            Golems_arsenal.LOGGER.warn("[Sanctuary] INDEX-READDED uuid={} ledger={} lookup={}",
+                    golem.getUUID(), HealthLedger.expectedOf(golem), indexed);
+            return indexed;
+        } catch (Throwable t) {
+            Golems_arsenal.LOGGER.warn("[Sanctuary] INDEX-READD-FAILED uuid={} {}",
+                    golem == null ? null : golem.getUUID(), t.toString());
+            return false;
+        }
+    }
+
+    /** 把实体从旧索引/knownUuids/tickList 完整摘掉，给 addFreshEntity 一个干净起点。 */
+    private static void unindex(AbstractGolemEntity<?, ?> golem) {
+        try {
+            ServerLevel level = (ServerLevel) golem.level();
             Object manager = readField(level, "f_143244_", "entityManager");
             if (manager == null) {
-                return false;
+                return;
             }
             Object lookup = readField(manager, "f_157494_", "visibleEntityStorage");
-            if (!(lookup instanceof EntityLookup<?> rawLookup)) {
-                return false;
+            if (lookup instanceof EntityLookup<?> rawLookup) {
+                @SuppressWarnings({"rawtypes", "unchecked"})
+                EntityLookup raw = (EntityLookup) rawLookup;
+                try {
+                    raw.remove(golem);
+                } catch (Throwable ignored) {
+                }
             }
-            Object byUuid = readField(lookup, "f_156808_", "byUuid");
-            boolean present = byUuid instanceof Map<?, ?> map && map.containsKey(golem.getUUID());
-            if (present) {
-                return true;
-            }
-            @SuppressWarnings({"rawtypes", "unchecked"})
-            EntityLookup raw = (EntityLookup) rawLookup;
-            raw.add(golem);
-
             Object storage = readField(manager, "f_157495_", "sectionStorage");
             if (storage instanceof EntitySectionStorage<?> rawStorage) {
                 @SuppressWarnings({"rawtypes", "unchecked"})
                 EntitySectionStorage sections = (EntitySectionStorage) rawStorage;
                 EntitySection<?> section = sections.getOrCreateSection(
                         SectionPos.asLong(golem.blockPosition()));
-                boolean inSection = section.getEntities().anyMatch(e -> e == golem);
-                if (!inSection) {
-                    @SuppressWarnings({"rawtypes", "unchecked"})
-                    EntitySection rawSection = (EntitySection) section;
-                    rawSection.add(golem);
+                @SuppressWarnings({"rawtypes", "unchecked"})
+                EntitySection rawSection = (EntitySection) section;
+                try {
+                    rawSection.remove(golem);
+                } catch (Throwable ignored) {
                 }
             }
-
             Object known = readField(manager, "f_157491_", "knownUuids");
             if (known instanceof Set<?> rawSet) {
                 @SuppressWarnings("unchecked")
                 Set<Object> uuids = (Set<Object>) rawSet;
-                uuids.add(golem.getUUID());
+                uuids.remove(golem.getUUID());
             }
-            reindexed++;
-            Golems_arsenal.LOGGER.warn("[Sanctuary] INDEX-READDED uuid={} ledger={}",
-                    golem.getUUID(), HealthLedger.expectedOf(golem));
-            return true;
-        } catch (Throwable t) {
-            Golems_arsenal.LOGGER.warn("[Sanctuary] INDEX-READD-FAILED uuid={} {}",
-                    golem == null ? null : golem.getUUID(), t.toString());
-            return false;
+            if (serverTickList == null) {
+                serverTickList = findField(ServerLevel.class, "f_143243_", "entityTickList");
+            }
+            Object tick = serverTickList == null ? null : serverTickList.get(level);
+            if (tick instanceof EntityTickList tickList) {
+                try {
+                    tickList.remove(golem);
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 

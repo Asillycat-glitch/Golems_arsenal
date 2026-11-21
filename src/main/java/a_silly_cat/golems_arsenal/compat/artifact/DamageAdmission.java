@@ -160,6 +160,17 @@ public final class DamageAdmission {
     }
 
     private static boolean allowHealthChange(LivingEntity entity, float amount, String op) {
+        // 客户端只做一件事：有主傀儡的血量不允许被同步成 0/负数/非有限值。
+        // 服务端已经拒绝了真实清血；客户端若还落地 0，会进入死亡动画并让碰撞箱/模型消失，
+        // 形成“服务端 dump 还在、客户端看不见”的幽灵。
+        if (entity != null && entity.level().isClientSide()) {
+            if (entity instanceof AbstractGolemEntity<?, ?> golem && golem.getOwnerUUID() != null
+                    && (!Float.isFinite(amount) || amount <= 0.0F)) {
+                logRejected(entity, op, "client lethal sync amount=" + amount);
+                return false;
+            }
+            return true;
+        }
         if (!isProtected(entity)) {
             return true;
         }
@@ -188,6 +199,17 @@ public final class DamageAdmission {
         // 只处理下降；上升/不变（heal、加载、恢复）不拦。
         if (amount >= raw - EPS) {
             return true;
+        }
+        // 不限制“大伤害”，只拒绝不合法的血量值：
+        // 正常 L2 一百万血量/伤害仍然放行；toaru 的 -Float.MAX_VALUE 不是伤害，
+        // 是非法负血量，必须拒绝。读档/死亡/内部修复允许负值过渡。
+        if (amount < 0.0F
+                && !SanctuaryScopes.inLoad()
+                && !SanctuaryScopes.inDeath()
+                && !SanctuaryScopes.inInternal()) {
+            logRejected(entity, op, "negative health amount=" + amount
+                    + " raw=" + raw + " caller=" + callerText());
+            return false;
         }
         // 作用域放行：已准入的 hurt / 死亡栈 / 读档 / 本模组内部写 / 宿主模组自己的写。
         if (SanctuaryScopes.inLoad() || SanctuaryScopes.inDeath()) {

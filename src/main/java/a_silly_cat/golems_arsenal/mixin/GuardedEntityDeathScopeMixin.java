@@ -1,7 +1,9 @@
 package a_silly_cat.golems_arsenal.mixin;
 
+import a_silly_cat.golems_arsenal.guard.SoulRegistry;
 import a_silly_cat.golems_arsenal.guard.sanctuary.Sanctuary;
 import a_silly_cat.golems_arsenal.guard.sanctuary.SanctuaryScopes;
+import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import dev.xkmc.modulargolems.content.entity.common.GuardedEntity;
 import net.minecraft.world.damagesource.DamageSource;
 import org.spongepowered.asm.mixin.Mixin;
@@ -31,6 +33,9 @@ public abstract class GuardedEntityDeathScopeMixin {
 
     @Inject(method = "die", at = @At("HEAD"), cancellable = true)
     private void ga$enterDie(DamageSource source, CallbackInfo ci) {
+        if ((Object) this instanceof AbstractGolemEntity<?, ?> golem) {
+            SoulRegistry.captureNow(golem);
+        }
         if (Sanctuary.preventDeath((GuardedEntity) (Object) this, source)) {
             ci.cancel();
             return;

@@ -40,7 +40,18 @@ public final class Watchdog {
 
     private static final int INTERVAL = 10;
 
-    private static final Map<UUID, AbstractGolemEntity<?, ?>> LIVE = new HashMap<>();
+    private static final Map<UUID, java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>>> LIVE = new HashMap<>();
+
+    private static java.util.List<AbstractGolemEntity<?, ?>> liveSnapshot() {
+        java.util.List<AbstractGolemEntity<?, ?>> out = new ArrayList<>(LIVE.size());
+        for (java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref : new ArrayList<>(LIVE.values())) {
+            AbstractGolemEntity<?, ?> golem = ref == null ? null : ref.get();
+            if (golem != null) {
+                out.add(golem);
+            }
+        }
+        return out;
+    }
 
     private static Field removalReasonField;
     private static Field addedToWorldField;
@@ -73,7 +84,7 @@ public final class Watchdog {
         }
         if (event.getEntity() instanceof AbstractGolemEntity<?, ?> golem
                 && Sanctuary.protectedGolem(golem)) {
-            LIVE.put(golem.getUUID(), golem);
+            LIVE.put(golem.getUUID(), new java.lang.ref.WeakReference<>(golem));
         }
     }
 
@@ -112,7 +123,7 @@ public final class Watchdog {
         // 匠战妖域的 superKillEntity 不是逐个摘实体，而是把整个 EntityLookup 换掉；
         // 逐实体检查看不出来（对象还在、字段也没动），所以这里单独盯对象身份。
         watchIndex(event.getServer().overworld());
-        for (AbstractGolemEntity<?, ?> golem : new ArrayList<>(LIVE.values())) {
+        for (AbstractGolemEntity<?, ?> golem : liveSnapshot()) {
             try {
                 check(golem);
             } catch (Throwable ignored) {
@@ -315,9 +326,9 @@ public final class Watchdog {
     }
 
     public static void rotateIdentity(UUID old, UUID fresh) {
-        AbstractGolemEntity<?, ?> golem = LIVE.remove(old);
-        if (golem != null) {
-            LIVE.put(fresh, golem);
+        java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref = LIVE.remove(old);
+        if (ref != null) {
+            LIVE.put(fresh, ref);
         }
         Long fail = LAST_READD_FAIL.remove(old);
         if (fail != null) {

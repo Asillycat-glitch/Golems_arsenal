@@ -1,5 +1,6 @@
 package a_silly_cat.golems_arsenal.mixin;
 
+import a_silly_cat.golems_arsenal.guard.ProtectedEntityPolicy;
 import a_silly_cat.golems_arsenal.guard.sanctuary.RemovalGuard;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,14 +27,30 @@ public abstract class EntityIsRemovedGuardMixin {
 
     @Inject(method = "isRemoved", at = @At("HEAD"), cancellable = true)
     private void ga$guardIsRemoved(CallbackInfoReturnable<Boolean> cir) {
-        if (RemovalGuard.ledgerAlive((Entity) (Object) this)) {
+        Entity self = (Entity) (Object) this;
+        if (ProtectedEntityPolicy.protectsClient(self)) {
+            RemovalGuard.clearClientField(self);
+            cir.setReturnValue(false);
+            return;
+        }
+        if (ProtectedEntityPolicy.protects(self)) {
+            // 读侧当场清字段：否则 ServerEntity/ChunkMap 仍可能按 raw reason 发移除包，
+            // 服务端对象还在，客户端实体却被删掉。
+            RemovalGuard.clearField(self);
             cir.setReturnValue(false);
         }
     }
 
     @Inject(method = "getRemovalReason", at = @At("HEAD"), cancellable = true)
     private void ga$guardRemovalReason(CallbackInfoReturnable<Entity.RemovalReason> cir) {
-        if (RemovalGuard.ledgerAlive((Entity) (Object) this)) {
+        Entity self = (Entity) (Object) this;
+        if (ProtectedEntityPolicy.protectsClient(self)) {
+            RemovalGuard.clearClientField(self);
+            cir.setReturnValue(null);
+            return;
+        }
+        if (ProtectedEntityPolicy.protects(self)) {
+            RemovalGuard.clearField(self);
             cir.setReturnValue(null);
         }
     }

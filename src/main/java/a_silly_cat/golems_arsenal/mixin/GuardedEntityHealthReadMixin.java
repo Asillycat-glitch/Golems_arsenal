@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public abstract class GuardedEntityHealthReadMixin {
 
     private static final Map<UUID, Integer> LAST_LOG = new ConcurrentHashMap<>();
+    private static final Map<UUID, Float> LAST_GOOD_CLIENT = new ConcurrentHashMap<>();
 
     @Inject(method = "getHealth", at = @At("RETURN"), cancellable = true)
     private void ga$correctReportedHealth(CallbackInfoReturnable<Float> cir) {
@@ -51,10 +52,36 @@ public abstract class GuardedEntityHealthReadMixin {
                 return;
             }
             float reported = cir.getReturnValue();
+            // 客户端也做投影读：AV 可以直接把客户端的 DATA_HEALTH 写成 0/0.1；
+            // 记住最后一次正常值，别让客户端模型/死亡动画按 0 血跑。
+            if (golem.level().isClientSide
+                    && a_silly_cat.golems_arsenal.guard.ProtectedEntityPolicy.protectsClient(golem)) {
+                if (Float.isFinite(reported) && reported > 1.0F) {
+                    LAST_GOOD_CLIENT.put(golem.getUUID(), reported);
+                    return;
+                }
+                Float last = LAST_GOOD_CLIENT.get(golem.getUUID());
+                float fallback = last != null && Float.isFinite(last) && last > 1.0F
+                        ? last : Math.max(1.0F, golem.getMaxHealth());
+                cir.setReturnValue(fallback);
+                return;
+            }
             float raw = DamageAdmission.rawHealth(golem);
-            // 2026-11-08：上界取 max(raw, 账本)。只看 raw 的话，"raw 被写 0、账本还满"这一帧
-            // 仍然会报 0 血（HUD 空血、客户端播死亡动画），而这正是攻击方要的那一帧。
             float expected = a_silly_cat.golems_arsenal.guard.HealthLedger.expectedOf(golem);
+            // 2026-11-18：服务端权威读。受保护傀儡的 getHealth 不再 max(raw, ledger)，
+            // 而是 Soul/账本；Entity/DataItem 只是投影。native 写内存写高/写低都不影响
+            // 这里的权威值（客户端仍读同步值，HUD 由服务端包纠正）。
+            if (!golem.level().isClientSide
+                    && a_silly_cat.golems_arsenal.guard.ProtectedEntityPolicy.protects(golem)) {
+                float soulHealth = a_silly_cat.golems_arsenal.guard.SoulRegistry
+                        .healthForProjection(golem.getUUID());
+                float authority = Float.isFinite(soulHealth) && soulHealth > 0.0F
+                        ? soulHealth : expected;
+                if (Float.isFinite(authority) && authority > 1.0F) {
+                    cir.setReturnValue(authority);
+                    return;
+                }
+            }
             // 2026-11-09：读侧掩护。服务端、非可信读者（原版 / 别的模组 / 攻击者）一律只看得到
             // 掩护值——"血量低于我最大生命就秒杀"这类阈值判定因此永远不成立。
             // 客户端不挡（HUD 要显示真实血条），我们自己的作用域也不挡。

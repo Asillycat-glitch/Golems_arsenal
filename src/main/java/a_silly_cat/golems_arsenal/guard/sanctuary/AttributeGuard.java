@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class AttributeGuard {
 
-    private static final Map<AttributeInstance, AbstractGolemEntity<?, ?>> OWNERS =
+    private static final Map<AttributeInstance, java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>>> OWNERS =
             new IdentityHashMap<>();
     private static final Map<UUID, Integer> LAST_LOG = new ConcurrentHashMap<>();
 
@@ -38,8 +38,13 @@ public final class AttributeGuard {
     /** 把属性实例和它的主人绑定（受击、审计时调用）。 */
     public static void bind(AttributeInstance instance, AbstractGolemEntity<?, ?> golem) {
         if (instance != null && golem != null) {
-            OWNERS.put(instance, golem);
+            OWNERS.put(instance, new java.lang.ref.WeakReference<>(golem));
         }
+    }
+
+    private static AbstractGolemEntity<?, ?> owner(AttributeInstance instance) {
+        java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref = OWNERS.get(instance);
+        return ref == null ? null : ref.get();
     }
 
     /** {@code AttributeInstance#addModifier/addPermanentModifier/addTransientModifier} HEAD。 */
@@ -51,7 +56,7 @@ public final class AttributeGuard {
             if (!isMaxHealth(instance)) {
                 return true;
             }
-            AbstractGolemEntity<?, ?> golem = OWNERS.get(instance);
+            AbstractGolemEntity<?, ?> golem = owner(instance);
             if (golem == null) {
                 // 攻击方可能抢在第一次绑定之前挂修饰符：做一次反向查找兜底。
                 golem = findOwner(instance);
@@ -82,7 +87,7 @@ public final class AttributeGuard {
             if (instance == null || !isMaxHealth(instance)) {
                 return true;
             }
-            AbstractGolemEntity<?, ?> golem = OWNERS.get(instance);
+            AbstractGolemEntity<?, ?> golem = owner(instance);
             if (golem == null) {
                 golem = findOwner(instance);
             }
@@ -182,7 +187,7 @@ public final class AttributeGuard {
             if (instance == null || !isMaxHealth(instance)) {
                 return reported;
             }
-            AbstractGolemEntity<?, ?> golem = OWNERS.get(instance);
+            AbstractGolemEntity<?, ?> golem = owner(instance);
             if (golem == null || !Sanctuary.protectedGolem(golem)) {
                 return reported;
             }

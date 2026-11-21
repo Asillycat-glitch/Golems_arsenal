@@ -3,6 +3,7 @@ package a_silly_cat.golems_arsenal.guard.sanctuary;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.compat.artifact.DamageAdmission;
 import a_silly_cat.golems_arsenal.guard.HealthLedger;
+import a_silly_cat.golems_arsenal.guard.SoulRegistry;
 import dev.xkmc.modulargolems.content.capability.GolemTracker;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.nbt.CompoundTag;
@@ -191,6 +192,10 @@ public final class IdentityGuard {
         }
         try {
             HealthLedger.rotateIdentity(old, fresh);
+        } catch (Throwable ignored) {
+        }
+        try {
+            SoulRegistry.rotateProjection(old, fresh);
         } catch (Throwable ignored) {
         }
         try {

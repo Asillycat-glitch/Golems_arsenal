@@ -74,4 +74,51 @@ public final class AgentBridge {
             return "agent=off";
         }
     }
+
+    /** agent 的 map/container 门用 int entity id 查受保护投影。 */
+    public static boolean isProtectedId(int id) {
+        try {
+            return Anchor.isProtectedEntityId(id);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /** 重建作用域：让 agent 的反射/容器门放行我们自己的 direct register。 */
+    public static void enterRebuild() {
+        try {
+            Class<?> runtime = Class.forName("sanctuary.agent.GuardRuntime");
+            runtime.getMethod("trustEnter").invoke(null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static void exitRebuild() {
+        try {
+            Class<?> runtime = Class.forName("sanctuary.agent.GuardRuntime");
+            runtime.getMethod("trustExit").invoke(null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** DataItem 没有反向指针；把受保护傀儡的 DATA_HEALTH 项推给 agent 的 Field.set 门。 */
+    public static void onProtectedDataItem(Object entity) {
+        if (!(entity instanceof net.minecraft.world.entity.LivingEntity living)) {
+            return;
+        }
+        try {
+            java.lang.reflect.Field accessorField = net.minecraft.world.entity.LivingEntity.class
+                    .getDeclaredField("f_20961_");
+            accessorField.setAccessible(true);
+            Object accessor = accessorField.get(null);
+            if (!(accessor instanceof net.minecraft.network.syncher.EntityDataAccessor<?> dataAccessor)) {
+                return;
+            }
+            Object item = living.getEntityData().get(
+                    (net.minecraft.network.syncher.EntityDataAccessor<Float>) dataAccessor);
+            Class<?> runtime = Class.forName("sanctuary.agent.GuardRuntime");
+            runtime.getMethod("protectDataItem", Object.class).invoke(null, item);
+        } catch (Throwable ignored) {
+        }
+    }
 }

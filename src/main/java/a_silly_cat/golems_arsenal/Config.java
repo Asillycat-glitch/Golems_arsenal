@@ -822,7 +822,7 @@ public final class Config {
 
         BUILDER.push("compat");
         FANTASY_TRUE_HEALTH_SYNC = BUILDER.comment("fantasy_ending writes true health directly to DATA_HEALTH_ID, leaving Modular Golems guardedData stale. When true, player-owned golems slowly sync guardedData down to the real DATA_HEALTH_ID so healing and getHealth() work again. Disable for P2 guard tests if you need guardedData left untouched.")
-                .define("fantasy_true_health_sync", true);
+                .define("fantasy_true_health_sync", false);
         BUILDER.pop();
 
         BUILDER.push("damage_admission");

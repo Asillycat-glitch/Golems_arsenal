@@ -1,6 +1,8 @@
 package a_silly_cat.golems_arsenal.mixin;
 
+import a_silly_cat.golems_arsenal.guard.sanctuary.Anchor;
 import a_silly_cat.golems_arsenal.guard.sanctuary.Projection;
+import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,6 +25,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityTickFreezeMixin {
+
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void ga$guardBeforeTick(CallbackInfo ci) {
+        if ((Object) this instanceof AbstractGolemEntity<?, ?> golem) {
+            Anchor.guardBeforeTick(golem);
+        }
+    }
 
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void ga$freezeTick(CallbackInfo ci) {

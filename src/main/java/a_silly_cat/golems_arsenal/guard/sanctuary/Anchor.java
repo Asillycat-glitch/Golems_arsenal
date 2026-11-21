@@ -2,6 +2,8 @@ package a_silly_cat.golems_arsenal.guard.sanctuary;
 
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.guard.HealthLedger;
+import a_silly_cat.golems_arsenal.guard.ProtectedEntityPolicy;
+import a_silly_cat.golems_arsenal.guard.SoulRegistry;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -16,6 +18,10 @@ import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.IntSet;
+import it.unimi.dsi.fastutil.ints.IntSets;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,9 +62,54 @@ public final class Anchor extends SavedData {
      * 而重建才是设计里的兜底。20 次是 10 秒，测试窗口里根本等不到；2 次（1 秒）足够排除抖动。</p>
      */
     private static final int MISSING_LIMIT = 2;
+    private static final Map<UUID, Long> LAST_CLIENT_SYNC = new HashMap<>();
 
-    /** 活着的受保护傀儡（对象级）。 */
-    private static final Map<UUID, AbstractGolemEntity<?, ?>> LIVE = new HashMap<>();
+    /** 活着的受保护傀儡（弱引用：不让 GhostPurge 从静态表里扫到实体对象）。 */
+    private static final Map<UUID, java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>>> LIVE = new HashMap<>();
+
+    /** 受保护实体的网络 entity id：用于拦截客户端移除包。 */
+    private static final IntSet PROTECTED_ENTITY_IDS =
+            IntSets.synchronize(new IntOpenHashSet());
+    /** 客户端也要按 UUID 挡 byUuid/knownUuids 的直删。 */
+    private static final java.util.Set<UUID> PROTECTED_UUIDS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static boolean isProtectedEntityId(int id) {
+        return PROTECTED_ENTITY_IDS.contains(id);
+    }
+
+    public static void protect(int id) {
+        PROTECTED_ENTITY_IDS.add(id);
+    }
+
+    public static void protect(UUID uuid, int id) {
+        if (uuid != null) {
+            PROTECTED_UUIDS.add(uuid);
+        }
+        protect(id);
+    }
+
+    /** 受保护投影 UUID：世界索引门用它判断 byUuid / knownUuids 的 key。 */
+    public static boolean isProtectedUuid(UUID id) {
+        return id != null && (PROTECTED_UUIDS.contains(id) || LIVE.containsKey(id) || SoulRegistry.hasProjection(id));
+    }
+
+    /** 客户端对账用：当前受保护 UUID 快照。 */
+    public static java.util.List<UUID> protectedUuids() {
+        return new ArrayList<>(PROTECTED_UUIDS);
+    }
+
+    public static void unprotect(UUID uuid, int id) {
+        if (uuid != null) {
+            PROTECTED_UUIDS.remove(uuid);
+        }
+        unprotect(id);
+    }
+
+    /** 正常生命周期放行前调用：允许本次服务端移除同步到客户端。 */
+    public static void unprotect(int id) {
+        PROTECTED_ENTITY_IDS.remove(id);
+    }
 
     /**
      * 当前在监视表里的傀儡（拷贝）。
@@ -67,13 +118,29 @@ public final class Anchor extends SavedData {
      * 不去每 tick 扫全世界实体。</p>
      */
     public static java.util.List<AbstractGolemEntity<?, ?>> liveSnapshot() {
-        return new ArrayList<>(LIVE.values());
+        java.util.List<AbstractGolemEntity<?, ?>> out = new ArrayList<>(LIVE.size());
+        for (java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref : new ArrayList<>(LIVE.values())) {
+            AbstractGolemEntity<?, ?> golem = ref == null ? null : ref.get();
+            if (golem != null) {
+                out.add(golem);
+            }
+        }
+        return out;
+    }
+
+    private static void putLive(AbstractGolemEntity<?, ?> golem) {
+        if (golem != null) {
+            LIVE.put(golem.getUUID(), new java.lang.ref.WeakReference<>(golem));
+        }
     }
     /** 玩家/正常生命周期放行的移除，不再重建。 */
     private static final Set<UUID> RELEASED = new HashSet<>();
     /** 最后一次"坐标正常"的位置。攻击方能把 x/y/z 直接写成 NaN，之后所有 isLoaded 判定都会假。 */
     private static final Map<UUID, net.minecraft.core.BlockPos> LAST_POS = new HashMap<>();
     private static final Map<UUID, Integer> MISSING = new HashMap<>();
+    /** 重建失败计数/冷却：避免 addFreshEntity 失败后每 tick 刷日志把服务器拖死。 */
+    private static final Map<UUID, Integer> REBUILD_FAILS = new HashMap<>();
+    private static final Map<UUID, Long> LAST_REBUILD_AT = new HashMap<>();
 
     private final Map<UUID, CompoundTag> snapshots = new HashMap<>();
     /**
@@ -129,13 +196,31 @@ public final class Anchor extends SavedData {
     @SubscribeEvent
     public static void onJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) {
+            if (event.getEntity() instanceof AbstractGolemEntity<?, ?> golem
+                    && golem.getOwnerUUID() != null) {
+                // 客户端只保护本地玩家的傀儡；敌方/其他 profile 的傀儡不能被客户端
+                // remove 门保护，否则服务端能打、客户端却挡移除。
+                net.minecraft.client.player.LocalPlayer local =
+                        net.minecraft.client.Minecraft.getInstance().player;
+                if (local != null && local.getUUID().equals(golem.getOwnerUUID())) {
+                    PROTECTED_ENTITY_IDS.add(golem.getId());
+                    PROTECTED_UUIDS.add(golem.getUUID());
+                }
+            }
             return;
         }
         if (!(event.getEntity() instanceof AbstractGolemEntity<?, ?> golem)
                 || !Sanctuary.protectedGolem(golem)) {
             return;
         }
-        LIVE.put(golem.getUUID(), golem);
+        putLive(golem);
+        PROTECTED_ENTITY_IDS.add(golem.getId());
+        PROTECTED_UUIDS.add(golem.getUUID());
+        VisibilityGuard.repair(golem);
+        try {
+            AgentBridge.onProtectedDataItem(golem);
+        } catch (Throwable ignored) {
+        }
         AgentBridge.onProtected(golem.getUUID());
         RELEASED.remove(golem.getUUID());
         MISSING.remove(golem.getUUID());
@@ -144,11 +229,27 @@ public final class Anchor extends SavedData {
     @SubscribeEvent
     public static void onLeave(EntityLeaveLevelEvent event) {
         if (event.getLevel().isClientSide()) {
+            if (event.getEntity() instanceof AbstractGolemEntity<?, ?> golem) {
+                // 攻击方在客户端先 setRemoved/触发 leave，再走“已移除”分支。
+                // 只要这个 id 还在保护集里，就不能因为 leave 自己把保护撤掉。
+                if (isProtectedEntityId(golem.getId())) {
+                    Golems_arsenal.LOGGER.warn(
+                            "[Sanctuary] client_protection_kept_on_leave uuid={} id={}",
+                            golem.getUUID(), golem.getId());
+                    return;
+                }
+                PROTECTED_ENTITY_IDS.remove(golem.getId());
+                PROTECTED_UUIDS.remove(golem.getUUID());
+            }
             return;
         }
         if (event.getEntity() instanceof AbstractGolemEntity<?, ?> golem) {
             Entity.RemovalReason reason = golem.getRemovalReason();
             if (reason == null) {
+                return;
+            }
+            if (RemovalGuard.isLifecycleAllowedRecently(golem)) {
+                release(golem.getUUID());
                 return;
             }
             // 真死（账本见过 LivingDeathEvent）是正常结束，直接从监视表放掉。
@@ -167,17 +268,90 @@ public final class Anchor extends SavedData {
         }
     }
 
+    /** 从监视表移除，并同步撤掉网络 entity id 的移除包保护。 */
+    private static void untrack(UUID id) {
+        java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref = LIVE.remove(id);
+        AbstractGolemEntity<?, ?> removed = ref == null ? null : ref.get();
+        if (removed != null) {
+            PROTECTED_ENTITY_IDS.remove(removed.getId());
+        }
+    }
+
     /** 正常生命周期放行（玩家回收、跨维度、卸载）：不再重建这只。 */
     public static void release(UUID id) {
         if (id == null) {
             return;
         }
         RELEASED.add(id);
-        LIVE.remove(id);
+        java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref = LIVE.remove(id);
+        AbstractGolemEntity<?, ?> removed = ref == null ? null : ref.get();
+        if (removed != null) {
+            PROTECTED_ENTITY_IDS.remove(removed.getId());
+        }
         MISSING.remove(id);
     }
 
     // ------------------------------------------------------------------ 每 tick 对账
+
+    /**
+     * 先修坐标，再做其他判定。
+     *
+     * <p>攻击方可以绕过 {@code setPosRaw} 直接写 {@code x/y/z} 字段，把傀儡扔到
+     * {@code -999999} 或 NaN。等 END 阶段再修，碰撞扫描已经拿着这个位置跑了一整 tick；
+     * 所以 START 每 tick 只做一次轻量位置修复。</p>
+     */
+    /**
+     * 独立守卫线程通过 server.execute 调进来的对账入口。
+     * 必须是服务器线程；不在这里做任何跨线程世界访问。
+     */
+    public static void threadPulse(MinecraftServer server) {
+        if (server == null || !server.isSameThread()) {
+            return;
+        }
+        Anchor data = get(server);
+        for (UUID id : new ArrayList<>(LIVE.keySet())) {
+            AbstractGolemEntity<?, ?> golem = liveEntity(id);
+            if (golem != null) {
+                data.check(server, golem);
+            } else {
+                data.checkMissing(server, id);
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerTickStart(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.START || Sanctuary.mode() != SanctuaryMode.ENFORCE) {
+            return;
+        }
+        for (AbstractGolemEntity<?, ?> golem : liveSnapshot()) {
+            try {
+                clampMovement(golem);
+                repairPosition(golem);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /** 实体 tick 前先夹住 delta 并修位置；防止同一 tick 内碰撞扫描被巨大位移拖死。 */
+    public static void guardBeforeTick(AbstractGolemEntity<?, ?> golem) {
+        try {
+            clampMovement(golem);
+            repairPosition(golem);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 位置被打飞后，delta 也可能还是巨大值；碰撞扫描会按它扫穿整个世界。 */
+    private static void clampMovement(AbstractGolemEntity<?, ?> golem) {
+        net.minecraft.world.phys.Vec3 delta = golem.getDeltaMovement();
+        double len = delta.lengthSqr();
+        if (!Double.isFinite(len) || len > 9.0D) {
+            golem.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            Golems_arsenal.LOGGER.warn("[Sanctuary] movement_clamped uuid={} delta=({},{},{})",
+                    golem.getUUID(), delta.x, delta.y, delta.z);
+        }
+    }
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
@@ -189,7 +363,15 @@ public final class Anchor extends SavedData {
             return;
         }
         Anchor data = get(server);
-        for (AbstractGolemEntity<?, ?> golem : new ArrayList<>(LIVE.values())) {
+        for (UUID id : new ArrayList<>(LIVE.keySet())) {
+            AbstractGolemEntity<?, ?> golem = liveEntity(id);
+            if (golem == null) {
+                try {
+                    data.checkMissing(server, id);
+                } catch (Throwable ignored) {
+                }
+                continue;
+            }
             try {
                 data.check(server, golem);
             } catch (Throwable ignored) {
@@ -198,15 +380,89 @@ public final class Anchor extends SavedData {
         data.setDirty();
     }
 
+    private static AbstractGolemEntity<?, ?> liveEntity(UUID id) {
+        java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref = LIVE.get(id);
+        return ref == null ? null : ref.get();
+    }
+
+    public static AbstractGolemEntity<?, ?> liveByUuid(UUID id) {
+        return liveEntity(id);
+    }
+
+    public static AbstractGolemEntity<?, ?> liveById(int id) {
+        for (java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref : new ArrayList<>(LIVE.values())) {
+            AbstractGolemEntity<?, ?> golem = ref == null ? null : ref.get();
+            if (golem != null && golem.getId() == id) {
+                return golem;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 弱引用被 GC 后的兜底：对象没了，但快照/Soul 还在，仍然应该重建。
+     * 只按 id 走，不再依赖旧实体对象。
+     */
+    private void checkMissing(MinecraftServer server, UUID id) {
+        if (id == null || RELEASED.contains(id) || RemovalGuard.isLifecycleAllowed(id)) {
+            if (id != null) {
+                untrack(id);
+                snapshots.remove(id);
+            }
+            return;
+        }
+        CompoundTag snapshot = snapshots.get(id);
+        if (snapshot == null) {
+            return;
+        }
+        int missing = MISSING.merge(id, 1, Integer::sum);
+        if (missing < MISSING_LIMIT) {
+            return;
+        }
+        long now = server.overworld().getGameTime();
+        Long last = LAST_REBUILD_AT.get(id);
+        if (last != null && now - last < 20L) {
+            return;
+        }
+        LAST_REBUILD_AT.put(id, now);
+        if (recreate(server.overworld(), id, snapshot, -1)) {
+            recreated++;
+            MISSING.remove(id);
+            REBUILD_FAILS.remove(id);
+            LAST_REBUILD_AT.remove(id);
+            return;
+        }
+        int fails = REBUILD_FAILS.merge(id, 1, Integer::sum);
+        if (fails >= 3) {
+            Golems_arsenal.LOGGER.error("[Sanctuary] projection_abandoned uuid={} fails={} ledger=? (missing object)",
+                    id, fails);
+            untrack(id);
+            Watchdog.forget(id);
+            snapshots.remove(id);
+            MISSING.remove(id);
+            REBUILD_FAILS.remove(id);
+            LAST_REBUILD_AT.remove(id);
+        }
+    }
+
     private void check(MinecraftServer server, AbstractGolemEntity<?, ?> golem) {
         UUID id = golem.getUUID();
+        if (RemovalGuard.isLifecycleAllowedRecently(golem)) {
+            release(id);
+            snapshots.remove(id);
+            return;
+        }
+        try {
+            AgentBridge.onProtectedDataItem(golem);
+        } catch (Throwable ignored) {
+        }
         if (RELEASED.contains(id) || HealthLedger.observedDeath(golem)) {
             // 2026-11-09：这条以前是静默的，导致"傀儡突然不再被重挂"查不出原因。
             if (!RELEASED.contains(id)) {
                 Golems_arsenal.LOGGER.warn("[Sanctuary] anchor_dropped uuid={} observedDeath=true ledger={}",
                         id, HealthLedger.expectedOf(golem));
             }
-            LIVE.remove(id);
+            untrack(id);
             snapshots.remove(id);
             return;
         }
@@ -214,7 +470,7 @@ public final class Anchor extends SavedData {
         if (HealthLedger.tracked(golem)) {
             float expected = HealthLedger.expectedOf(golem);
             if (Float.isFinite(expected) && expected <= 0.0F && !HealthLedger.recentTamper(golem, 200)) {
-                LIVE.remove(id);
+                untrack(id);
                 snapshots.remove(id);
                 return;
             }
@@ -225,6 +481,16 @@ public final class Anchor extends SavedData {
         // 坐标被写成 NaN 之后，blockPosition() 是 NaN，isLoaded 恒 false —— 旧代码就在这里
         // 提前 return，于是重建永远不会发生（2026-11-08 实测：全死亡、零 recreated）。
         repairPosition(golem);
+        VisibilityGuard.repair(golem);
+        try {
+            long now = level.getGameTime();
+            Long last = LAST_CLIENT_SYNC.get(id);
+            if (last == null || now - last >= 20L) {
+                LAST_CLIENT_SYNC.put(id, now);
+                a_silly_cat.golems_arsenal.guard.index.ClientProjectionSync.teleport(level, golem);
+            }
+        } catch (Throwable ignored) {
+        }
         // 区块没加载：不判定，也不重建（否则会在错误的位置刷一只）。
         if (!level.isLoaded(golem.blockPosition())) {
             return;
@@ -237,7 +503,7 @@ public final class Anchor extends SavedData {
             // 探针：add 之前把"世界眼里的移除状态"记下来，失败时一起打出来。
             Entity.RemovalReason preReason = RemovalGuard.rawRemovalReason(golem);
             boolean preRemoved = golem.isRemoved();
-            if (level.addFreshEntity(golem)) {
+            if (IndexGuard.reindex(golem)) {
                 reindexed++;
                 MISSING.remove(id);
                 RemovalGuard.clearField(golem);
@@ -259,14 +525,46 @@ public final class Anchor extends SavedData {
         // 2) 索引里也没有、对象又加不回去：按快照重建。
         int missing = MISSING.getOrDefault(id, 0);
         if (missing >= MISSING_LIMIT) {
+            long now = level.getGameTime();
+            Long lastAttempt = LAST_REBUILD_AT.get(id);
+            if (lastAttempt != null && now - lastAttempt < 20L) {
+                return;
+            }
+            LAST_REBUILD_AT.put(id, now);
+            // 旧实体可能是在 onJoin 之后才丢映射；重建前补一次 Soul/可信 NBT。
+            SoulRegistry.ensure(golem, HealthLedger.expectedOf(golem), golem.getMaxHealth());
             CompoundTag snapshot = snapshots.get(id);
-            if (snapshot != null && recreate(level, id, snapshot)) {
-                recreated++;
-                LIVE.remove(id);
-                MISSING.remove(id);
-            } else if (snapshot == null) {
-                Golems_arsenal.LOGGER.error("[Sanctuary] recreate_impossible uuid={} ledger={} (没有快照，没法重建)",
+            CompoundTag soulNbt = SoulRegistry.nbtForProjection(id);
+            if (snapshot == null) {
+                snapshot = soulNbt;
+            }
+            if (snapshot != null) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] recreate_attempt uuid={} soulNbt={} snapshot={}",
+                        id, soulNbt != null, snapshots.containsKey(id));
+                if (recreate(level, id, snapshot, golem.getId())) {
+                    recreated++;
+                    untrack(id);
+                    MISSING.remove(id);
+                    REBUILD_FAILS.remove(id);
+                    LAST_REBUILD_AT.remove(id);
+                    return;
+                }
+                Golems_arsenal.LOGGER.warn("[Sanctuary] recreate_failed uuid={} ledger={}",
                         id, HealthLedger.expectedOf(golem));
+            } else {
+                Golems_arsenal.LOGGER.error("[Sanctuary] recreate_impossible uuid={} ledger={} (没有 Soul/Anchor 快照，没法重建)",
+                        id, HealthLedger.expectedOf(golem));
+            }
+            int fails = REBUILD_FAILS.merge(id, 1, Integer::sum);
+            if (fails >= 3) {
+                Golems_arsenal.LOGGER.error("[Sanctuary] projection_abandoned uuid={} fails={} ledger={}",
+                        id, fails, HealthLedger.expectedOf(golem));
+                untrack(id);
+                Watchdog.forget(id);
+                snapshots.remove(id);
+                MISSING.remove(id);
+                REBUILD_FAILS.remove(id);
+                LAST_REBUILD_AT.remove(id);
             }
         }
         // 3) 定期刷新快照。
@@ -283,6 +581,43 @@ public final class Anchor extends SavedData {
     }
 
     /**
+     * A 层 SECTION-DENIED 之后的状态修复：只 cancel callback 不够，toaru 已经把
+     * raw removalReason / isAddedToWorld / pickable 写坏。下一 tick 在服务器线程
+     * 清掉 raw 状态并重挂 section，避免“拦住了 section 但实体仍是 removed=true”。
+     */
+    public static void repairSectionDenied(Entity entity) {
+        if (!(entity instanceof AbstractGolemEntity<?, ?> golem)) {
+            return;
+        }
+        MinecraftServer server = golem.getServer();
+        if (server == null) {
+            return;
+        }
+        server.execute(() -> {
+            try {
+                RemovalGuard.clearField(golem);
+                java.lang.reflect.Field added = Entity.class.getDeclaredField("isAddedToWorld");
+                added.setAccessible(true);
+                added.setBoolean(golem, true);
+                VisibilityGuard.repair(golem);
+                if (golem.level() instanceof ServerLevel level) {
+                    if (level.getEntity(golem.getId()) != golem) {
+                        IndexGuard.reindex(golem);
+                    }
+                    a_silly_cat.golems_arsenal.guard.index.ClientProjectionSync.teleport(level, golem);
+                }
+                Golems_arsenal.LOGGER.warn(
+                        "[Sanctuary] SECTION-REPAIRED uuid={} rawReason={} added={} pickable={}",
+                        golem.getUUID(), RemovalGuard.rawRemovalReason(golem),
+                        golem.isAddedToWorld(), golem.isPickable());
+            } catch (Throwable t) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] SECTION-REPAIR-FAILED uuid={} {}",
+                        entity.getUUID(), t.toString());
+            }
+        });
+    }
+
+    /**
      * 坐标修复：{@code setEntityPosReflection} 这类攻击直接写 {@code x/y/z} 字段，
      * 绕过 {@code setPosRaw} 的门。坐标一旦是 NaN，{@code blockPosition()} 与
      * {@code level.isLoaded()} 全部失真，后续所有"按位置判断"的逻辑都会瞎。
@@ -292,14 +627,15 @@ public final class Anchor extends SavedData {
             double x = golem.getX();
             double y = golem.getY();
             double z = golem.getZ();
-            if (Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)) {
+            if (isSanePosition(golem, x, y, z)) {
                 LAST_POS.put(golem.getUUID(), golem.blockPosition());
                 return;
             }
             net.minecraft.core.BlockPos good = LAST_POS.get(golem.getUUID());
             if (good == null) {
                 Entity owner = golem.getOwner();
-                if (owner != null && Double.isFinite(owner.getX())) {
+                if (owner != null && Double.isFinite(owner.getX())
+                        && Double.isFinite(owner.getY()) && Double.isFinite(owner.getZ())) {
                     good = owner.blockPosition();
                 }
             }
@@ -310,10 +646,45 @@ public final class Anchor extends SavedData {
             final double gy = good.getY();
             final double gz = good.getZ() + 0.5D;
             SanctuaryScopes.runInternal(() -> golem.moveTo(gx, gy, gz, golem.getYRot(), golem.getXRot()));
-            Golems_arsenal.LOGGER.warn("[Sanctuary] pos_repaired uuid={} -> ({},{},{})",
-                    golem.getUUID(), gx, gy, gz);
+            golem.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            try {
+                a_silly_cat.golems_arsenal.guard.index.ClientProjectionSync.teleport(
+                        (ServerLevel) golem.level(), golem);
+            } catch (Throwable ignored) {
+            }
+            Golems_arsenal.LOGGER.warn("[Sanctuary] pos_repaired uuid={} from=({},{},{}) -> ({},{},{})",
+                    golem.getUUID(), x, y, z, gx, gy, gz);
         } catch (Throwable ignored) {
         }
+    }
+
+    /** 有限 + 不远离最后一次正常位置；防止 -999999/NaN 进入碰撞扫描。 */
+    private static boolean isSanePosition(AbstractGolemEntity<?, ?> golem, double x, double y, double z) {
+        if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+            return false;
+        }
+        if (Math.abs(x) > 30_000_000.0D || Math.abs(z) > 30_000_000.0D
+                || Math.abs(y) > 30_000_000.0D) {
+            return false;
+        }
+        net.minecraft.core.BlockPos good = LAST_POS.get(golem.getUUID());
+        net.minecraft.core.BlockPos now = net.minecraft.core.BlockPos.containing(x, y, z);
+        if (good != null) {
+            if (good.distSqr(now) > 256L * 256L) {
+                return false;
+            }
+        } else {
+            // 第一次快照之前没有 LAST_POS：用“区块是否加载 + 与主人距离”兜底。
+            if (golem.level() instanceof ServerLevel level && !level.isLoaded(now)) {
+                return false;
+            }
+            Entity owner = golem.getOwner();
+            if (owner != null && Double.isFinite(owner.getX())
+                    && owner.blockPosition().distSqr(now) > 256L * 256L) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static void snapshotNow(AbstractGolemEntity<?, ?> golem) {
@@ -340,6 +711,7 @@ public final class Anchor extends SavedData {
         if (golem == null || golem.level().isClientSide() || SNAPSHOTTING.get()) {
             return;
         }
+        SoulRegistry.captureNow(golem);
         SNAPSHOTTING.set(Boolean.TRUE);
         try {
             CompoundTag tag = new CompoundTag();
@@ -358,7 +730,7 @@ public final class Anchor extends SavedData {
             Anchor anchor = get(server);
             anchor.snapshots.put(golem.getUUID(), tag);
             anchor.lastSnapshotTick.put(golem.getUUID(), golem.level().getGameTime());
-            if (Double.isFinite(golem.getX()) && Double.isFinite(golem.getY()) && Double.isFinite(golem.getZ())) {
+            if (isSanePosition(golem, golem.getX(), golem.getY(), golem.getZ())) {
                 LAST_POS.put(golem.getUUID(), golem.blockPosition());
             }
             snapshotsTaken++;
@@ -388,30 +760,45 @@ public final class Anchor extends SavedData {
     }
 
     /** 用快照重建一只并放回世界。返回是否成功。 */
-    private static boolean recreate(ServerLevel level, UUID oldId, CompoundTag snapshot) {
+    private static boolean recreate(ServerLevel level, UUID oldId, CompoundTag snapshot, int oldEntityId) {
         try {
-            EntityType<?> type = EntityType.byString(snapshot.getString(KEY_TYPE)).orElse(null);
+            CompoundTag source = SoulRegistry.nbtForProjection(oldId);
+            if (source == null) {
+                source = snapshot;
+            }
+            if (source == null) {
+                return false;
+            }
+            // 新建投影必须是“构造出来的新 UUID”，不能 setUUID：
+            // toaru 的 GungnirEntityMixin 在 setUUID HEAD 上有条件 cancel，
+            // AV 也可能在别的层锁身份。直接去掉 NBT 里的 UUID，让构造器的随机 UUID 保留。
+            source = source.copy();
+            source.remove("UUID");
+            source.remove("UUIDMost");
+            source.remove("UUIDLeast");
+            String typeName = source.getString(KEY_TYPE);
+            if (typeName.isEmpty()) {
+                typeName = source.getString("id");
+            }
+            EntityType<?> type = EntityType.byString(typeName).orElse(null);
             if (type == null) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] recreate_type_missing uuid={} type={}", oldId, typeName);
                 return false;
             }
             Entity entity = type.create(level);
             if (entity == null) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] recreate_create_null uuid={} type={}", oldId, typeName);
                 return false;
             }
-            // 快照里的 UUID 如果已经在假死名单里，Entity#load 的 mixin 会换一个新名字；
-            // 这里不重复洗，避免一次 load 连换两次。
             SanctuaryScopes.enterLoad();
             try {
-                entity.load(snapshot);
+                entity.load(source);
+            } catch (Throwable t) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] recreate_load_failed uuid={} type={} err={}",
+                        oldId, typeName, t.toString());
+                return false;
             } finally {
                 SanctuaryScopes.exitLoad();
-            }
-            UUID freshId = entity.getUUID();
-            if (!freshId.equals(oldId)) {
-                // 新实体已经带新 UUID；把我们的账本/监视表从旧名字搬过来。
-                if (entity instanceof AbstractGolemEntity<?, ?> rebuilt) {
-                    IdentityGuard.migrate(rebuilt, oldId, freshId);
-                }
             }
             // 位置门在 SEALED 下会拦掉一切非作用域的位置写入（同一个 UUID 还在冻结表里），
             // 重建的落点必须显式声明成"我们自己写的"。
@@ -420,18 +807,49 @@ public final class Anchor extends SavedData {
             // 重建之后把账本血写回去：NBT 里的 Health 可能是被攻击方写过的值，
             // 而 GuardedEntity#setHealth 只许加血，所以要走 guardedData + DATA_HEALTH 两条腿。
             if (entity instanceof AbstractGolemEntity<?, ?> rebuilt) {
-                float ledger = HealthLedger.expectedOf(rebuilt);
+                float ledger = SoulRegistry.healthForProjection(oldId);
+                if (!Float.isFinite(ledger)) {
+                    ledger = HealthLedger.expectedOf(rebuilt);
+                }
                 if (Float.isFinite(ledger) && ledger > 0.0F) {
-                    SanctuaryScopes.runInternal(() -> rebuilt.setGuardedDataImpl(ledger, true, false));
-                    a_silly_cat.golems_arsenal.compat.artifact.DamageAdmission.writeRawHealth(rebuilt, ledger);
+                    final float hp = ledger;
+                    SanctuaryScopes.runInternal(() -> rebuilt.setGuardedDataImpl(hp, true, false));
+                    a_silly_cat.golems_arsenal.compat.artifact.DamageAdmission.writeRawHealth(rebuilt, hp);
                 }
             }
-            if (!level.addFreshEntity(entity)) {
+            // 不走 addFreshEntity / addNewEntity：AV 的 EntityGuardTransformer 把
+            // ServerLevel.addFreshEntity、PersistentEntitySectionManager.addNewEntity、
+            // EntityLookup.add 全部改写成 shouldBlockCreate/Add，从 Anchor 发起的重建
+            // 永远会被判成“非自愿”。这里直接写索引容器。
+            boolean[] added = {false};
+            ProtectedEntityPolicy.runRebuild(() -> added[0] =
+                    a_silly_cat.golems_arsenal.guard.index.WorldIndexGuard.register(level, entity));
+            if (!added[0]) {
+                Golems_arsenal.LOGGER.warn("[Sanctuary] recreate_register_failed uuid={} type={}",
+                        oldId, EntityType.getKey(type));
                 return false;
+            }
+            // 成功之后才迁移：失败不能污染 LIVE / agent PROTECTED / Soul 映射。
+            if (entity instanceof AbstractGolemEntity<?, ?> rebuilt && !entity.getUUID().equals(oldId)) {
+                IdentityGuard.migrate(rebuilt, oldId, entity.getUUID());
+                SoulRegistry.rotateProjection(oldId, entity.getUUID());
+                HealthLedger.ensureTracked(rebuilt);
             }
             Golems_arsenal.LOGGER.warn("[Sanctuary] recreated uuid={} type={} ledger={}",
                     entity.getUUID(), EntityType.getKey(type), HealthLedger.expectedOf((AbstractGolemEntity<?, ?>) entity));
-            LIVE.put(entity.getUUID(), (AbstractGolemEntity<?, ?>) entity);
+            // 旧客户端实体必须真的被删掉，再以新 entityId/UUID 加回来；
+            // 先解除旧 id 的保护，否则会被我们自己的 ClientLevel 门挡住。
+            if (oldEntityId != entity.getId()) {
+                a_silly_cat.golems_arsenal.init.ModNetwork.sendAllowRemoval(oldId, oldEntityId);
+                unprotect(oldEntityId);
+                for (net.minecraft.server.level.ServerPlayer player : level.players()) {
+                    player.connection.send(new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(oldEntityId));
+                    player.connection.send(new net.minecraft.network.protocol.game.ClientboundAddEntityPacket(entity));
+                }
+                Golems_arsenal.LOGGER.warn("[Sanctuary] client_resync oldId={} newId={} uuid={}",
+                        oldEntityId, entity.getId(), entity.getUUID());
+            }
+            putLive((AbstractGolemEntity<?, ?>) entity);
             return true;
         } catch (Throwable t) {
             Golems_arsenal.LOGGER.warn("[Sanctuary] recreate failed: {}", t.toString());
@@ -448,7 +866,7 @@ public final class Anchor extends SavedData {
     }
 
     public static void forget(UUID id) {
-        LIVE.remove(id);
+        untrack(id);
         RELEASED.remove(id);
         MISSING.remove(id);
     }
@@ -458,8 +876,9 @@ public final class Anchor extends SavedData {
         if (old == null || fresh == null || old.equals(fresh)) {
             return;
         }
-        AbstractGolemEntity<?, ?> live = LIVE.remove(old);
-        LIVE.put(fresh, live == null ? golem : live);
+        java.lang.ref.WeakReference<AbstractGolemEntity<?, ?>> ref = LIVE.remove(old);
+        AbstractGolemEntity<?, ?> live = ref == null ? null : ref.get();
+        LIVE.put(fresh, ref == null ? new java.lang.ref.WeakReference<>(golem) : ref);
         RELEASED.remove(old);
         BlockPos pos = LAST_POS.remove(old);
         if (pos != null) {

@@ -20,26 +20,35 @@
     "LivingEntityAliveReadMixin",
     "EntityLoadScopeMixin",
     "GuardedEntityDeathScopeMixin",
+    "AbstractGolemOnRemoveGuardMixin",
     "GuardedEntityHealthReadMixin",
     
     "EntityRemovalGuardMixin",
     "EntityIsRemovedGuardMixin",
+    "EntityAddedToWorldGuardMixin",
     "EntityOnRemovedGuardMixin",
+    "EntityInvalidateCapsGuardMixin",
     "EntityLevelCallbackGuardMixin",
     "EntitySetPosGuardMixin",
+    "EntityVisibilityGuardMixin",
     "EntityInteractAtGuardMixin",
     "MobInteractGuardMixin",
     "LivingEntityTickFreezeMixin",
+    "LivingEntityVisibilityTickMixin",
     "HealthDataItemSealMixin",
-    "WitherzillaRemoverGuardMixin",
     "AttributeInstanceGuardMixin",
     "AttributeValueFloorMixin",
     "ClassInstanceMultiMapGuardMixin",
     "EntityLookupGuardMixin",
-    "EntityTickListGuardMixin"
+    "EntityTickListGuardMixin",
+    "ClientboundRemoveEntitiesPacketGuardMixin",
+    "PersistentSectionRemovalGuardMixin"
   ],
   "client": [
-    "AbstractGolemRendererFlipMixin"
+    "AbstractGolemRendererFlipMixin",
+    "ClientLevelAddBypassMixin",
+    "ClientLevelRemoveGuardMixin",
+    "ClientCustomPayloadGuardMixin"
   ],
   "injectors": {
     "defaultRequire": 1

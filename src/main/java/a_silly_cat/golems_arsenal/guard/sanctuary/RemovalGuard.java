@@ -3,8 +3,11 @@ package a_silly_cat.golems_arsenal.guard.sanctuary;
 import a_silly_cat.golems_arsenal.Config;
 import a_silly_cat.golems_arsenal.Golems_arsenal;
 import a_silly_cat.golems_arsenal.guard.HealthLedger;
+import a_silly_cat.golems_arsenal.guard.ProtectedEntityPolicy;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.Map;
 import java.util.UUID;
@@ -63,15 +66,32 @@ public final class RemovalGuard {
         if (!(entity instanceof AbstractGolemEntity<?, ?> golem)) {
             return true;
         }
-        if (entity.level().isClientSide || golem.getOwnerUUID() == null) {
+        if (ProtectedEntityPolicy.inRebuild()) {
+            return true;
+        }
+        if (entity.level().isClientSide) {
+            // 客户端 raw setRemoved：受保护 id 除非刚刚由服务端授权移除，否则拒绝。
+            // 这条挡住 AV ClientEntityRemover / ForceDieClient 直接写 removalReason，
+            // 同时 allow-removal 包已经把正常回收的 id 移出保护集。
+            return !Anchor.isProtectedEntityId(golem.getId());
+        }
+        if (golem.getOwnerUUID() == null) {
+            return true;
+        }
+        if (!Sanctuary.protectedGolem(golem)) {
+            // 敌对/野生 MetalGolemEntity 不是我们要保的对象；放开移除，
+            // 否则它会变成打不死的幽灵并继续锁定目标。
             return true;
         }
         SanctuaryMode mode = mode();
         if (mode == SanctuaryMode.OFF) {
+            Anchor.unprotect(golem.getId());
             return true;
         }
         String name = reason == null ? "null" : reason.name();
         if (isDead(golem)) {
+            markLifecycleAllowed(golem);
+            Anchor.unprotect(golem.getId());
             allowed++;
             return true;
         }
@@ -81,6 +101,8 @@ public final class RemovalGuard {
         //   2) 调用栈里同时出现 RetrievalWandItem 和 AbstractGolemEntity.toItem 时直接认；
         // 其余 DISCARDED（Capsule 清区、toaru finishRemoval、AV 的 discard）一律按敌意处理。
         if (isAllowedLifecycle(golem, reason)) {
+            markLifecycleAllowed(golem);
+            Anchor.unprotect(golem.getId());
             allowed++;
             return true;
         }
@@ -89,10 +111,14 @@ public final class RemovalGuard {
                 || ("UNLOADED_TO_CHUNK".equals(name)
                     && entity.level().isLoaded(entity.blockPosition()));
         if (!hostile) {
+            markLifecycleAllowed(golem);
+            Anchor.unprotect(golem.getId());
             allowed++;
             return true;
         }
         if (mode == SanctuaryMode.SHADOW) {
+            markLifecycleAllowed(golem);
+            Anchor.unprotect(golem.getId());
             wouldReject++;
             // 强制快照（触发点 1/4）：SHADOW 下移除会真的发生，必须在它发生前拍一张，
             // 否则 Anchor 重建时手里只有 10 tick 前的旧副本（或者被攻击方写过的 0 血）。
@@ -102,9 +128,9 @@ public final class RemovalGuard {
         }
         rejected++;
         Anchor.snapshotNow(golem, "removal_rejected");
-        // 换名是"拦下之后"的增益项：对方的死亡名单/延迟任务按旧 UUID 回来时会打空。
-        // 失败不影响拒绝本身（rotate 内部已经把异常吞掉）。
-        IdentityGuard.rotate(golem, "removal_" + name);
+        // 不再在“拦下移除”时旋转 UUID：客户端 tracking 不知道 UUID 变了，
+        // 服务端还是这只傀儡，客户端却只剩旧 UUID 的幽灵。
+        // 身份清洗只在生成/读档（scrubTag）阶段做。
         log(golem, "rejected " + name, reason);
         return false;
     }
@@ -152,6 +178,14 @@ public final class RemovalGuard {
     //   * 调用栈里同时有 RetrievalWandItem 和 AbstractGolemEntity.toItem（host 回收路径）。
 
     private static final Map<UUID, Long> RECOVERY_AT = new ConcurrentHashMap<>();
+    /**
+     * 正常生命周期放行窗口：setRemoved 的栈里有 toItem/returnToInventory，但后续
+     * EntityLookup/Section/TickList 的清理由别的调用帧完成，那时栈已经没了。
+     * 这里把"这一次移除被我们允许过"记 40 tick，让容器门也放行，避免
+     * "物品已经回收、实体还在世界里"的幽灵/重复回收。
+     */
+    private static final Map<UUID, Long> LIFECYCLE_ALLOWED = new ConcurrentHashMap<>();
+    private static final Map<Integer, Long> LIFECYCLE_ALLOWED_IDS = new ConcurrentHashMap<>();
     private static final StackWalker WALKER = StackWalker.getInstance();
 
     /** 玩家右键回收手杖、目标是一只受保护傀儡时调用。 */
@@ -198,6 +232,62 @@ public final class RemovalGuard {
     /** 这次移除是不是正常生命周期（卸载/跨维度/玩家回收/放生），不是"活体被折索引"。 */
     public static boolean isAllowedLifecycle(Entity entity) {
         return isAllowedLifecycle(entity, rawRemovalReason(entity));
+    }
+
+    private static final int LIFECYCLE_TTL = 40;
+
+    private static void markLifecycleAllowed(AbstractGolemEntity<?, ?> golem) {
+        try {
+            long now = golem.level().getGameTime();
+            if (LIFECYCLE_ALLOWED.size() > 1024) {
+                LIFECYCLE_ALLOWED.entrySet().removeIf(e -> now - e.getValue() > 200);
+            }
+            LIFECYCLE_ALLOWED.put(golem.getUUID(), now);
+            LIFECYCLE_ALLOWED_IDS.put(golem.getId(), now);
+            // 先让客户端放行这个 id，再让服务端真正移除；否则客户端移除包会被
+            // ClientboundRemoveEntitiesPacketGuard 当成 AV 的攻击而过滤掉。
+            a_silly_cat.golems_arsenal.init.ModNetwork.sendAllowRemoval(golem);
+            Anchor.unprotect(golem.getId());
+            if (golem.level() instanceof net.minecraft.server.level.ServerLevel level) {
+                GhostTargetGuard.clearFor(level, golem.getUUID());
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static boolean isLifecycleAllowed(UUID id) {
+        if (id == null) {
+            return false;
+        }
+        try {
+            Long at = LIFECYCLE_ALLOWED.get(id);
+            if (at == null) {
+                return false;
+            }
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            long now = server == null ? at : server.overworld().getGameTime();
+            return now - at >= 0 && now - at <= LIFECYCLE_TTL;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public static boolean isLifecycleAllowedRecently(AbstractGolemEntity<?, ?> golem) {
+        return golem != null && isLifecycleAllowed(golem.getUUID());
+    }
+
+    public static boolean isLifecycleAllowed(int id) {
+        try {
+            Long at = LIFECYCLE_ALLOWED_IDS.get(id);
+            if (at == null) {
+                return false;
+            }
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            long now = server == null ? at : server.overworld().getGameTime();
+            return now - at >= 0 && now - at <= LIFECYCLE_TTL;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /** 同上，但由调用方给出本次 reason（{@code setRemoved} 的 HEAD 里字段还没写）。 */
@@ -417,8 +507,7 @@ public final class RemovalGuard {
         try {
             if (entity.level().isClientSide || golem.getOwnerUUID() == null) {
                 return false;
-            }
-            if (mode() != SanctuaryMode.ENFORCE) {
+            }            if (mode() != SanctuaryMode.ENFORCE) {
                 return false;
             }
             if (SanctuaryScopes.inDeath() || HealthLedger.observedDeath(golem)) {
@@ -504,6 +593,28 @@ public final class RemovalGuard {
                 + " wouldReject=" + wouldReject
                 + " rejected=" + rejected
                 + " recoveryWindows=" + RECOVERY_AT.size();
+    }
+
+    /** 客户端也保护有主傀儡：自定义 remove 包/raw 字段写最终要让 isRemoved 读侧说“还在”。 */
+    public static boolean clientProtected(Entity entity) {
+        return entity != null
+                && entity.level().isClientSide
+                && entity instanceof AbstractGolemEntity<?, ?> golem
+                && golem.getOwnerUUID() != null
+                && Anchor.isProtectedEntityId(entity.getId());
+    }
+
+    /** 客户端 raw removalReason 清理：不依赖 HealthLedger（客户端没有账本）。 */
+    public static void clearClientField(Entity entity) {
+        try {
+            if (removalReasonField == null) {
+                removalReasonField = net.minecraftforge.fml.util.ObfuscationReflectionHelper
+                        .findField(Entity.class, "f_146795_");
+                removalReasonField.setAccessible(true);
+            }
+            removalReasonField.set(entity, null);
+        } catch (Throwable ignored) {
+        }
     }
 
     /** 把 {@code removalReason} 字段清空（重建/重新注册前必须做，否则 addFreshEntity 会被当成已移除）。 */

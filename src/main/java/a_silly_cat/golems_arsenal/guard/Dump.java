@@ -58,6 +58,16 @@ public final class Dump {
         sb.append(" guarded=").append(fmt(guarded(golem)));
         sb.append(" read=").append(fmt(golem.getHealth()));
         sb.append(" ledger=").append(fmt(HealthLedger.expectedOf(golem)));
+        sb.append(" visible=").append(!golem.isInvisible());
+        sb.append(" noPhysics=").append(golem.noPhysics);
+        sb.append(" bb=").append(fmt(golem.getBoundingBox().getXsize())).append('x')
+                .append(fmt(golem.getBoundingBox().getYsize())).append('x')
+                .append(fmt(golem.getBoundingBox().getZsize()));
+        sb.append(" pickable=").append(golem.isPickable());
+        sb.append(" collidable=").append(golem.canBeCollidedWith());
+        sb.append(" added=").append(golem.isAddedToWorld());
+        sb.append(" canUpdate=").append(golem.canUpdate());
+        sb.append(" removed=").append(golem.isRemoved());
         sb.append(" upgrades=").append(upgrades(golem));
         sb.append(" data=").append(dataItems(golem));
         return sb.toString();

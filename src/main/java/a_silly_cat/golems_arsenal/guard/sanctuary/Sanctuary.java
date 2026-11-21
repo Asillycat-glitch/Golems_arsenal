@@ -341,9 +341,32 @@ public final class Sanctuary {
      * 两件事分开配置，免得关掉写入口就顺手把判定也关了。</p>
      */
     public static boolean protectedGolem(AbstractGolemEntity<?, ?> golem) {
-        return golem != null
-                && !golem.level().isClientSide
-                && golem.getOwnerUUID() != null;
+        if (golem == null || golem.level().isClientSide || golem.getOwnerUUID() == null) {
+            return false;
+        }
+        try {
+            net.minecraft.server.MinecraftServer server = golem.getServer();
+            if (server == null) {
+                return false;
+            }
+            // 单人整合包：只保护本地玩家的傀儡。其他 profile/敌对阵营的 MetalGolem
+            // 即使有 owner UUID 也不该被我们保护。
+            if (server.isSingleplayer()) {
+                net.minecraft.world.entity.player.Player local = server.getSingleplayerProfile() == null
+                        ? null : server.getPlayerList().getPlayer(server.getSingleplayerProfile().getId());
+                if (local != null) {
+                    return local.getUUID().equals(golem.getOwnerUUID());
+                }
+            }
+            // 只保护“在线玩家拥有的傀儡”。敌对/整合包生成的 MetalGolemEntity 可能有
+            // 一个假 owner UUID；之前 owner != null 就保护，导致敌对傀儡也打不死、
+            // 变成幽灵并继续锁定目标。
+            return server != null
+                    && (server.getPlayerList().getPlayer(golem.getOwnerUUID()) != null
+                        || server.getProfileCache().get(golem.getOwnerUUID()).isPresent());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /**
