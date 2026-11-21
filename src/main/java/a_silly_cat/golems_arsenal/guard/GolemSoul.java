@@ -19,8 +19,8 @@ public final class GolemSoul {
     public final UUID owner;
     public ResourceKey<Level> dimension;
     public BlockPos lastPos;
-    public float health;
-    public float maxHealth;
+    private final SealedFloat health = new SealedFloat();
+    private final SealedFloat maxHealth = new SealedFloat();
     public boolean died;
     public long revision;
     /** 受信任的投影 NBT 摘要；重建时优先使用，而不是被攻击方写脏的 Entity 快照。 */
@@ -32,18 +32,26 @@ public final class GolemSoul {
         this.owner = owner;
         this.dimension = dimension;
         this.lastPos = lastPos;
-        this.health = health;
-        this.maxHealth = maxHealth;
+        this.health.set(health);
+        this.maxHealth.set(maxHealth);
         this.revision = 1L;
+    }
+
+    public synchronized float health() {
+        return health.get();
+    }
+
+    public synchronized float maxHealth() {
+        return maxHealth.get();
     }
 
     public synchronized void observe(float health, float maxHealth, BlockPos pos,
                                      ResourceKey<Level> dimension, boolean died) {
         if (Float.isFinite(health)) {
-            this.health = health;
+            this.health.set(health);
         }
         if (Float.isFinite(maxHealth) && maxHealth > 0.0F) {
-            this.maxHealth = maxHealth;
+            this.maxHealth.set(maxHealth);
         }
         if (pos != null) {
             this.lastPos = pos;

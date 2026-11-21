@@ -86,7 +86,7 @@ public final class SoulRegistry {
             SOULS.put(soulId, soul);
         } else {
             // ensure() 只允许抬高；真正被准入的伤害由 observe() 单独下调。
-            float safe = Float.isFinite(health) ? Math.max(health, soul.health) : soul.health;
+            float safe = Float.isFinite(health) ? Math.max(health, soul.health()) : soul.health();
             soul.observe(safe, maxHealth, golem.blockPosition(), golem.level().dimension(), false);
         }
         if (soul.trustedNbt == null && Float.isFinite(health) && health > 1.0F) {
@@ -138,7 +138,7 @@ public final class SoulRegistry {
     public static synchronized float healthForProjection(UUID projection) {
         UUID soulId = PROJECTIONS.get(projection);
         GolemSoul soul = soulId == null ? null : SOULS.get(soulId);
-        return soul == null ? Float.NaN : soul.health;
+        return soul == null ? Float.NaN : soul.health();
     }
 
     public static synchronized boolean hasProjection(UUID projection) {

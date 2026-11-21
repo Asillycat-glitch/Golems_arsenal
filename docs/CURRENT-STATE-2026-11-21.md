@@ -125,4 +125,20 @@ D:\我自己的包\.minecraft\versions\1.20.1-Forge_47.4.20\mods\golems_arsenal-
 
 当前构建：`golems_arsenal-0.3.jar` 1,369,870 B，2026-11-21 12:33:42。
 
+## 2026-11-21 12:38 更新：Soul 权威值多层封装
+
+没有给 `AbstractGolemEntity` 新增 DataAccessor（避免碰宿主同步/构造），
+而是在我们自己的 authority 层做多层的 `SealedFloat`：
+
+- `GolemSoul.health` / `maxHealth` 不再保存明文 float；
+- `SoulAuthority.Snapshot` 里也不保留明文 health/maxHealth；
+- `SealedFloat`：XOR → rotate → odd multiply → per-instance XOR → split/checksum；
+- 盲写 `lo/hi` 会校验失败，`get()` 返回 NaN；不是密码学安全，native 仍可读代码/找 key。
+
+当前构建：`golems_arsenal-0.3.jar` 1,371,270 B，2026-11-21 12:38:46。
+
+仍未加密：`HealthLedger.Track.expected` 的 fallback、`GolemSoul.trustedNbt` 内的 NBT 血量。
+protected 傀儡正常走 Soul，所以 fallback 不应成为主路径；后续可把 Track 也换成 SealedFloat。
+
+
 

@@ -369,8 +369,8 @@ public final class HealthLedger {
      */
     public static float expectedOf(AbstractGolemEntity<?, ?> golem) {
         GolemSoul soul = SoulRegistry.soulFor(golem);
-        if (soul != null && Float.isFinite(soul.health)) {
-            return soul.health;
+        if (soul != null && Float.isFinite(soul.health())) {
+            return soul.health();
         }
         Track track = TRACKED.get(golem.getUUID());
         if (track != null && Float.isFinite(track.expected)) {

@@ -14,8 +14,57 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class SoulAuthority {
 
-    public record Snapshot(UUID soulId, UUID owner, float health, float maxHealth,
-                           boolean died, long revision, long receivedAt) {
+    /**
+     * 快照里也不保留明文 health/maxHealth：authority 线程拿到的也是 SealedFloat。
+     * 这不是“防任意 native”，只是避免在另一个长期存活的容器里复制明文。
+     */
+    public static final class Snapshot {
+        private final UUID soulId;
+        private final UUID owner;
+        private final SealedFloat health = new SealedFloat();
+        private final SealedFloat maxHealth = new SealedFloat();
+        private final boolean died;
+        private final long revision;
+        private final long receivedAt;
+
+        Snapshot(UUID soulId, UUID owner, float health, float maxHealth,
+                 boolean died, long revision, long receivedAt) {
+            this.soulId = soulId;
+            this.owner = owner;
+            this.health.set(health);
+            this.maxHealth.set(maxHealth);
+            this.died = died;
+            this.revision = revision;
+            this.receivedAt = receivedAt;
+        }
+
+        public UUID soulId() {
+            return soulId;
+        }
+
+        public UUID owner() {
+            return owner;
+        }
+
+        public float health() {
+            return health.get();
+        }
+
+        public float maxHealth() {
+            return maxHealth.get();
+        }
+
+        public boolean died() {
+            return died;
+        }
+
+        public long revision() {
+            return revision;
+        }
+
+        public long receivedAt() {
+            return receivedAt;
+        }
     }
 
     private static final Map<UUID, Snapshot> LATEST = new ConcurrentHashMap<>();
@@ -33,8 +82,8 @@ public final class SoulAuthority {
         if (soul == null) {
             return;
         }
-        Snapshot snapshot = new Snapshot(soul.soulId, soul.owner, soul.health,
-                soul.maxHealth, soul.died, soul.revision, System.currentTimeMillis());
+        Snapshot snapshot = new Snapshot(soul.soulId, soul.owner, soul.health(),
+                soul.maxHealth(), soul.died, soul.revision, System.currentTimeMillis());
         EXECUTOR.execute(() -> {
             LATEST.put(snapshot.soulId(), snapshot);
             PUBLISHED.incrementAndGet();
