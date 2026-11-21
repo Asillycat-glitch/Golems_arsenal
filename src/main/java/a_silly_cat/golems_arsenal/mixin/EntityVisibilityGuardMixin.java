@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * AV 的死亡渲染/幽灵路径会通过 invisible 位、isPickable 或包围盒让实体"看起来不存在"；
  * 受保护实体这些读侧一律回答"可见、可交互、可碰撞"。
  */
-@Mixin(Entity.class)
+@Mixin(value = Entity.class, priority = Integer.MAX_VALUE)
 public abstract class EntityVisibilityGuardMixin {
 
     private static boolean ga$protected(Entity entity) {

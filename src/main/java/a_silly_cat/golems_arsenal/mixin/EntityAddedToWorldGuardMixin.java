@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * AV EntityDeath 会把 isAddedToWorld 读成 false；有些渲染/跟踪路径会据此跳过实体。
  * 受保护实体在真实移除之前一律回答已加入世界。
  */
-@Mixin(value = Entity.class, priority = 2000)
+@Mixin(value = Entity.class, priority = Integer.MAX_VALUE)
 public abstract class EntityAddedToWorldGuardMixin {
 
     @Inject(method = "isAddedToWorld", at = @At("HEAD"), cancellable = true)

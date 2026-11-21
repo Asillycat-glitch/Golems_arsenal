@@ -35,6 +35,7 @@
     "MobInteractGuardMixin",
     "LivingEntityTickFreezeMixin",
     "LivingEntityVisibilityTickMixin",
+    "LivingEntityClientDeathGuardMixin",
     "HealthDataItemSealMixin",
     "AttributeInstanceGuardMixin",
     "AttributeValueFloorMixin",

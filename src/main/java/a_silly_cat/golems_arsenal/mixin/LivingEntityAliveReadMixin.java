@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 受保护傀儡只要真实 {@code DATA_HEALTH > 1}、没被移除、没有真实死亡事件，就是活的。
  * 只向上纠正“被判定为死”，真死（血量 &lt;= 1 / 死亡栈 / 见过死亡事件）不动。</p>
  */
-@Mixin(value = LivingEntity.class, priority = 2000)
+@Mixin(value = LivingEntity.class, priority = Integer.MAX_VALUE)
 public abstract class LivingEntityAliveReadMixin {
 
     @Inject(method = "isAlive", at = @At("HEAD"), cancellable = true)
