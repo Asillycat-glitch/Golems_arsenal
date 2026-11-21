@@ -48,13 +48,7 @@ import java.nio.file.StandardCopyOption;
 @Mod.EventBusSubscriber(modid = Golems_arsenal.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class AgentBootstrap {
 
-    private static final String[] TARGETS = {
-            "com.luoee.arcanevortex.Content.Item.EntityRemover.Purge.HardErase",
-            "com.luoee.arcanevortex.Content.Item.EntityRemover.Purge.HardRemove",
-            "com.luoee.arcanevortex.NativeAgent.NativeAgentHealthMethod",
-            "dev.othinus.toaru.GungnirExecution",
-            "dev.othinus.toaru.GungnirArcaneCompat"
-    };
+    // 2026-11-18 去针对化：不再维护对手类名列表。晚加载走 getAllLoadedClasses + /mods/ code source。
 
     /** attach 成功之后才置 true；失败/关闭都不置，允许后续 config reload 再试。 */
     private static boolean installed;
@@ -295,7 +289,7 @@ public final class AgentBootstrap {
         }
     }
 
-    /** 对已经加载的目标类补一次 retransform（agent 晚于它们加载时用）。 */
+    /** 对已经加载的 mods 类补一次 retransform（agent 晚于它们加载时用）。 */
     private static void retransformLoaded() {
         try {
             Class<?> agent = Class.forName("sanctuary.agent.SanctuaryAgent", true,
@@ -304,15 +298,20 @@ public final class AgentBootstrap {
             if (!(inst instanceof Instrumentation instrumentation)) {
                 return;
             }
-            ClassLoader loader = Golems_arsenal.class.getClassLoader();
-            for (String name : TARGETS) {
+            for (Class<?> cls : instrumentation.getAllLoadedClasses()) {
                 try {
-                    Class<?> cls = Class.forName(name, false, loader);
-                    if (instrumentation.isModifiableClass(cls)) {
+                    if (!instrumentation.isModifiableClass(cls)) {
+                        continue;
+                    }
+                    java.security.CodeSource source = cls.getProtectionDomain().getCodeSource();
+                    if (source == null || source.getLocation() == null) {
+                        continue;
+                    }
+                    String path = source.getLocation().toString().replace('\\', '/');
+                    if (path.contains("/mods/") || path.endsWith("/mods")) {
                         instrumentation.retransformClasses(cls);
                     }
                 } catch (Throwable ignored) {
-                    // 目标 mod 没装或类名变了
                 }
             }
         } catch (Throwable ignored) {

@@ -3,6 +3,7 @@ package a_silly_cat.golems_arsenal.mixin.tinkers;
 import dev.xkmc.modulargolems.content.entity.common.AbstractGolemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.common.capabilities.Capability;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -41,6 +42,13 @@ public abstract class TinkersGolemOverslimeCompatMixin {
                                        CallbackInfoReturnable<Float> cir) {
         if (isForeignGolem(entity)) {
             cir.setReturnValue(amount);
+        }
+    }
+
+    @Inject(method = "onStartTracking", at = @At("HEAD"), cancellable = true)
+    private static void ga$onStartTracking(PlayerEvent.StartTracking event, CallbackInfo ci) {
+        if (event.getTarget() instanceof LivingEntity living && isForeignGolem(living)) {
+            ci.cancel();
         }
     }
 

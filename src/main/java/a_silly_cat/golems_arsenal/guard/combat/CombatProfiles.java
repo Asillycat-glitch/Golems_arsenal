@@ -80,12 +80,9 @@ public final class CombatProfiles {
         boolean continuous = overrides(cls, "inventoryTick",
                 ItemStack.class, Level.class, Entity.class, int.class, boolean.class);
 
-        // 没有已知武器家族，但自己声明了攻击钩子：也是战斗物品，未知 -> custom。
-        // ArcaneVortex 的非方块物品（VanSh / 实体移除器 / 星璇等）是已确认的复合物品：
-        // 它们的 use/onLeftClickEntity 不走普通攻击家族，统一标成 CUSTOM_HOOK。
-        boolean arcaneVortex = cls.getName().startsWith("com.erchien.arcanevortex.")
-                && !(item instanceof BlockItem);
-        boolean combat = melee || ranged || attackHook || arcaneVortex;
+        // 2026-11-18 去针对化：不再按来源包名把物品标成 CUSTOM_HOOK。
+        // 只按行为：近战/远程家族、覆写攻击钩子、自定义 use/inventoryTick。
+        boolean combat = melee || ranged || attackHook;
         boolean meleeLike = melee || attackHook;
         boolean pureRanged = ranged && !melee;
         // 纯远程的 use/inventoryTick 是弓/弩的正常拉弓/装填行为，不算自定义危险 hook；
@@ -94,7 +91,7 @@ public final class CombatProfiles {
             caps.add(CombatCapability.CONTINUOUS_HOOK);
         }
         if (combat && !vanilla && !pureRanged
-                && (arcaneVortex || attackHook || (melee && (customUse || continuous)))) {
+                && (attackHook || (melee && (customUse || continuous)))) {
             caps.add(CombatCapability.CUSTOM_HOOK);
         }
         return ItemProfile.of(cls.getName(), caps);
