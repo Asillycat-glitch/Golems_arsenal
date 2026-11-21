@@ -104,3 +104,25 @@ D:\我自己的包\.minecraft\versions\1.20.1-Forge_47.4.20\mods\golems_arsenal-
   - 挡不住 JDK/vanilla 已编译代码的写、native 直接写、`MethodHandle` 多态调用；
   - JVMTI 仍需 native 编译环境（当前机器没有 MSVC/MinGW）。
 
+## 2026-11-21 12:33 更新：移除独立守卫线程
+
+参考 `super-steve-1.7.1.3shit.jar` 的做法后确认：
+
+- Super Steve 没有额外守卫线程；状态由实体自己的 `m_8119_` tick 推进，
+  血量放在**加密字符串 DataAccessor**（`DATA_SS_HEALTH_ID` + `FloatObfuscator`），
+  `getHealth` 覆写读它，`setHealth` 空实现。
+- 渲染是它自己实体的 `HumanoidMobRenderer` + 自定义 layer，不接管别的实体。
+
+我们只采用“**不单开线程、由服务器 tick 驱动对账**”这一条：
+
+- 删除 `SanctuaryGuardThread.java`；
+- 删除 `Anchor.threadPulse`；
+- 对账统一走 `Anchor.onServerTick`（`ServerTickEvent.END`，每 10 tick）；
+- 不再有 `server.execute` 后台队列。
+
+没有照搬 Super Steve 的加密血量 DataAccessor：那需要给 Modular Golems 实体加
+新的 `EntityDataAccessor` 并改构造/同步，属于会动宿主兼容面的改动，先不擅自做。
+
+当前构建：`golems_arsenal-0.3.jar` 1,369,870 B，2026-11-21 12:33:42。
+
+

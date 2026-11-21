@@ -301,23 +301,10 @@ public final class Anchor extends SavedData {
      * 所以 START 每 tick 只做一次轻量位置修复。</p>
      */
     /**
-     * 独立守卫线程通过 server.execute 调进来的对账入口。
-     * 必须是服务器线程；不在这里做任何跨线程世界访问。
+     * 2026-11-21：独立守卫线程已移除。对账统一走服务器 tick 的
+     * {@link #onServerTick}（每 10 tick），不再有跨线程 server.execute 队列。
+     * 这与 Super Steve 的做法一致：状态由实体/世界 tick 驱动，而不是后台线程。
      */
-    public static void threadPulse(MinecraftServer server) {
-        if (server == null || !server.isSameThread()) {
-            return;
-        }
-        Anchor data = get(server);
-        for (UUID id : new ArrayList<>(LIVE.keySet())) {
-            AbstractGolemEntity<?, ?> golem = liveEntity(id);
-            if (golem != null) {
-                data.check(server, golem);
-            } else {
-                data.checkMissing(server, id);
-            }
-        }
-    }
 
     @SubscribeEvent
     public static void onServerTickStart(TickEvent.ServerTickEvent event) {
