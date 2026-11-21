@@ -140,5 +140,28 @@ D:\我自己的包\.minecraft\versions\1.20.1-Forge_47.4.20\mods\golems_arsenal-
 仍未加密：`HealthLedger.Track.expected` 的 fallback、`GolemSoul.trustedNbt` 内的 NBT 血量。
 protected 傀儡正常走 Soul，所以 fallback 不应成为主路径；后续可把 Track 也换成 SealedFloat。
 
+## 2026-11-21 13:29 更新：B 层误杀 Forge 同步包
+
+模型贴图坏掉的直接原因是 B 层过滤太宽：
+
+```
+CUSTOM_PAYLOAD_BLOCKED channel=fml:play uuid=d4e9798d... bytes=456
+```
+
+`fml:play` 承载 Forge 的 spawn/同步/装备数据；按 UUID 盲过滤会把模型/贴图/装备/血量同步一起打掉。
+
+修正：
+
+- `minecraft:*`、`fml:*`、`forge:*`、`golems_arsenal:*` 一律放行；
+- 只过滤 **<=64 字节**的小 payload（死亡/擦除包很小；大包多半是同步/资源数据）。
+
+同时 `SECTION-REPAIRED` 之前仍打印 `added=false pickable=false`：section gate 只挡住了销毁，
+读侧 `ProtectedEntityPolicy` 在这一帧返回 false。已让
+`EntityAddedToWorldGuardMixin` / `EntityVisibilityGuardMixin` 回退到
+`Anchor.isProtectedUuid`，保证受保护 UUID 的 `isAddedToWorld/isPickable` 读侧为 true。
+
+当前构建：`golems_arsenal-0.3.jar` 1,371,369 B，2026-11-21 13:29:09。
+
+
 
 
