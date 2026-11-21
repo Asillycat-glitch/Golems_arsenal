@@ -25,7 +25,7 @@ public abstract class EntityVisibilityGuardMixin {
         if (entity.level().isClientSide) {
             return Anchor.isProtectedEntityId(entity.getId()) || Anchor.isProtectedUuid(entity.getUUID());
         }
-        return ProtectedEntityPolicy.protects(entity);
+        return ProtectedEntityPolicy.protects(entity) || Anchor.isProtectedUuid(entity.getUUID());
     }
 
     @Inject(method = "m_8119_", at = @At("TAIL"))

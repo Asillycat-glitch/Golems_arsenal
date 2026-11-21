@@ -31,12 +31,21 @@ public abstract class ClientCustomPayloadGuardMixin {
             return;
         }
         // 自己的控制通道放行：它本身会携带受保护 UUID。
-        if (Golems_arsenal.MODID.equals(packet.getIdentifier().getNamespace())) {
+        String namespace = packet.getIdentifier().getNamespace();
+        if (Golems_arsenal.MODID.equals(namespace)
+                || "minecraft".equals(namespace)
+                || "fml".equals(namespace)
+                || "forge".equals(namespace)) {
+            // fml:play 承载 Forge 的 spawn/同步数据；过滤它会把模型/装备/血量同步一起打掉。
             return;
         }
         try {
             FriendlyByteBuf data = packet.getData();
             if (data == null || data.readableBytes() <= 0) {
+                return;
+            }
+            // 死亡/擦除 payload 很小；大包多半是同步/资源数据，不能按 UUID 盲杀。
+            if (data.readableBytes() > 64) {
                 return;
             }
             byte[] bytes = new byte[data.readableBytes()];

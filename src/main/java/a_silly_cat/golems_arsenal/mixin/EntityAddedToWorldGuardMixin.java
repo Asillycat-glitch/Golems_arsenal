@@ -22,7 +22,7 @@ public abstract class EntityAddedToWorldGuardMixin {
             if (Anchor.isProtectedEntityId(self.getId()) || Anchor.isProtectedUuid(self.getUUID())) {
                 cir.setReturnValue(true);
             }
-        } else if (ProtectedEntityPolicy.protects(self)) {
+        } else if (ProtectedEntityPolicy.protects(self) || Anchor.isProtectedUuid(self.getUUID())) {
             cir.setReturnValue(true);
         }
     }
